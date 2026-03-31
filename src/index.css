@@ -1,0 +1,300 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root,
+.theme-light {
+  --background: 38 38% 93%;
+  --foreground: 24 18% 15%;
+  --card: 42 30% 97%;
+  --card-foreground: 24 18% 15%;
+  --popover: 40 32% 96%;
+  --popover-foreground: 24 18% 15%;
+  --primary: 217 78% 54%;
+  --primary-foreground: 210 40% 98%;
+  --secondary: 34 22% 88%;
+  --secondary-foreground: 24 18% 15%;
+  --muted: 34 18% 86%;
+  --muted-foreground: 24 10% 38%;
+  --accent: 36 24% 84%;
+  --accent-foreground: 24 18% 15%;
+  --border: 32 20% 79%;
+  --input: 38 24% 90%;
+  --ring: 217 78% 54%;
+  --success: 156 58% 32%;
+  --success-foreground: 0 0% 100%;
+  --warning: 34 86% 42%;
+  --warning-foreground: 24 18% 15%;
+  --danger: 3 68% 48%;
+  --danger-foreground: 0 0% 100%;
+  --sidebar: 36 28% 91%;
+  --sidebar-foreground: 24 18% 15%;
+  --sidebar-border: 32 20% 79%;
+  --tone-get: 208 88% 36%;
+  --tone-post: 145 67% 28%;
+  --tone-put: 31 92% 32%;
+  --tone-patch: 270 55% 38%;
+  --tone-delete: 355 68% 42%;
+  --json-key: 215 72% 40%;
+  --json-string: 156 54% 28%;
+  --json-boolean: 275 52% 42%;
+  --json-null: 25 76% 38%;
+  --json-number: 193 68% 33%;
+  --json-punctuation: 22 10% 42%;
+  --graphql-keyword: 278 62% 34%;
+  --graphql-field: 214 58% 24%;
+  --graphql-variable: 196 70% 32%;
+  --graphql-string: 151 49% 28%;
+  --graphql-number: 31 82% 35%;
+  --graphql-directive: 342 68% 42%;
+  --graphql-comment: 24 8% 46%;
+  --graphql-punctuation: 24 12% 28%;
+}
+
+.theme-dark {
+  --background: 225 13% 12%;
+  --foreground: 216 24% 88%;
+  --card: 222 14% 16%;
+  --card-foreground: 216 24% 88%;
+  --popover: 224 14% 18%;
+  --popover-foreground: 216 24% 88%;
+  --primary: 217 92% 67%;
+  --primary-foreground: 210 40% 98%;
+  --secondary: 223 13% 22%;
+  --secondary-foreground: 216 24% 88%;
+  --muted: 222 12% 19%;
+  --muted-foreground: 218 14% 61%;
+  --accent: 223 14% 23%;
+  --accent-foreground: 216 24% 88%;
+  --border: 222 14% 24%;
+  --input: 223 13% 20%;
+  --ring: 217 92% 67%;
+  --success: 142 45% 50%;
+  --success-foreground: 210 40% 98%;
+  --warning: 40 72% 58%;
+  --warning-foreground: 225 13% 12%;
+  --danger: 356 74% 66%;
+  --danger-foreground: 210 40% 98%;
+  --sidebar: 223 15% 15%;
+  --sidebar-foreground: 216 24% 88%;
+  --sidebar-border: 223 12% 24%;
+  --tone-get: 207 100% 69%;
+  --tone-post: 120 41% 67%;
+  --tone-put: 35 78% 65%;
+  --tone-patch: 283 55% 70%;
+  --tone-delete: 355 74% 69%;
+  --json-key: 210 88% 72%;
+  --json-string: 102 42% 67%;
+  --json-boolean: 286 54% 70%;
+  --json-null: 28 80% 67%;
+  --json-number: 193 70% 67%;
+  --json-punctuation: 216 12% 62%;
+  --graphql-keyword: 286 58% 72%;
+  --graphql-field: 214 78% 77%;
+  --graphql-variable: 191 80% 70%;
+  --graphql-string: 102 42% 67%;
+  --graphql-number: 35 78% 69%;
+  --graphql-directive: 352 74% 71%;
+  --graphql-comment: 218 10% 48%;
+  --graphql-punctuation: 216 12% 66%;
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  html,
+  body {
+    @apply h-full overflow-hidden;
+  }
+
+  body {
+    @apply bg-background text-foreground antialiased;
+    font-family: "IBM Plex Sans", "Segoe UI", sans-serif;
+    font-size: clamp(12px, 0.74vw + 4px, 16px);
+    line-height: 1.45;
+    font-feature-settings: "ss01" 1, "cv02" 1, "cv03" 1;
+    background-image: radial-gradient(circle at top left, rgba(96, 139, 255, 0.08), transparent 28%), linear-gradient(180deg, hsl(var(--background)) 0%, hsl(var(--background)) 100%);
+  }
+
+  .theme-light body {
+    background-image: radial-gradient(circle at top left, rgba(90, 136, 255, 0.09), transparent 24%), linear-gradient(180deg, hsl(38 34% 94%) 0%, hsl(35 30% 91%) 100%);
+  }
+
+  .theme-dark body {
+    background-image: radial-gradient(circle at top left, rgba(104, 127, 255, 0.1), transparent 22%), linear-gradient(180deg, hsl(225 13% 13%) 0%, hsl(223 14% 11%) 100%);
+  }
+
+  button,
+  input,
+  textarea,
+  select {
+    font: inherit;
+  }
+
+  #root {
+    @apply h-full overflow-hidden;
+  }
+}
+
+@layer utilities {
+  .panel-surface {
+    @apply border border-border/45 backdrop-blur-xl;
+    background-color: hsl(var(--card) / 0.92);
+  }
+
+  .status-success {
+    background-color: hsl(var(--success) / 0.14);
+    color: hsl(var(--success));
+  }
+
+  .status-danger {
+    background-color: hsl(var(--danger) / 0.14);
+    color: hsl(var(--danger));
+  }
+
+  .status-muted {
+    background-color: hsl(var(--secondary) / 0.5);
+    color: hsl(var(--muted-foreground));
+  }
+
+  .tone-get-text {
+    color: hsl(var(--tone-get));
+  }
+
+  .tone-get-bg {
+    background-color: hsl(var(--tone-get) / 0.12);
+  }
+
+  .tone-post-text {
+    color: hsl(var(--tone-post));
+  }
+
+  .tone-post-bg {
+    background-color: hsl(var(--tone-post) / 0.13);
+  }
+
+  .tone-put-text {
+    color: hsl(var(--tone-put));
+  }
+
+  .tone-put-bg {
+    background-color: hsl(var(--tone-put) / 0.13);
+  }
+
+  .tone-patch-text {
+    color: hsl(var(--tone-patch));
+  }
+
+  .tone-patch-bg {
+    background-color: hsl(var(--tone-patch) / 0.12);
+  }
+
+  .tone-delete-text {
+    color: hsl(var(--tone-delete));
+  }
+
+  .tone-delete-bg {
+    background-color: hsl(var(--tone-delete) / 0.12);
+  }
+
+  .tone-default-text {
+    color: hsl(var(--muted-foreground));
+  }
+
+  .tone-default-bg {
+    background-color: hsl(var(--secondary) / 0.4);
+  }
+
+  .json-key {
+    color: hsl(var(--json-key));
+  }
+
+  .json-string {
+    color: hsl(var(--json-string));
+  }
+
+  .json-boolean {
+    color: hsl(var(--json-boolean));
+  }
+
+  .json-null {
+    color: hsl(var(--json-null));
+  }
+
+  .json-number {
+    color: hsl(var(--json-number));
+  }
+
+  .json-punctuation {
+    color: hsl(var(--json-punctuation));
+  }
+
+  .graphql-keyword {
+    color: hsl(var(--graphql-keyword));
+  }
+
+  .graphql-field {
+    color: hsl(var(--graphql-field));
+  }
+
+  .graphql-variable {
+    color: hsl(var(--graphql-variable));
+  }
+
+  .graphql-string {
+    color: hsl(var(--graphql-string));
+  }
+
+  .graphql-number {
+    color: hsl(var(--graphql-number));
+  }
+
+  .graphql-directive {
+    color: hsl(var(--graphql-directive));
+  }
+
+  .graphql-comment {
+    color: hsl(var(--graphql-comment));
+  }
+
+  .graphql-punctuation {
+    color: hsl(var(--graphql-punctuation));
+  }
+
+  .mono-scroll {
+    scrollbar-width: thin;
+    scrollbar-color: hsl(var(--muted-foreground) / 0.32) hsl(var(--background) / 0.08);
+  }
+
+  .thin-scrollbar {
+    scrollbar-width: thin;
+    scrollbar-color: hsl(var(--muted-foreground) / 0.34) hsl(var(--background) / 0.1);
+  }
+
+  .thin-scrollbar::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+  }
+
+  .thin-scrollbar::-webkit-scrollbar-thumb {
+    border: 2px solid transparent;
+    border-radius: 999px;
+    background-clip: padding-box;
+    background-color: hsl(var(--muted-foreground) / 0.34);
+  }
+
+  .thin-scrollbar::-webkit-scrollbar-thumb:hover {
+    background-color: hsl(var(--muted-foreground) / 0.48);
+  }
+
+  .thin-scrollbar::-webkit-scrollbar-track {
+    border-radius: 999px;
+    background: hsl(var(--background) / 0.08);
+  }
+
+  .thin-scrollbar::-webkit-scrollbar-corner {
+    background: transparent;
+  }
+}
