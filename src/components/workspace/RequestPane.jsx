@@ -111,9 +111,9 @@ function GraphQLEditor({ query, variables, onQueryChange, onVariablesChange, dis
   }
 
   return (
-    <div className="grid h-full min-h-0 grid-rows-[minmax(0,1fr)_auto_220px] overflow-hidden bg-background/10">
+    <div className="grid h-full min-h-0 grid-rows-[minmax(0,1fr)_auto_minmax(0,1fr)] overflow-hidden bg-background/10">
       <div className="grid min-h-0 grid-rows-[auto_minmax(0,1fr)]">
-        <div className="flex items-center justify-between border-b border-border/20 px-3 py-2 text-[11px] text-muted-foreground">
+        <div className="flex items-center justify-between border-b border-border/20 px-3 py-2 text-[11px] text-muted-foreground lg:text-[12px]">
           <span className="font-medium text-foreground">Query</span>
           <Button type="button" variant="outline" size="sm" className="h-7 px-2.5 text-[11px]" onClick={handleFormatQuery} disabled={disabled}>
             <Wand2 className="h-3 w-3" />
@@ -125,6 +125,25 @@ function GraphQLEditor({ query, variables, onQueryChange, onVariablesChange, dis
           onChange={onQueryChange}
           placeholder={"query GetUsers {\n  users {\n    id\n    name\n  }\n}"}
           language="graphql"
+          disabled={disabled}
+        />
+      </div>
+
+      <div className="h-px bg-border/25" />
+
+      <div className="grid min-h-0 grid-rows-[auto_minmax(0,1fr)]">
+        <div className="flex items-center justify-between border-b border-border/20 px-3 py-2 text-[11px] text-muted-foreground lg:text-[12px]">
+          <span className="font-medium text-foreground">Variables</span>
+          <Button type="button" variant="outline" size="sm" className="h-7 px-2.5 text-[11px]" onClick={handleFormatVariables} disabled={disabled}>
+            <Wand2 className="h-3 w-3" />
+            Format Variables
+          </Button>
+        </div>
+        <CodeEditor
+          value={variables}
+          onChange={onVariablesChange}
+          placeholder={"{\n  \"id\": 1\n}"}
+          language="json"
           disabled={disabled}
         />
       </div>
