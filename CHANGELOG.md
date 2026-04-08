@@ -2,6 +2,16 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.3.2]. 2026-04-08
+
+### This release introduces Native Auto-Updates.
+
+- **New**: Auto Updater. Kivo now automatically checks for, silently downloads, and prepares updates in the background, minimizing disruptions.
+- **New**: Seamless Upgrades. You can now restart and apply updates whenever you are ready via a clean Toast notification or directly from the Collection Settings panel.
+- **Security**: Signed Binaries. All updates are now distributed and verified utilizing Tauri's cryptographically secure signatures.
+
+- **Full Changelog**: [View CHANGELOG.md](https://github.com/dexter-xD/Kivo/blob/main/CHANGELOG.md)
+
 ## [0.3.1]. 2026-04-06
 
 ### Fixed
