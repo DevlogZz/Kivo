@@ -3,7 +3,9 @@ import { check } from "@tauri-apps/plugin-updater";
 import { relaunch } from "@tauri-apps/plugin-process";
 import { getVersion } from "@tauri-apps/api/app";
 import { RefreshCw, X } from "lucide-react";
+
 import { Button } from "@/components/ui/button.jsx";
+import { cn } from "@/lib/utils.js";
 
 export function Updater() {
   const [updateInfo, setUpdateInfo] = useState(null);
@@ -53,7 +55,7 @@ export function Updater() {
   if (status === "idle") return null;
   if (status === "checking") {
     return (
-      <div className="fixed bottom-6 right-6 z-50 flex items-center gap-3 rounded-lg border border-border/40 bg-card/95 px-4 py-3 shadow-xl backdrop-blur-md animate-in slide-in-from-bottom-5">
+      <div className="fixed bottom-6 right-6 z-50 flex items-center gap-3 rounded-sm border border-border/45 bg-card/95 px-4 py-3 shadow-xl backdrop-blur-md animate-in slide-in-from-bottom-5">
         <RefreshCw className="h-4 w-4 text-primary animate-spin" />
         <span className="text-[13px] font-medium">Checking for updates...</span>
       </div>
@@ -61,47 +63,51 @@ export function Updater() {
   }
 
   return (
-    <div className="fixed bottom-6 right-6 z-50 animate-in slide-in-from-bottom-5 fade-in duration-300">
-      <div className="flex flex-col gap-3 rounded-xl border border-border/40 bg-card/95 p-4 shadow-xl backdrop-blur-md min-w-[320px]">
-        <div className="flex items-start justify-between">
-          <div className="flex items-center gap-2 text-foreground">
-            <RefreshCw className={`h-4 w-4 ${status === "downloading" ? "text-primary animate-spin" : status === "error" ? "text-destructive" : status === "up-to-date" ? "text-emerald-500" : "text-primary"}`} />
-            <span className="font-semibold text-[14px]">
-              {status === "downloading" ? "Downloading Update..." :
-                status === "ready" ? "Update Ready" :
-                  status === "error" ? "Update Failed" : "Up to Date"}
-            </span>
+    <div className="fixed bottom-6 right-6 z-50 panel-surface flex flex-col gap-3 rounded-sm p-5 shadow-2xl min-w-[340px] animate-in slide-in-from-right-5 fade-in duration-500">
+      <div className="flex items-start justify-between">
+        <div className="flex items-center gap-2.5 text-foreground font-semibold tracking-tight">
+          <div className={cn(
+            "flex h-8 w-8 items-center justify-center rounded-sm transition-colors border border-border/10",
+            status === "downloading" ? "bg-primary/10 text-primary" :
+              status === "error" ? "bg-red-500/10 text-red-500" :
+                status === "up-to-date" ? "bg-emerald-500/10 text-emerald-400" : "bg-primary/10 text-primary"
+          )}>
+            <RefreshCw className={cn("h-4 w-4", status === "downloading" && "animate-spin")} />
           </div>
-          <button onClick={() => setStatus("idle")} className="text-muted-foreground hover:bg-accent/50 p-1 rounded-md transition-colors">
-            <X className="h-4 w-4" />
-          </button>
+          <span className="text-[14px]">
+            {status === "downloading" ? "Downloading Update" :
+              status === "ready" ? "Update Ready" :
+                status === "error" ? "Update Failed" : "Up to Date"}
+          </span>
         </div>
+        <button onClick={() => setStatus("idle")} className="text-muted-foreground hover:bg-accent/40 hover:text-foreground h-7 w-7 flex items-center justify-center rounded-sm transition-all focus-visible:outline-none">
+          <X className="h-4 w-4" />
+        </button>
+      </div>
 
-        <div className="text-[12.5px] text-muted-foreground leading-relaxed">
-          {status === "downloading" && `Quietly grabbing version ${updateInfo?.version}...`}
-          {status === "ready" && (
-            <p>
-              Version <span className="font-semibold text-foreground">{updateInfo?.version}</span> is ready to install.
-              <br />
-              <span className="text-[11px] opacity-70">Current: v{currentVersion}</span>
-            </p>
-          )}
-          {status === "error" && <p className="text-destructive/90">{errorMsg}</p>}
-          {status === "up-to-date" && <p>You are on the latest version (v{currentVersion}). Everything is looking good!</p>}
-        </div>
-
+      <div className="text-[12.5px] text-muted-foreground leading-relaxed px-0.5">
+        {status === "downloading" && `Quietly fetching version ${updateInfo?.version}...`}
         {status === "ready" && (
-          <div className="flex justify-end gap-2 mt-2 pt-2 border-t border-border/30">
-            <Button variant="ghost" size="sm" className="h-8 text-[12px] hover:bg-red-500/10 hover:text-red-500 transition-colors" onClick={() => setStatus("idle")}>
-              Remind me later
-            </Button>
-            <Button size="sm" className="h-8 text-[12px] gap-1.5 shadow-md active:scale-95 transition-transform" onClick={() => relaunch()}>
-              <RefreshCw className="h-3 w-3" />
-              Restart App
-            </Button>
+          <div className="space-y-1">
+            <p>Version <span className="font-bold text-foreground">{updateInfo?.version}</span> is ready to install.</p>
+            <p className="text-[11px] font-medium opacity-60">Currently on v{currentVersion}</p>
           </div>
         )}
+        {status === "error" && <p className="text-red-500/90 font-medium">{errorMsg}</p>}
+        {status === "up-to-date" && <p>You are on the latest version <span className="text-foreground font-medium">v{currentVersion}</span>. Everything is looking good!</p>}
       </div>
+
+      {status === "ready" && (
+        <div className="flex justify-end gap-2 mt-1 pt-3 border-t border-border/15">
+          <Button variant="ghost" size="sm" className="h-8 rounded-sm text-[11.5px] px-3 font-medium hover:bg-accent/40 transition-colors" onClick={() => setStatus("idle")}>
+            Later
+          </Button>
+          <Button size="sm" className="h-8 rounded-sm text-[11.5px] px-4 gap-2 shadow-md active:scale-95 transition-transform font-semibold font-mono" onClick={() => relaunch()}>
+            <RefreshCw className="h-3 w-3" />
+            RELAUNCH
+          </Button>
+        </div>
+      )}
     </div>
   );
 }

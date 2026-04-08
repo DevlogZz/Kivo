@@ -28,7 +28,7 @@
       "endpoints": [
         "https://github.com/dexter-xD/Kivo/releases/latest/download/latest.json"
       ],
-      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IEI1ODhGOEUyQTIyNzg1MjcKUldRbmhTZWk0dmlJdFNUY21qaGRtUmhuUmFXZ0ZHUTY5UnpqVFlGN2xQL2czS1hXRXEreXQ3MEYK"
+      "pubkey": "untrusted comment: minisign public key: B588F8E2A2278527\nRWQnhSei4viItSTcmjhdmRhnRaWgFGQ69RzjTYF7lP/g3KXWEq+yt70F"
     }
   },
   "bundle": {
