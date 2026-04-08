@@ -1,7 +1,7 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
   "productName": "Kivo",
-  "version": "0.3.1",
+  "version": "0.3.2",
   "identifier": "com.kivo.app",
   "build": {
     "beforeDevCommand": "pnpm frontend:dev",
@@ -21,6 +21,14 @@
     ],
     "security": {
       "csp": null
+    }
+  },
+  "plugins": {
+    "updater": {
+      "endpoints": [
+        "https://github.com/dexter-xD/Kivo/releases/latest/download/latest.json"
+      ],
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IEI1ODhGOEUyQTIyNzg1MjcKUldRbmhTZWk0dmlJdFNUY21qaGRtUmhuUmFXZ0ZHUTY5UnpqVFlGN2xQL2czS1hXRXEreXQ3MEYK"
     }
   },
   "bundle": {

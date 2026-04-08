@@ -42,17 +42,43 @@ jobs:
         uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         with:
           tagName: ${{ github.ref_name }}
           releaseName: "Kivo ${{ github.ref_name }}"
           releaseBody: |
 
-            ### This release focuses on storage reliability and data integrity fixes.
+            ### This release introduces Native Auto-Updates.
 
-            - **Fixed**: Collection Data Loss. Editing environment variables no longer wipes requests and subfolders from the collection directory.
-            - **Fixed**: Requests Not Persisted. Newly created requests are now correctly written to disk and survive app restarts.
-            - **Fixed**: Delete Request Not Working. Deleting a request now properly removes its file from disk.
-            - **Fixed**: Slash Names Breaking Storage. Collection and request names containing `/` or other special characters are now safely sanitized for the filesystem while preserving the original display name.
-            - **Improved**: Storage Robustness. All serde structs now use safe defaults, preventing silent deserialization failures from corrupting state.
-            - **Improved**: Testability. Core storage logic extracted into pure functions and covered by 59 unit tests across normal, complex, and stress scenarios.
+            - **New**: Auto Updater. Kivo now automatically checks for, silently downloads, and prepares updates in the background, minimizing disruptions.
+            - **New**: Seamless Upgrades. You can now restart and apply updates whenever you are ready via a clean Toast notification or directly from the Collection Settings panel.
+            - **Security**: Signed Binaries. All updates are now distributed and verified utilizing Tauri's cryptographically secure signatures.
+
+            - **Full Changelog**: [View CHANGELOG.md](https://github.com/dexter-xD/Kivo/blob/main/CHANGELOG.md)
           projectPath: desktop
+
+      - name: Update CHANGELOG.md
+        if: matrix.platform == 'ubuntu-latest'
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          DATE=$(date +'%Y-%m-%d')
+          BODY=$(gh release view $GITHUB_REF_NAME --json body -q .body)
+          
+          echo "## [$VERSION]. $DATE" > new_entry.md
+          echo "" >> new_entry.md
+          echo "$BODY" >> new_entry.md
+          echo "" >> new_entry.md
+          
+          head -n 4 CHANGELOG.md > updated_changelog.md
+          cat new_entry.md >> updated_changelog.md
+          tail -n +5 CHANGELOG.md >> updated_changelog.md
+          mv updated_changelog.md CHANGELOG.md
+          
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+          git add CHANGELOG.md
+          git commit -m "docs: auto-update changelog for $GITHUB_REF_NAME [skip ci]" || exit 0
+          git push origin HEAD:main

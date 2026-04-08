@@ -5,6 +5,7 @@ import { Sidebar } from "@/components/workspace/Sidebar.jsx";
 import { RequestTabs } from "@/components/workspace/RequestTabs.jsx";
 import { SidebarResizer } from "@/components/workspace/SidebarResizer.jsx";
 import { SetupWizard } from "@/components/workspace/SetupWizard.jsx";
+import { Updater } from "@/components/Updater.jsx";
 import { WorkspaceView } from "@/components/workspace/WorkspaceView.jsx";
 import { WorkspaceModal } from "@/components/workspace/WorkspaceModal.jsx";
 import { CollectionSettingsPage } from "@/components/workspace/CollectionSettingsPage.jsx";
@@ -132,6 +133,7 @@ export default function App() {
 
   return (
     <div className="h-full overflow-hidden">
+      <Updater />
       {showWorkspaceModal && (
         <WorkspaceModal
           title="New Workspace"

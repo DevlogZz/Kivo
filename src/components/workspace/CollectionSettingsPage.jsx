@@ -1,10 +1,11 @@
 import { useEffect, useState } from "react";
 import {
   BookOpen, Code2, FileJson, FlaskConical, FolderOpen, Globe, Layers,
-  Save, Share2, RotateCcw, ChevronRight, Eye, EyeOff
+  Save, Share2, RotateCcw, ChevronRight, Eye, EyeOff, RefreshCw
 } from "lucide-react";
 
 import { invoke } from "@tauri-apps/api/core";
+import { getVersion } from "@tauri-apps/api/app";
 
 import { Button } from "@/components/ui/button.jsx";
 import { Card } from "@/components/ui/card.jsx";
@@ -106,6 +107,11 @@ function OverviewTab({ workspace, collection, storagePath, envVars, onNavigate }
   const collectionCount = envVars?.collection?.length ?? 0;
   const requestCount = collection?.requests?.length ?? 0;
 
+  const [appVersion, setAppVersion] = useState("...");
+  useEffect(() => {
+    getVersion().then(setAppVersion).catch(() => {});
+  }, []);
+
   return (
     <div className="flex flex-col h-full overflow-y-auto p-8 gap-6 max-w-4xl">
       <div className="mb-2">
@@ -180,6 +186,27 @@ function OverviewTab({ workspace, collection, storagePath, envVars, onNavigate }
                 <h3 className="font-semibold text-foreground text-[13px]">Total Requests</h3>
               </div>
               <div className="text-2xl font-bold tracking-tight text-foreground/90">{requestCount}</div>
+            </div>
+          </Card>
+          <Card className="flex flex-col flex-1 border-border/20 bg-background/50 p-5 shadow-sm transition-all hover:bg-card/80">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-emerald-500/10 text-emerald-400">
+                  <RefreshCw className="h-4 w-4" />
+                </div>
+                <div>
+                  <h3 className="font-semibold text-foreground text-[13px]">Software Update</h3>
+                  <p className="text-[11px] text-muted-foreground mt-0.5">Current Version: v{appVersion}</p>
+                </div>
+              </div>
+              <Button 
+                variant="secondary" 
+                size="sm" 
+                className="h-8 text-[11.5px] border-border/40 hover:bg-accent/50 transition-colors" 
+                onClick={() => window.dispatchEvent(new CustomEvent('manual-update-check'))}
+              >
+                Check for Updates
+              </Button>
             </div>
           </Card>
         </div>

@@ -3,3 +3,7 @@ dist/
 target/
 desktop/target/
 .tauri/
+
+# signature keys
+*.key
+*.key.pub

@@ -28,6 +28,7 @@ Kivo is a lightweight cross-platform HTTP client designed for developers who val
 - Tabbed Interface: Work on multiple requests simultaneously with a robust tab management system
 - Sidebar Search: Quickly filter through your collections and requests with real-time search
 - Advanced Request Interaction: Comprehensive context menus for cloning, renaming, and copy-pasting requests
+- Self-Updating: Built-in background auto-updater with signature verification guarantees you're always on the latest version.
 - Security: Local-first data storage ensuring your request data stays on your machine
 
 ## Getting Started
@@ -84,6 +85,11 @@ Contributions are welcome! If you have suggestions for improvements or encounter
 5. Open a Pull Request
 
 ## Changelog
+
+### v0.3.2 (2026-04-08)
+
+- **Auto Updater**. Kivo now automatically checks, downloads, and stages updates in the background flawlessly, offering a convenient Restart button once verified.
+- **Signed Upgrades**. Ensures full security by validating all upgrades against cryptographic public keys.
 
 ### v0.3.1 (2026-04-06)
 
