@@ -137,10 +137,6 @@
     @apply h-full overflow-hidden;
   }
 
-  /* macOS transparent titlebar — only applies when body has .macos class */
-  body.macos #root {
-    padding-top: 28px;
-  }
 }
 
 @layer utilities {
