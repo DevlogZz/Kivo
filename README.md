@@ -18,6 +18,20 @@
 
 Kivo is a lightweight cross-platform HTTP client designed for developers who value speed and simplicity. It provides a clean, distraction-free environment for testing APIs and managing request collections without the bloat of traditional tools.
 
+## Features
+
+- Native Performance: Built with Rust and Tauri for minimal resource usage and fast startup times across Windows, macOS, and Linux
+- Cross-Platform Support: Native builds for Windows (MSI/NSIS), macOS (Silicon/Intel DMG), and Linux (DEB/RPM)
+- Multi-Scope Environments: Manage global workspace variables and collection-specific overrides
+- Hierarchical Structure: Organize your API requests into workspaces and nested collections
+- Modernized Settings: Completely redesigned Overview, Headers, and Auth pages for a premium experience
+- Setup Wizard: Seamless onboarding experience to bootstrap your application configuration
+- Tabbed Interface: Work on multiple requests simultaneously with a robust tab management system
+- Sidebar Search: Quickly filter through your collections and requests with real-time search
+- Advanced Request Interaction: Comprehensive context menus for cloning, renaming, and copy-pasting requests
+- Self-Updating: Built-in background auto-updater with signature verification guarantees you're always on the latest version.
+- Security: Local-first data storage ensuring your request data stays on your machine
+
 ## Download Kivo (v0.3.4)
 
 Get the latest stable version for your operating system:
@@ -32,21 +46,22 @@ Get the latest stable version for your operating system:
 
 *For other formats and old releases, visit the [Releases page](https://github.com/dexter-xD/Kivo/releases).*
 
+### Linux Installation Guide
+
+- **Debian / Ubuntu**:
+  ```bash
+  sudo apt install ./Kivo_0.3.4_amd64.deb
+  ```
+- **Fedora / RHEL**:
+  ```bash
+  sudo dnf install ./Kivo-0.3.4-1.x86_64.rpm
+  ```
+- **Arch / Other (RPM via rpm tool)**:
+  ```bash
+  sudo rpm -i --nodeps --nosignature ./Kivo-0.3.4-1.x86_64.rpm
+  ```
+
 ---
-
-## Features
-
-- Native Performance: Built with Rust and Tauri for minimal resource usage and fast startup times across Windows, macOS, and Linux
-- Cross-Platform Support: Native builds for Windows (MSI/NSIS), macOS (Silicon/Intel DMG), and Linux (DEB/RPM)
-- Multi-Scope Environments: Manage global workspace variables and collection-specific overrides
-- Hierarchical Structure: Organize your API requests into workspaces and nested collections
-- Modernized Settings: Completely redesigned Overview, Headers, and Auth pages for a premium experience
-- Setup Wizard: Seamless onboarding experience to bootstrap your application configuration
-- Tabbed Interface: Work on multiple requests simultaneously with a robust tab management system
-- Sidebar Search: Quickly filter through your collections and requests with real-time search
-- Advanced Request Interaction: Comprehensive context menus for cloning, renaming, and copy-pasting requests
-- Self-Updating: Built-in background auto-updater with signature verification guarantees you're always on the latest version.
-- Security: Local-first data storage ensuring your request data stays on your machine
 
 ## Getting Started
 
