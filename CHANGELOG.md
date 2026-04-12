@@ -2,6 +2,15 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.3.5]. 2026-04-12
+
+### v0.3.5: Cross-Platform Storage & Smart Setup
+
+- **feat**: Improved default storage paths for macOS and Linux (Documents → Home → AppData).
+- **feat**: New "Create Kivo Subfolder" toggle with auto-detection to prevent nested data.
+- **feat**: Smarter path separator handling and dynamic placeholders based on detected OS.
+- **fix**: Absolute path detection now uses `Path::is_absolute()` for better reliability.
+
 ## [0.3.4]. 2026-04-11
 
 ### v0.3.4: macOS & Linux RPM Support
