@@ -1,4 +1,5 @@
-import { BadgeCheck, Clock3, Cookie, FileJson2, ListTree } from "lucide-react";
+import { BadgeCheck, Clock3, Cookie, FileJson2, ListTree, Search, X } from "lucide-react";
+import { useState, useMemo } from "react";
 
 import { CodeEditor } from "@/components/workspace/CodeEditor.jsx";
 import { Card } from "@/components/ui/card.jsx";
@@ -18,6 +19,42 @@ function getTone(status) {
   }
 
   return "muted";
+}
+
+function filterJson(data, query) {
+  if (!query) return data;
+  const q = query.toLowerCase();
+
+  function filterNode(node, key = null) {
+    if (key && String(key).toLowerCase().includes(q)) return node;
+
+    if (node === null) {
+      if ("null".includes(q)) return node;
+      return undefined;
+    }
+
+    if (typeof node === "object") {
+      const isArray = Array.isArray(node);
+      const res = isArray ? [] : {};
+      let hasMatch = false;
+
+      for (const [k, v] of Object.entries(node)) {
+        const childNode = filterNode(v, k);
+        if (childNode !== undefined) {
+          hasMatch = true;
+          if (isArray) res.push(childNode);
+          else res[k] = childNode;
+        }
+      }
+      return hasMatch ? res : undefined;
+    }
+
+    if (String(node).toLowerCase().includes(q)) return node;
+    return undefined;
+  }
+
+  const result = filterNode(data);
+  return result === undefined ? (Array.isArray(data) ? [] : {}) : result;
 }
 
 export function ResponsePane({ response, activeTab, onTabChange, bodyView, onBodyViewChange }) {
@@ -47,6 +84,13 @@ export function ResponsePane({ response, activeTab, onTabChange, bodyView, onBod
       parsedJson = null;
     }
   }
+
+  const [searchQuery, setSearchQuery] = useState("");
+
+  const filteredJson = useMemo(() => {
+    if (!parsedJson) return null;
+    return filterJson(parsedJson, searchQuery);
+  }, [parsedJson, searchQuery]);
 
   return (
     <Card className="flex h-full min-h-0 flex-col gap-0 overflow-hidden border-0 bg-card/84 p-0 shadow-none">
@@ -92,9 +136,28 @@ export function ResponsePane({ response, activeTab, onTabChange, bodyView, onBod
         {activeTab === "Body" ? (
           <div className="grid h-full min-h-0 grid-rows-[auto_minmax(0,1fr)] gap-3">
             <div className="flex items-center justify-between text-[10px] uppercase tracking-[0.18em] text-muted-foreground">
-              <div className="flex items-center gap-1.5">
-                <FileJson2 className="h-3 w-3" />
-                <span>Body</span>
+              <div className="flex items-center gap-3">
+                <div className="flex items-center gap-1.5">
+                  <FileJson2 className="h-3 w-3" />
+                  <span>Body</span>
+                </div>
+                {currentView === "Tree" && (
+                  <div className="flex items-center gap-1.5 border border-border/20 rounded pl-2.5 pr-1.5 py-[3px] w-48 bg-background/30 transition-colors focus-within:border-primary/50 shadow-sm ml-2 normal-case tracking-normal">
+                    <Search className="h-[11px] w-[11px] text-muted-foreground shrink-0" />
+                    <input
+                      type="text"
+                      placeholder="Filter JSON tree..."
+                      value={searchQuery}
+                      onChange={(e) => setSearchQuery(e.target.value)}
+                      className="w-full bg-transparent text-[11px] font-medium outline-none placeholder:text-muted-foreground/60 text-foreground"
+                    />
+                    {searchQuery && (
+                      <button onClick={() => setSearchQuery("")} className="text-muted-foreground hover:text-foreground shrink-0 focus:outline-none">
+                        <X className="h-[11px] w-[11px]" />
+                      </button>
+                    )}
+                  </div>
+                )}
               </div>
               <div className="flex items-center gap-1">
                 {bodyViews.map((view) => (
@@ -114,7 +177,14 @@ export function ResponsePane({ response, activeTab, onTabChange, bodyView, onBod
             </div>
             {currentView === "Tree" && parsedJson !== null ? (
               <div className="h-full overflow-auto thin-scrollbar bg-background/20 rounded p-4 border border-border/10 shadow-inner">
-                <JsonTree data={parsedJson} />
+                {Object.keys(filteredJson).length > 0 || Array.isArray(filteredJson) && filteredJson.length > 0 ? (
+                  <JsonTree data={filteredJson} searchQuery={searchQuery} />
+                ) : (
+                  <div className="flex h-full flex-col items-center justify-center text-muted-foreground/70">
+                    <Search className="h-8 w-8 mb-2 opacity-20" />
+                    <span className="text-[12px]">No matching keys or values found</span>
+                  </div>
+                )}
               </div>
             ) : currentView === "Preview" ? (
               <div className="h-full overflow-hidden rounded bg-white border border-border/10 shadow-inner">

@@ -1,6 +1,38 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { ChevronDown, ChevronRight, Copy, Check } from "lucide-react";
 import { cn } from "@/lib/utils";
+
+function HighlightedText({ text, query }) {
+  if (!query) return <span>{text}</span>;
+  const str = String(text);
+  const lowerStr = str.toLowerCase();
+  const lowerQuery = query.toLowerCase();
+  
+  const parts = [];
+  let lastIndex = 0;
+  let index = lowerStr.indexOf(lowerQuery);
+  
+  if (index === -1) return <span>{text}</span>;
+  
+  while (index !== -1) {
+    if (index > lastIndex) {
+      parts.push(<span key={`text-${lastIndex}`}>{str.slice(lastIndex, index)}</span>);
+    }
+    parts.push(
+      <mark key={`mark-${index}`} className="bg-yellow-500/40 text-foreground rounded-sm px-0.5">
+        {str.slice(index, index + query.length)}
+      </mark>
+    );
+    lastIndex = index + query.length;
+    index = lowerStr.indexOf(lowerQuery, lastIndex);
+  }
+  
+  if (lastIndex < str.length) {
+    parts.push(<span key={`text-${lastIndex}`}>{str.slice(lastIndex)}</span>);
+  }
+  
+  return <>{parts}</>;
+}
 
 function CopyButton({ value }) {
   const [copied, setCopied] = useState(false);
@@ -24,30 +56,35 @@ function CopyButton({ value }) {
   );
 }
 
-function JsonValue({ value }) {
+function JsonValue({ value, searchQuery }) {
   const type = typeof value;
   
   if (value === null) {
-    return <span className="json-null font-mono">null</span>;
+    return <span className="json-null font-mono"><HighlightedText text="null" query={searchQuery} /></span>;
   }
   
   if (type === "string") {
-    return <span className="json-string font-mono font-medium">"{value}"</span>;
+    return <span className="json-string font-mono font-medium">"<HighlightedText text={value} query={searchQuery} />"</span>;
   }
   
   if (type === "number") {
-    return <span className="json-number font-mono font-medium">{value}</span>;
+    return <span className="json-number font-mono font-medium"><HighlightedText text={value} query={searchQuery} /></span>;
   }
   
   if (type === "boolean") {
-    return <span className="json-boolean font-mono font-medium">{value ? "true" : "false"}</span>;
+    return <span className="json-boolean font-mono font-medium"><HighlightedText text={value ? "true" : "false"} query={searchQuery} /></span>;
   }
   
-  return <span className="text-foreground font-mono">{String(value)}</span>;
+  return <span className="text-foreground font-mono"><HighlightedText text={String(value)} query={searchQuery} /></span>;
 }
 
-export function JsonTree({ data, name, depth = 0, isLast = true }) {
-  const [expanded, setExpanded] = useState(depth < 2);
+export function JsonTree({ data, name, depth = 0, isLast = true, searchQuery = "" }) {
+  const isSearchActive = searchQuery.length > 0;
+  const [expanded, setExpanded] = useState(isSearchActive || depth < 2);
+  
+  useEffect(() => {
+    if (isSearchActive) setExpanded(true);
+  }, [isSearchActive]);
   
   const isArray = Array.isArray(data);
   const isObject = data !== null && typeof data === "object";
@@ -55,8 +92,8 @@ export function JsonTree({ data, name, depth = 0, isLast = true }) {
   if (!isObject) {
     return (
       <div className="group flex items-center gap-1.5 font-mono text-[13px] leading-relaxed py-0.5 w-max pr-4">
-        {name && <span className="json-key">"{name}":</span>}
-        <JsonValue value={data} />
+        {name && <span className="json-key">"<HighlightedText text={name} query={searchQuery} />":</span>}
+        <JsonValue value={data} searchQuery={searchQuery} />
         {!isLast && <span className="json-punctuation">,</span>}
         <CopyButton value={data} />
       </div>
@@ -72,7 +109,7 @@ export function JsonTree({ data, name, depth = 0, isLast = true }) {
   if (isEmpty) {
     return (
       <div className="group flex items-center gap-1.5 font-mono text-[13px] leading-relaxed py-0.5 w-max pr-4">
-        {name && <span className="json-key">"{name}":</span>}
+        {name && <span className="json-key">"<HighlightedText text={name} query={searchQuery} />":</span>}
         <span className="json-punctuation">{bracketOpen}{bracketClose}</span>
         {!isLast && <span className="json-punctuation">,</span>}
         <CopyButton value={data} />
@@ -92,7 +129,7 @@ export function JsonTree({ data, name, depth = 0, isLast = true }) {
         <div className="flex h-3 w-3 items-center justify-center text-muted-foreground shrink-0">
           {expanded ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />}
         </div>
-        {name && <span className="json-key">"{name}":</span>}
+        {name && <span className="json-key">"<HighlightedText text={name} query={searchQuery} />":</span>}
         <span className="json-punctuation">{bracketOpen}</span>
         {!expanded && (
           <span className="text-muted-foreground italic text-[11px] ml-1">
@@ -112,6 +149,7 @@ export function JsonTree({ data, name, depth = 0, isLast = true }) {
               data={data[key]}
               depth={depth + 1}
               isLast={index === keys.length - 1}
+              searchQuery={searchQuery}
             />
           ))}
         </div>
