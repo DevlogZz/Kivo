@@ -24,7 +24,7 @@ export function Updater() {
   }, []);
 
   async function checkForUpdates(isManual) {
-    if (status === "downloading" || status === "ready") return;
+    if (status === "downloading" || status === "available") return;
 
     if (isManual) setStatus("checking");
 
@@ -32,10 +32,7 @@ export function Updater() {
       const update = await check();
       if (update) {
         setUpdateInfo(update);
-        setStatus("downloading");
-        await update.downloadAndInstall();
-
-        setStatus("ready");
+        setStatus("available");
       } else {
         if (isManual) {
           setStatus("up-to-date");
@@ -49,6 +46,19 @@ export function Updater() {
         setErrorMsg(err?.message || "Failed to check for updates");
         setTimeout(() => setStatus("idle"), 5000);
       }
+    }
+  }
+
+  async function handleInstallAndRestart() {
+    setStatus("downloading");
+    try {
+      await updateInfo.downloadAndInstall();
+      await relaunch();
+    } catch (err) {
+      console.error("Install failed:", err);
+      setStatus("error");
+      setErrorMsg(err?.message || "Failed to install update");
+      setTimeout(() => setStatus("idle"), 5000);
     }
   }
 
@@ -75,36 +85,38 @@ export function Updater() {
             <RefreshCw className={cn("h-4 w-4", status === "downloading" && "animate-spin")} />
           </div>
           <span className="text-[14px]">
-            {status === "downloading" ? "Downloading Update" :
-              status === "ready" ? "Update Ready" :
+            {status === "downloading" ? "Applying Update..." :
+              status === "available" ? "Update Available" :
                 status === "error" ? "Update Failed" : "Up to Date"}
           </span>
         </div>
-        <button onClick={() => setStatus("idle")} className="text-muted-foreground hover:bg-accent/40 hover:text-foreground h-7 w-7 flex items-center justify-center rounded-sm transition-all focus-visible:outline-none">
-          <X className="h-4 w-4" />
-        </button>
+        {status !== "downloading" && (
+          <button onClick={() => setStatus("idle")} className="text-muted-foreground hover:bg-accent/40 hover:text-foreground h-7 w-7 flex items-center justify-center rounded-sm transition-all focus-visible:outline-none">
+            <X className="h-4 w-4" />
+          </button>
+        )}
       </div>
 
       <div className="text-[12.5px] text-muted-foreground leading-relaxed px-0.5">
-        {status === "downloading" && `Quietly fetching version ${updateInfo?.version}...`}
-        {status === "ready" && (
+        {status === "downloading" && `Downloading and installing version ${updateInfo?.version}...`}
+        {status === "available" && (
           <div className="space-y-1">
-            <p>Version <span className="font-bold text-foreground">{updateInfo?.version}</span> is ready to install.</p>
-            <p className="text-[11px] font-medium opacity-60">Currently on v{currentVersion}</p>
+            <p>Restart Kivo to apply the new changes.</p>
+            <p className="text-[11px] font-medium opacity-60">Currently on v{currentVersion} → New version: <span className="font-bold text-foreground">{updateInfo?.version}</span></p>
           </div>
         )}
         {status === "error" && <p className="text-red-500/90 font-medium">{errorMsg}</p>}
         {status === "up-to-date" && <p>You are on the latest version <span className="text-foreground font-medium">v{currentVersion}</span>. Everything is looking good!</p>}
       </div>
 
-      {status === "ready" && (
+      {status === "available" && (
         <div className="flex justify-end gap-2 mt-1 pt-3 border-t border-border/15">
-          <Button variant="ghost" size="sm" className="h-8 rounded-sm text-[11.5px] px-3 font-medium hover:bg-accent/40 transition-colors" onClick={() => setStatus("idle")}>
-            Later
+          <Button variant="ghost" size="sm" className="h-8 rounded-sm text-[11.5px] px-3 font-medium hover:bg-accent/40 transition-colors" onClick={() => {}}>
+            Release Notes
           </Button>
-          <Button size="sm" className="h-8 rounded-sm text-[11.5px] px-4 gap-2 shadow-md active:scale-95 transition-transform font-semibold font-mono" onClick={() => relaunch()}>
+          <Button size="sm" className="h-8 rounded-sm text-[11.5px] px-4 gap-2 shadow-md active:scale-95 transition-transform font-semibold font-mono" onClick={handleInstallAndRestart}>
             <RefreshCw className="h-3 w-3" />
-            RELAUNCH
+            Restart
           </Button>
         </div>
       )}
