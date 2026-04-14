@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, memo } from "react";
 import { ChevronDown, ChevronRight, Copy, Check } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -7,13 +7,13 @@ function HighlightedText({ text, query }) {
   const str = String(text);
   const lowerStr = str.toLowerCase();
   const lowerQuery = query.toLowerCase();
-  
+
   const parts = [];
   let lastIndex = 0;
   let index = lowerStr.indexOf(lowerQuery);
-  
+
   if (index === -1) return <span>{text}</span>;
-  
+
   while (index !== -1) {
     if (index > lastIndex) {
       parts.push(<span key={`text-${lastIndex}`}>{str.slice(lastIndex, index)}</span>);
@@ -26,17 +26,17 @@ function HighlightedText({ text, query }) {
     lastIndex = index + query.length;
     index = lowerStr.indexOf(lowerQuery, lastIndex);
   }
-  
+
   if (lastIndex < str.length) {
     parts.push(<span key={`text-${lastIndex}`}>{str.slice(lastIndex)}</span>);
   }
-  
+
   return <>{parts}</>;
 }
 
 function CopyButton({ value }) {
   const [copied, setCopied] = useState(false);
-  
+
   const handleCopy = (e) => {
     e.stopPropagation();
     const textToCopy = typeof value === 'string' ? value : JSON.stringify(value, null, 2);
@@ -44,9 +44,9 @@ function CopyButton({ value }) {
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
   };
-  
+
   return (
-    <button 
+    <button
       onClick={handleCopy}
       className="opacity-0 group-hover:opacity-100 transition-opacity ml-2 text-muted-foreground hover:text-foreground focus:outline-none"
       title="Copy value"
@@ -58,37 +58,42 @@ function CopyButton({ value }) {
 
 function JsonValue({ value, searchQuery }) {
   const type = typeof value;
-  
+
   if (value === null) {
     return <span className="json-null font-mono"><HighlightedText text="null" query={searchQuery} /></span>;
   }
-  
+
   if (type === "string") {
     return <span className="json-string font-mono font-medium">"<HighlightedText text={value} query={searchQuery} />"</span>;
   }
-  
+
   if (type === "number") {
     return <span className="json-number font-mono font-medium"><HighlightedText text={value} query={searchQuery} /></span>;
   }
-  
+
   if (type === "boolean") {
     return <span className="json-boolean font-mono font-medium"><HighlightedText text={value ? "true" : "false"} query={searchQuery} /></span>;
   }
-  
+
   return <span className="text-foreground font-mono"><HighlightedText text={String(value)} query={searchQuery} /></span>;
 }
 
-export function JsonTree({ data, name, depth = 0, isLast = true, searchQuery = "" }) {
+export const JsonTree = memo(function JsonTree({ data, name, depth = 0, isLast = true, searchQuery = "" }) {
   const isSearchActive = searchQuery.length > 0;
   const [expanded, setExpanded] = useState(isSearchActive || depth < 2);
-  
+  const [visibleCount, setVisibleCount] = useState(100);
+
   useEffect(() => {
-    if (isSearchActive) setExpanded(true);
-  }, [isSearchActive]);
-  
+    if (isSearchActive) {
+      setExpanded(true);
+    } else {
+      setExpanded(depth < 2);
+    }
+  }, [isSearchActive, depth]);
+
   const isArray = Array.isArray(data);
   const isObject = data !== null && typeof data === "object";
-  
+
   if (!isObject) {
     return (
       <div className="group flex items-center gap-1.5 font-mono text-[13px] leading-relaxed py-0.5 w-max pr-4">
@@ -99,13 +104,13 @@ export function JsonTree({ data, name, depth = 0, isLast = true, searchQuery = "
       </div>
     );
   }
-  
+
   const keys = Object.keys(data);
   const isEmpty = keys.length === 0;
-  
+
   const bracketOpen = isArray ? "[" : "{";
   const bracketClose = isArray ? "]" : "}";
-  
+
   if (isEmpty) {
     return (
       <div className="group flex items-center gap-1.5 font-mono text-[13px] leading-relaxed py-0.5 w-max pr-4">
@@ -116,10 +121,14 @@ export function JsonTree({ data, name, depth = 0, isLast = true, searchQuery = "
       </div>
     );
   }
-  
+
+  const showCount = Math.min(visibleCount, keys.length);
+  const hasMore = keys.length > showCount;
+  const remaining = keys.length - showCount;
+
   return (
     <div className="flex flex-col font-mono text-[13px] leading-relaxed">
-      <div 
+      <div
         className={cn(
           "group flex items-center gap-1.5 cursor-pointer hover:bg-accent/30 py-0.5 px-1 rounded transition-colors w-max pr-4",
           depth > 0 ? "-ml-4" : ""
@@ -139,27 +148,31 @@ export function JsonTree({ data, name, depth = 0, isLast = true, searchQuery = "
         {!expanded && <span className="json-punctuation ml-1">{bracketClose}{!isLast && ","}</span>}
         <CopyButton value={data} />
       </div>
-      
+
       {expanded && (
         <div className="flex flex-col border-l border-border/20 ml-[5px] pl-4">
-          {keys.slice(0, 100).map((key, index) => (
+          {keys.slice(0, showCount).map((key, index) => (
             <JsonTree
               key={key}
               name={isArray ? null : key}
               data={data[key]}
               depth={depth + 1}
-              isLast={index === Math.min(keys.length, 100) - 1}
+              isLast={!hasMore && index === showCount - 1}
               searchQuery={searchQuery}
             />
           ))}
-          {keys.length > 100 && (
-            <div className="flex items-center gap-1.5 py-1 text-muted-foreground italic text-[11px]">
-              <span>...and {keys.length - 100} more items hidden</span>
-            </div>
+          {hasMore && (
+            <button
+              type="button"
+              onClick={() => setVisibleCount((c) => c + 100)}
+              className="flex items-center gap-1.5 py-1.5 px-2 my-1 text-[11px] text-primary/80 hover:text-primary hover:bg-primary/5 rounded transition-colors cursor-pointer w-max"
+            >
+              ▼ Show {Math.min(remaining, 100)} more ({remaining} remaining)
+            </button>
           )}
         </div>
       )}
-      
+
       {expanded && (
         <div className="json-punctuation py-0.5">
           {bracketClose}
@@ -168,4 +181,4 @@ export function JsonTree({ data, name, depth = 0, isLast = true, searchQuery = "
       )}
     </div>
   );
-}
+});

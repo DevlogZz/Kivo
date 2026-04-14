@@ -24,7 +24,7 @@ function getTone(status) {
 
 export function ResponsePane({ response, activeTab, onTabChange, bodyView, onBodyViewChange }) {
   const tone = getTone(response.status);
-  
+
   const contentType = Object.entries(response.headers).find(([k]) => k.toLowerCase() === 'content-type')?.[1]?.toLowerCase() || "";
   const isHtml = contentType.includes("text/html");
   const isJson = response.isJson;
@@ -41,29 +41,52 @@ export function ResponsePane({ response, activeTab, onTabChange, bodyView, onBod
     currentView = bodyViews[0];
   }
 
-  let parsedJson = null;
-  if (isJson && currentView === "Tree") {
+  const parsedJson = useMemo(() => {
+    if (!isJson) return null;
     try {
-      parsedJson = JSON.parse(response.body);
+      return JSON.parse(response.body);
     } catch {
-      parsedJson = null;
+      return null;
     }
-  }
+  }, [response.body, isJson]);
 
   const [inputValue, setInputValue] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
 
   useEffect(() => {
+    if (!inputValue.trim()) {
+      setSearchQuery("");
+      return;
+    }
+
+    const isStructured = /[=!<>]/.test(inputValue);
+    if (!isStructured && inputValue.trim().length < 2) {
+      setSearchQuery("");
+      return;
+    }
+
     const timer = setTimeout(() => {
       setSearchQuery(inputValue);
-    }, 250);
+    }, 300);
     return () => clearTimeout(timer);
   }, [inputValue]);
 
   const filteredJson = useMemo(() => {
-    if (!parsedJson) return null;
+    if (!parsedJson || !searchQuery) return parsedJson;
     return filterJson(parsedJson, searchQuery);
   }, [parsedJson, searchQuery]);
+
+  const MAX_DISPLAY = 50;
+  const displayJson = useMemo(() => {
+    if (!filteredJson || !searchQuery) return filteredJson;
+    if (Array.isArray(filteredJson) && filteredJson.length > MAX_DISPLAY) {
+      return filteredJson.slice(0, MAX_DISPLAY);
+    }
+    return filteredJson;
+  }, [filteredJson, searchQuery]);
+
+  const totalMatches = filteredJson ? (Array.isArray(filteredJson) ? filteredJson.length : Object.keys(filteredJson).length) : 0;
+  const isResultCapped = searchQuery && Array.isArray(filteredJson) && filteredJson.length > MAX_DISPLAY;
 
   return (
     <Card className="flex h-full min-h-0 flex-col gap-0 overflow-hidden border-0 bg-card/84 p-0 shadow-none">
@@ -119,7 +142,7 @@ export function ResponsePane({ response, activeTab, onTabChange, bodyView, onBod
                     <Search className="h-[11px] w-[11px] text-muted-foreground shrink-0" />
                     <input
                       type="text"
-                      placeholder="Filter JSON tree..."
+                      placeholder="e.g. age > 20 && status == active"
                       value={inputValue}
                       onChange={(e) => setInputValue(e.target.value)}
                       className="w-full bg-transparent text-[11px] font-medium outline-none placeholder:text-muted-foreground/60 text-foreground"
@@ -150,8 +173,17 @@ export function ResponsePane({ response, activeTab, onTabChange, bodyView, onBod
             </div>
             {currentView === "Tree" && parsedJson !== null ? (
               <div className="h-full overflow-auto thin-scrollbar bg-background/20 rounded p-4 border border-border/10 shadow-inner">
-                {Object.keys(filteredJson).length > 0 || Array.isArray(filteredJson) && filteredJson.length > 0 ? (
-                  <JsonTree data={filteredJson} searchQuery={searchQuery} />
+                {(Array.isArray(displayJson) ? displayJson.length > 0 : Object.keys(displayJson || {}).length > 0) ? (
+                  <div className="flex flex-col gap-0">
+                    {searchQuery && (
+                      <div className="text-[11px] text-muted-foreground mb-3 font-medium">
+                        {isResultCapped
+                          ? `Showing ${MAX_DISPLAY} of ${totalMatches} matches`
+                          : `${totalMatches} match${totalMatches !== 1 ? "es" : ""}`}
+                      </div>
+                    )}
+                    <JsonTree data={displayJson} searchQuery={searchQuery} />
+                  </div>
                 ) : (
                   <div className="flex h-full flex-col items-center justify-center text-muted-foreground/70">
                     <Search className="h-8 w-8 mb-2 opacity-20" />
