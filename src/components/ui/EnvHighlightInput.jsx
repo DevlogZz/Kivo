@@ -24,11 +24,16 @@ function renderHighlighted(text, envVars) {
       <span
         key={`v-${match.index}`}
         className={cn(
-          "rounded-sm px-0.5 mx-px font-semibold",
+          "rounded-sm font-semibold",
           isResolved
-            ? "bg-emerald-500/15 text-emerald-400"
-            : "bg-amber-500/15 text-amber-400"
+            ? "text-emerald-400"
+            : "text-amber-400"
         )}
+        style={{
+          boxShadow: isResolved
+            ? "0 0 0 2px rgba(52,211,153,0.10), inset 0 0 0 12px rgba(52,211,153,0.10)"
+            : "0 0 0 2px rgba(251,191,36,0.10), inset 0 0 0 12px rgba(251,191,36,0.10)"
+        }}
       >
         {match[0]}
       </span>
