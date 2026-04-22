@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+﻿import { useEffect, useState } from "react";
 import {
   BookOpen, Code2, FileJson, FlaskConical, FolderOpen, Globe, Layers,
   Save, Share2, RotateCcw, ChevronRight, Eye, EyeOff, RefreshCw
@@ -12,6 +12,7 @@ import { Card } from "@/components/ui/card.jsx";
 import { Input } from "@/components/ui/input.jsx";
 import { EnvHighlightInput } from "@/components/ui/EnvHighlightInput.jsx";
 import { EnvEditor } from "@/components/workspace/EnvEditor.jsx";
+import { OAuth2Panel } from "@/components/workspace/OAuth2Panel.jsx";
 import { useCollectionConfig } from "@/hooks/use-collection-config.js";
 import { useEnv } from "@/hooks/use-env.js";
 import { cn } from "@/lib/utils.js";
@@ -78,7 +79,7 @@ function HeadersTable({ rows, onChange, onDelete }) {
             }}
             className="flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground hover:bg-red-500/10 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-all justify-self-center"
           >
-            ✕
+            âœ•
           </button>
         </div>
       ))}
@@ -103,7 +104,7 @@ function OverviewTab({ workspace, collection, storagePath, envVars, onNavigate }
   const collectionPath =
     storagePath && workspace && collection
       ? [storagePath, workspace.name, "collections", collection.name].join(sep)
-      : "Loading…";
+      : "Loadingâ€¦";
 
   const globalCount = envVars?.workspace?.length ?? 0;
   const collectionCount = envVars?.collection?.length ?? 0;
@@ -278,7 +279,7 @@ function HeadersTab({ config, updateConfig, onSave, onReset, isDirty, isSaving }
         <div className="flex items-center gap-3">
           <Button className="h-9 px-6 text-[13px] gap-2 shadow-md transition-transform active:scale-95" onClick={() => onSave()} disabled={isSaving || !isDirty}>
             <Save className="h-4 w-4" />
-            {isSaving ? "Saving…" : "Save"}
+            {isSaving ? "Savingâ€¦" : "Save"}
           </Button>
         </div>
       </div>
@@ -291,6 +292,7 @@ const AUTH_MODES = [
   { value: "basic", label: "Basic Auth" },
   { value: "bearer", label: "Bearer Token" },
   { value: "apikey", label: "API Key" },
+  { value: "oauth2", label: "OAuth 2.0" },
 ];
 
 const API_KEY_IN_OPTIONS = [
@@ -298,13 +300,13 @@ const API_KEY_IN_OPTIONS = [
   { value: "query", label: "Query Param" },
 ];
 
-function AuthTab({ config, updateConfig, onSave, onReset, isDirty, isSaving, envVars }) {
+function AuthTab({ workspace, collection, config, updateConfig, onSave, onReset, isDirty, isSaving, envVars }) {
   const auth = config.defaultAuth ?? { type: "none", token: "" };
   const [showToken, setShowToken] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
 
   return (
-    <div className="flex flex-col gap-6 p-8 max-w-xl">
+    <div className="flex h-full min-h-0 flex-col gap-6 p-8">
       <div>
         <h3 className="text-lg font-semibold text-foreground tracking-tight">Collection Auth</h3>
         <p className="text-[13px] text-muted-foreground mt-1">
@@ -312,10 +314,10 @@ function AuthTab({ config, updateConfig, onSave, onReset, isDirty, isSaving, env
         </p>
       </div>
 
-      <Card className="flex flex-col gap-5 border-border/20 bg-background/40 p-5 shadow-sm">
+      <Card className={cn("flex min-h-0 flex-col gap-5 border-border/20 bg-background/40 p-5 shadow-sm", auth.type === "oauth2" ? "flex-1 overflow-hidden p-0" : "")}>
         <div className="grid gap-3 text-left w-full">
           <label className="text-[11px] font-semibold uppercase tracking-[0.1em] text-muted-foreground">Authentication Type</label>
-          <div className="flex items-center gap-2 p-1 rounded-lg bg-accent/30 border border-border/20 w-fit">
+          <div className="mx-5 mt-5 flex flex-wrap items-center gap-2 rounded-lg border border-border/20 bg-accent/30 p-1 w-fit">
             {AUTH_MODES.map((m) => (
               <button
                 key={m.value}
@@ -420,7 +422,7 @@ function AuthTab({ config, updateConfig, onSave, onReset, isDirty, isSaving, env
             </div>
             <div className="grid gap-2">
               <label className="text-[11px] font-semibold uppercase tracking-[0.1em] text-muted-foreground">Add To</label>
-              <div className="flex items-center gap-2 p-1 rounded-lg bg-accent/30 border border-border/20 w-fit">
+              <div className="mx-5 mt-5 flex flex-wrap items-center gap-2 rounded-lg border border-border/20 bg-accent/30 p-1 w-fit">
                 {API_KEY_IN_OPTIONS.map((opt) => (
                   <button
                     key={opt.value}
@@ -447,8 +449,24 @@ function AuthTab({ config, updateConfig, onSave, onReset, isDirty, isSaving, env
           </div>
         )}
 
+        {auth.type === "oauth2" && (
+          <OAuth2Panel
+            auth={auth}
+            envVars={envVars}
+            workspaceName={workspace?.name}
+            collectionName={collection?.name}
+            scopeLabel="collection"
+            onChange={(nextAuth) => updateConfig({ defaultAuth: nextAuth })}
+            onPersist={async (nextAuth) => {
+              const nextConfig = { ...config, defaultAuth: nextAuth };
+              updateConfig(nextConfig);
+              await onSave(nextConfig);
+            }}
+          />
+        )}
+
         {auth.type === "none" && (
-          <p className="text-[12px] text-muted-foreground/70">No authentication will be applied to inherited requests.</p>
+          <p className="px-5 pb-5 text-[12px] text-muted-foreground/70">No authentication will be applied to inherited requests.</p>
         )}
       </Card>
       <div className="flex items-center justify-between border-t border-border/10 pt-6">
@@ -466,7 +484,7 @@ function AuthTab({ config, updateConfig, onSave, onReset, isDirty, isSaving, env
         <div className="flex items-center gap-3">
           <Button className="h-9 px-6 text-[13px] gap-2 shadow-md transition-transform active:scale-95" onClick={() => onSave()} disabled={isSaving || !isDirty}>
             <Save className="h-4 w-4" />
-            {isSaving ? "Saving…" : "Save"}
+            {isSaving ? "Savingâ€¦" : "Save"}
           </Button>
         </div>
       </div>
@@ -595,6 +613,8 @@ export function CollectionSettingsPage({
 
         {activeTab === "Auth" && (
           <AuthTab
+            workspace={workspace}
+            collection={collection}
             config={config}
             updateConfig={updateConfig}
             isDirty={isDirty}
@@ -608,4 +628,5 @@ export function CollectionSettingsPage({
     </div>
   );
 }
+
 

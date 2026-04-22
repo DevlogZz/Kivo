@@ -4,6 +4,10 @@ export function sendHttpRequest(payload) {
   return invoke("send_http_request", { payload });
 }
 
+export function exchangeOAuthToken(payload) {
+  return invoke("oauth_exchange_token", { payload });
+}
+
 export function loadAppState() {
   return invoke("load_app_state");
 }

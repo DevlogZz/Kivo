@@ -4,6 +4,66 @@ use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Deserialize, Default)]
 #[serde(rename_all = "camelCase")]
+pub struct OAuthParamRow {
+    #[serde(default)]
+    pub key: String,
+    #[serde(default)]
+    pub value: String,
+    #[serde(default)]
+    pub enabled: bool,
+}
+
+#[allow(dead_code)]
+#[derive(Debug, Deserialize, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct OAuthPayload {
+    #[serde(default)]
+    pub grant_type: String,
+    #[serde(default)]
+    pub auth_url: String,
+    #[serde(default)]
+    pub token_url: String,
+    #[serde(default)]
+    pub callback_url: String,
+    #[serde(default)]
+    pub client_id: String,
+    #[serde(default)]
+    pub client_secret: String,
+    #[serde(default)]
+    pub scope: String,
+    #[serde(default)]
+    pub audience: String,
+    #[serde(default)]
+    pub resource: String,
+    #[serde(default)]
+    pub authorization_code: String,
+    #[serde(default)]
+    pub access_token: String,
+    #[serde(default)]
+    pub refresh_token: String,
+    #[serde(default)]
+    pub token_type: String,
+    #[serde(default)]
+    pub expires_at: String,
+    #[serde(default)]
+    pub username: String,
+    #[serde(default)]
+    pub password: String,
+    #[serde(default)]
+    pub use_pkce: bool,
+    #[serde(default)]
+    pub code_verifier: String,
+    #[serde(default)]
+    pub state: String,
+    #[serde(default)]
+    pub client_auth_method: String,
+    #[serde(default)]
+    pub extra_token_params: Vec<OAuthParamRow>,
+}
+
+#[allow(dead_code)]
+#[derive(Debug, Deserialize, Default)]
+#[serde(rename_all = "camelCase")]
 pub struct AuthPayload {
     #[serde(default)]
     pub api_key_in: String,
@@ -11,6 +71,8 @@ pub struct AuthPayload {
     pub api_key_name: String,
     #[serde(default)]
     pub api_key_value: String,
+    #[serde(default)]
+    pub oauth2: Option<OAuthPayload>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -37,6 +99,28 @@ pub struct RequestPayload {
     pub auth_payload: Option<AuthPayload>,
 }
 
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct OAuthTokenExchangePayload {
+    #[serde(default)]
+    pub workspace_name: String,
+    #[serde(default)]
+    pub collection_name: String,
+    pub oauth: OAuthPayload,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct OAuthTokenExchangeResult {
+    pub access_token: String,
+    pub refresh_token: String,
+    pub token_type: String,
+    pub scope: String,
+    pub expires_in: Option<u64>,
+    pub expires_at: String,
+    pub raw: serde_json::Value,
+}
+
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ResponsePayload {
@@ -46,4 +130,3 @@ pub struct ResponsePayload {
     pub body: String,
     pub duration_ms: u128,
 }
-

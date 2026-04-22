@@ -351,6 +351,8 @@ export default function App() {
                   onUpdateActiveRequest={updateActiveRequest}
                   response={response}
                   envVars={envVars}
+                  workspaceName={activeWorkspace?.name}
+                  collectionName={activeCollection?.name}
                 />
               </div>
             </>

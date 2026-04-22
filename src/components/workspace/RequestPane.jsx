@@ -5,6 +5,7 @@ import { CodeEditor } from "@/components/workspace/CodeEditor.jsx";
 import { Button } from "@/components/ui/button.jsx";
 import { Card } from "@/components/ui/card.jsx";
 import { Input } from "@/components/ui/input.jsx";
+import { OAuth2Panel } from "@/components/workspace/OAuth2Panel.jsx";
 import { formatGraphqlText, formatJsonText } from "@/lib/formatters.js";
 import { getMethodTone, requestBodyModes } from "@/lib/http-ui.js";
 import { cn } from "@/lib/utils.js";
@@ -17,6 +18,7 @@ const authModes = [
   { value: "basic", label: "Basic Auth" },
   { value: "bearer", label: "Bearer Token" },
   { value: "apikey", label: "API Key" },
+  { value: "oauth2", label: "OAuth 2.0" },
   { value: "inherit", label: "Inherit from Collection" },
 ];
 
@@ -346,13 +348,15 @@ const apiKeyInOptions = [
   { value: "query", label: "Query Param" },
 ];
 
-function AuthPanel({ state, onAuthChange, envVars }) {
+function AuthPanel({ state, onAuthChange, envVars, response, workspaceName, collectionName }) {
   const auth = state.auth ?? { type: "none" };
   const [showPassword, setShowPassword] = useState(false);
 
   return (
-    <div className="grid gap-4 px-3 py-3 text-[12px] text-muted-foreground">
-      <div className="grid max-w-[420px] gap-2">
+    <div className="h-full min-h-0 overflow-hidden text-[12px] text-muted-foreground">
+      <div className="h-full thin-scrollbar overflow-auto px-3 py-3">
+      <div className={cn("grid gap-4", auth.type !== "oauth2" && "pb-3")}>
+      <div className="grid max-w-[420px] gap-2 px-3 pt-3">
         <label className="text-[10px] uppercase tracking-[0.18em]">Type</label>
         <SelectMenu
           value={auth.type}
@@ -362,7 +366,7 @@ function AuthPanel({ state, onAuthChange, envVars }) {
       </div>
 
       {auth.type === "basic" && (
-        <div className="grid max-w-[420px] gap-4" style={{ animation: "fadeIn 0.2s ease-out" }}>
+        <div className="grid max-w-[420px] gap-4 px-3" style={{ animation: "fadeIn 0.2s ease-out" }}>
           <div className="grid gap-2">
             <label className="text-[10px] uppercase tracking-[0.18em]">Username</label>
             <EnvHighlightInput
@@ -399,7 +403,7 @@ function AuthPanel({ state, onAuthChange, envVars }) {
       )}
 
       {auth.type === "bearer" && (
-        <div className="grid max-w-[420px] gap-2" style={{ animation: "fadeIn 0.2s ease-out" }}>
+        <div className="grid max-w-[420px] gap-2 px-3" style={{ animation: "fadeIn 0.2s ease-out" }}>
           <label className="text-[10px] uppercase tracking-[0.18em]">Token</label>
           <EnvHighlightInput
             value={auth.token ?? ""}
@@ -414,7 +418,7 @@ function AuthPanel({ state, onAuthChange, envVars }) {
       )}
 
       {auth.type === "apikey" && (
-        <div className="grid max-w-[420px] gap-4" style={{ animation: "fadeIn 0.2s ease-out" }}>
+        <div className="grid max-w-[420px] gap-4 px-3" style={{ animation: "fadeIn 0.2s ease-out" }}>
           <div className="grid gap-2">
             <label className="text-[10px] uppercase tracking-[0.18em]">Key</label>
             <EnvHighlightInput
@@ -450,13 +454,26 @@ function AuthPanel({ state, onAuthChange, envVars }) {
         </div>
       )}
 
+      {auth.type === "oauth2" && (
+        <OAuth2Panel
+          auth={auth}
+          onChange={onAuthChange}
+          envVars={envVars}
+          response={response}
+          workspaceName={workspaceName}
+          collectionName={collectionName}
+        />
+      )}
+
       {(auth.type === "none" || auth.type === "inherit") && (
-        <div className="bg-background/20 p-3">
+        <div className="mx-3 bg-background/20 p-3">
           {auth.type === "inherit"
             ? "This request will use the authentication configured on the parent collection."
             : "No authentication will be applied to this request."}
         </div>
       )}
+      </div>
+      </div>
     </div>
   );
 }
@@ -471,6 +488,9 @@ export function RequestPane({
   onHeadersChange,
   onAuthChange,
   envVars,
+  response,
+  workspaceName,
+  collectionName,
 }) {
   const activeTab = state.activeEditorTab ?? "Params";
   const bodyDisabled = state.method === "GET" || state.method === "DELETE" || state.bodyType === "none";
@@ -489,6 +509,7 @@ export function RequestPane({
     if (!envVars) return [];
     const merged = envVars.merged ?? {};
     const auth = debouncedState.auth ?? {};
+    const oauthRows = auth.oauth2?.extraTokenParams ?? [];
     const allText = [
       debouncedState.url ?? "",
       ...(debouncedState.headers ?? []).map((h) => `${h.key}=${h.value}`),
@@ -498,8 +519,30 @@ export function RequestPane({
       auth.password ?? "",
       auth.apiKeyName ?? "",
       auth.apiKeyValue ?? "",
+      auth.oauth2?.authUrl ?? "",
+      auth.oauth2?.tokenUrl ?? "",
+      auth.oauth2?.callbackUrl ?? "",
+      auth.oauth2?.clientId ?? "",
+      auth.oauth2?.clientSecret ?? "",
+      auth.oauth2?.scope ?? "",
+      auth.oauth2?.audience ?? "",
+      auth.oauth2?.resource ?? "",
+      auth.oauth2?.authorizationCode ?? "",
+      auth.oauth2?.refreshToken ?? "",
+      auth.oauth2?.accessToken ?? "",
+      auth.oauth2?.tokenType ?? "",
+      auth.oauth2?.username ?? "",
+      auth.oauth2?.password ?? "",
+      auth.oauth2?.state ?? "",
+      auth.oauth2?.codeVerifier ?? "",
+      auth.oauth2?.clientAuthMethod ?? "",
+      ...oauthRows.map((row) => `${row?.key ?? ""}=${row?.value ?? ""}`),
     ].join(" ");
-    const placeholders = [...allText.matchAll(/\{\{([^}]+)\}\}/g)].map((m) => m[1].trim());
+
+    const placeholders = [...allText.matchAll(/\{\{+\s*([^{}]+?)\s*\}\}+/g)]
+      .map((m) => m[1].trim())
+      .filter(Boolean);
+
     return [...new Set(placeholders)].filter((key) => !(key in merged));
   }, [debouncedState, envVars]);
 
@@ -529,7 +572,7 @@ export function RequestPane({
 
       {missingVars.length > 0 && (
         <div className="flex items-center gap-2 border-b border-amber-500/20 bg-amber-500/[0.08] px-3 py-1.5 text-[11px] text-amber-500 dark:text-amber-400">
-          <span className="shrink-0">⚠</span>
+          <span className="shrink-0">âš </span>
           <span>
             Undefined variable{missingVars.length > 1 ? "s" : ""}:{" "}
             <code className="font-mono">{missingVars.map((k) => `{{${k}}}`).join(", ")}</code>
@@ -636,7 +679,14 @@ export function RequestPane({
         ) : null}
 
         {activeTab === "Auth" ? (
-          <AuthPanel state={state} onAuthChange={onAuthChange} envVars={envVars} />
+          <AuthPanel
+            state={state}
+            onAuthChange={onAuthChange}
+            envVars={envVars}
+            response={response}
+            workspaceName={workspaceName}
+            collectionName={collectionName}
+          />
         ) : null}
 
         {activeTab === "Docs" ? (
@@ -654,3 +704,4 @@ export function RequestPane({
     </Card>
   );
 }
+

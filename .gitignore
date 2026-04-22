@@ -8,3 +8,6 @@ desktop/target/
 *.key
 *.key.pub
 .superpowers/
+
+# mock servers
+/oauth-mock-server/

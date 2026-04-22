@@ -3,7 +3,7 @@
 mod http;
 mod storage;
 
-use http::client::send_http_request;
+use http::client::{oauth_exchange_token, send_http_request};
 use storage::{
     get_app_config, get_default_storage_path, get_env_vars, get_resolved_storage_path,
     get_collection_config, load_app_state, open_config_directory, reveal_item, save_app_state,
@@ -18,6 +18,7 @@ fn main() {
         .plugin(tauri_plugin_opener::init())
         .invoke_handler(tauri::generate_handler![
             send_http_request,
+            oauth_exchange_token,
             load_app_state,
             save_app_state,
             open_config_directory,

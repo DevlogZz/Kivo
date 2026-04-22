@@ -1,3 +1,5 @@
+import { createDefaultAuthState, normalizeAuthState } from "@/lib/oauth.js";
+
 export function formatSavedAt() {
   return new Date().toLocaleString();
 }
@@ -46,7 +48,7 @@ export function createRequest(name = "New Request") {
     url: "",
     queryParams: [],
     headers: [],
-    auth: { type: "none", token: "", username: "", password: "", apiKeyName: "", apiKeyValue: "", apiKeyIn: "header" },
+    auth: createDefaultAuthState(),
     bodyType: "json",
     body: "",
     bodyRows: [],
@@ -55,6 +57,7 @@ export function createRequest(name = "New Request") {
     activeEditorTab: "Params",
     activeResponseTab: "Body",
     responseBodyView: "JSON",
+    inheritHeaders: true,
     lastResponse: null
   };
 }
@@ -126,21 +129,12 @@ export function normalizeRequestRecord(request) {
   return {
     ...request,
     pinned: Boolean(request?.pinned),
+    inheritHeaders: request?.inheritHeaders ?? true,
     queryParams: Array.isArray(request?.queryParams) ? request.queryParams : [],
     headers: Array.isArray(request?.headers) ? request.headers : [],
     bodyRows: Array.isArray(request?.bodyRows) ? request.bodyRows : [],
     graphqlVariables: typeof request?.graphqlVariables === "string" ? request.graphqlVariables : "{\n\n}",
-    auth: request?.auth && typeof request.auth === "object"
-      ? {
-        type: request.auth.type ?? "none",
-        token: request.auth.token ?? "",
-        username: request.auth.username ?? "",
-        password: request.auth.password ?? "",
-        apiKeyName: request.auth.apiKeyName ?? "",
-        apiKeyValue: request.auth.apiKeyValue ?? "",
-        apiKeyIn: request.auth.apiKeyIn ?? "header",
-      }
-      : { type: "none", token: "", username: "", password: "", apiKeyName: "", apiKeyValue: "", apiKeyIn: "header" }
+    auth: normalizeAuthState(request?.auth)
   };
 }
 
@@ -151,6 +145,7 @@ export function cloneRequest(request) {
     queryParams: (request.queryParams || []).map((row) => ({ ...row })),
     headers: (request.headers || []).map((row) => ({ ...row })),
     bodyRows: (request.bodyRows || []).map((row) => ({ ...row })),
+    auth: normalizeAuthState(request.auth),
     lastResponse: request.lastResponse ? { ...request.lastResponse } : null
   };
 }

@@ -1,10 +1,11 @@
 import { useCallback, useEffect, useState } from "react";
 
 import { getCollectionConfig, saveCollectionConfig } from "@/lib/http-client.js";
+import { createDefaultAuthState, normalizeAuthState } from "@/lib/oauth.js";
 
 const DEFAULT_CONFIG = {
   defaultHeaders: [],
-  defaultAuth: { type: "none", token: "", username: "", password: "", apiKeyName: "", apiKeyValue: "", apiKeyIn: "header" },
+  defaultAuth: createDefaultAuthState(),
   scripts: { preRequest: "", postResponse: "" },
 };
 
@@ -26,15 +27,7 @@ export function useCollectionConfig(workspaceName, collectionName) {
       const result = await getCollectionConfig(workspaceName, collectionName);
       const normalized = {
         defaultHeaders: result.defaultHeaders ?? [],
-        defaultAuth: {
-          type: result.defaultAuth?.type ?? "none",
-          token: result.defaultAuth?.token ?? "",
-          username: result.defaultAuth?.username ?? "",
-          password: result.defaultAuth?.password ?? "",
-          apiKeyName: result.defaultAuth?.apiKeyName ?? "",
-          apiKeyValue: result.defaultAuth?.apiKeyValue ?? "",
-          apiKeyIn: result.defaultAuth?.apiKeyIn ?? "header",
-        },
+        defaultAuth: normalizeAuthState(result.defaultAuth),
         scripts: result.scripts ?? { preRequest: "", postResponse: "" },
       };
       setConfig(normalized);
@@ -50,6 +43,20 @@ export function useCollectionConfig(workspaceName, collectionName) {
   useEffect(() => {
     load();
   }, [load]);
+
+  useEffect(() => {
+    if (!workspaceName || !collectionName || !isDirty || isLoading) {
+      return undefined;
+    }
+
+    const timer = window.setTimeout(() => {
+      save(config).catch((error) => {
+        console.error("useCollectionConfig: autosave failed", error);
+      });
+    }, 700);
+
+    return () => window.clearTimeout(timer);
+  }, [workspaceName, collectionName, config, isDirty, isLoading]);
 
   async function save(overrideConfig) {
     const toSave = overrideConfig || config;

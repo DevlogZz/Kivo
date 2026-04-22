@@ -55,6 +55,7 @@ fn default_auth_record() -> AuthRecord {
         api_key_name: String::new(),
         api_key_value: String::new(),
         api_key_in: "header".to_string(),
+        oauth2: OAuthConfig::default(),
     }
 }
 
@@ -260,6 +261,101 @@ pub struct KeyValueRow {
     pub enabled: bool,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct OAuthParamRow {
+    #[serde(default)]
+    pub key: String,
+    #[serde(default)]
+    pub value: String,
+    #[serde(default)]
+    pub enabled: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct OAuthConfig {
+    #[serde(default)]
+    pub grant_type: String,
+    #[serde(default)]
+    pub auth_url: String,
+    #[serde(default)]
+    pub token_url: String,
+    #[serde(default)]
+    pub callback_url: String,
+    #[serde(default)]
+    pub client_id: String,
+    #[serde(default)]
+    pub client_secret: String,
+    #[serde(default)]
+    pub scope: String,
+    #[serde(default)]
+    pub audience: String,
+    #[serde(default)]
+    pub resource: String,
+    #[serde(default)]
+    pub authorization_code: String,
+    #[serde(default)]
+    pub access_token: String,
+    #[serde(default)]
+    pub refresh_token: String,
+    #[serde(default)]
+    pub token_type: String,
+    #[serde(default)]
+    pub expires_at: String,
+    #[serde(default)]
+    pub username: String,
+    #[serde(default)]
+    pub password: String,
+    #[serde(default)]
+    pub use_pkce: bool,
+    #[serde(default)]
+    pub code_verifier: String,
+    #[serde(default)]
+    pub state: String,
+    #[serde(default)]
+    pub client_auth_method: String,
+    #[serde(default)]
+    pub extra_token_params: Vec<OAuthParamRow>,
+    #[serde(default)]
+    pub last_error: String,
+    #[serde(default)]
+    pub last_warning: String,
+    #[serde(default)]
+    pub last_status: String,
+}
+
+impl Default for OAuthConfig {
+    fn default() -> Self {
+        Self {
+            grant_type: "authorization_code".to_string(),
+            auth_url: String::new(),
+            token_url: String::new(),
+            callback_url: String::new(),
+            client_id: String::new(),
+            client_secret: String::new(),
+            scope: String::new(),
+            audience: String::new(),
+            resource: String::new(),
+            authorization_code: String::new(),
+            access_token: String::new(),
+            refresh_token: String::new(),
+            token_type: "Bearer".to_string(),
+            expires_at: String::new(),
+            username: String::new(),
+            password: String::new(),
+            use_pkce: true,
+            code_verifier: String::new(),
+            state: String::new(),
+            client_auth_method: "basic".to_string(),
+            extra_token_params: vec![],
+            last_error: String::new(),
+            last_warning: String::new(),
+            last_status: String::new(),
+        }
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct AuthRecord {
@@ -277,6 +373,8 @@ pub struct AuthRecord {
     pub api_key_value: String,
     #[serde(default, rename = "apiKeyIn")]
     pub api_key_in: String,
+    #[serde(default)]
+    pub oauth2: OAuthConfig,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -746,3 +844,4 @@ pub fn reveal_item(
         .reveal_item_in_dir(path.to_string_lossy().to_string())
         .map_err(|e| format!("Failed to reveal item: {e}"))
 }
+

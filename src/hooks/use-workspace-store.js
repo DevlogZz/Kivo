@@ -699,7 +699,43 @@ export function useWorkspaceStore() {
     }
 
     if (!finalUrl) {
-      console.warn("No URL provided or URL is invalid");
+      updateStore((current) => ({
+        ...current,
+        workspaces: current.workspaces.map((workspace) => {
+          if (workspace.name !== current.activeWorkspaceName) return workspace;
+          return {
+            ...workspace,
+            collections: workspace.collections.map((collection) => {
+              if (collection.name !== current.activeCollectionName) return collection;
+              return {
+                ...collection,
+                requests: collection.requests.map((request) =>
+                  request.name === activeRequest.name
+                    ? {
+                        ...request,
+                        responseBodyView: "Raw",
+                        lastResponse: {
+                          status: 0,
+                          badge: "Request warning",
+                          statusText: "Request warning",
+                          duration: "-",
+                          size: "0 B",
+                          headers: {},
+                          cookies: [],
+                          body: "Enter a valid URL before sending the request.",
+                          rawBody: "Enter a valid URL before sending the request.",
+                          isJson: false,
+                          meta: { url: activeRequest.url || "-", method: activeRequest.method },
+                          savedAt: formatSavedAt()
+                        }
+                      }
+                    : request
+                )
+              };
+            })
+          };
+        })
+      }));
       return;
     }
 

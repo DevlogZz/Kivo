@@ -155,6 +155,11 @@ export function serializeHeaders(rows = [], auth = { type: "none", token: "" }, 
     headers[String(auth.apiKeyName).trim()] = String(auth.apiKeyValue || "");
   }
 
+  if (auth?.type === "oauth2" && String(auth?.oauth2?.accessToken || "").trim()) {
+    const tokenType = String(auth?.oauth2?.tokenType || "Bearer").trim() || "Bearer";
+    headers.Authorization = `${tokenType} ${String(auth.oauth2.accessToken).trim()}`;
+  }
+
   const contentType = explicitContentType || getDefaultContentType(bodyType);
 
   if (contentType && !hasHeader(headers, "content-type")) {
@@ -232,6 +237,7 @@ export function buildRequestPayload(request, workspaceName, collectionName) {
       apiKeyIn: auth.apiKeyIn ?? "header",
       apiKeyName: auth.apiKeyName ?? "",
       apiKeyValue: auth.apiKeyValue ?? "",
+      oauth2: auth.type === "oauth2" ? auth.oauth2 ?? null : null,
     },
   };
 }
