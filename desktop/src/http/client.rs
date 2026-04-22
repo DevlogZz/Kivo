@@ -15,9 +15,14 @@ use super::models::{
 use crate::storage::{get_collection_dir, get_storage_root, load_collection_config_from_path, load_env_vars};
 
 static OAUTH_CANCEL_REGISTRY: OnceLock<Mutex<HashMap<String, watch::Sender<bool>>>> = OnceLock::new();
+static HTTP_CANCEL_REGISTRY: OnceLock<Mutex<HashMap<String, watch::Sender<bool>>>> = OnceLock::new();
 
 fn oauth_cancel_registry() -> &'static Mutex<HashMap<String, watch::Sender<bool>>> {
     OAUTH_CANCEL_REGISTRY.get_or_init(|| Mutex::new(HashMap::new()))
+}
+
+fn http_cancel_registry() -> &'static Mutex<HashMap<String, watch::Sender<bool>>> {
+    HTTP_CANCEL_REGISTRY.get_or_init(|| Mutex::new(HashMap::new()))
 }
 
 fn register_oauth_cancel(request_id: &str) -> Option<watch::Receiver<bool>> {
@@ -40,13 +45,49 @@ fn unregister_oauth_cancel(request_id: &str) {
     registry.remove(request_id);
 }
 
+fn register_http_cancel(request_id: &str) -> Option<watch::Receiver<bool>> {
+    if request_id.trim().is_empty() {
+        return None;
+    }
+
+    let (cancel_tx, cancel_rx) = watch::channel(false);
+    let mut registry = http_cancel_registry().lock().unwrap();
+    registry.insert(request_id.to_string(), cancel_tx);
+    Some(cancel_rx)
+}
+
+fn unregister_http_cancel(request_id: &str) {
+    if request_id.trim().is_empty() {
+        return;
+    }
+
+    let mut registry = http_cancel_registry().lock().unwrap();
+    registry.remove(request_id);
+}
+
 struct OAuthCancelGuard {
+    request_id: String,
+}
+
+struct HttpCancelGuard {
     request_id: String,
 }
 
 impl OAuthCancelGuard {
     fn new(request_id: String) -> Self {
         Self { request_id }
+    }
+}
+
+impl HttpCancelGuard {
+    fn new(request_id: String) -> Self {
+        Self { request_id }
+    }
+}
+
+impl Drop for HttpCancelGuard {
+    fn drop(&mut self) {
+        unregister_http_cancel(&self.request_id);
     }
 }
 
@@ -90,6 +131,34 @@ async fn send_oauth_form(
     }
 }
 
+async fn send_http_request_with_cancel(
+    request: reqwest::RequestBuilder,
+    cancel_rx: &mut Option<watch::Receiver<bool>>,
+) -> Result<reqwest::Response, String> {
+    if let Some(receiver) = cancel_rx.as_mut() {
+        tokio::select! {
+            changed = receiver.changed() => {
+                match changed {
+                    Ok(_) => {
+                        if *receiver.borrow() {
+                            return Err("Request cancelled by user.".to_string());
+                        }
+                        return Err("Request cancelled by user.".to_string());
+                    }
+                    Err(_) => {
+                        return Err("Request cancelled by user.".to_string());
+                    }
+                }
+            }
+            response = request.send() => {
+                response.map_err(|err| err.to_string())
+            }
+        }
+    } else {
+        request.send().await.map_err(|err| err.to_string())
+    }
+}
+
 #[tauri::command]
 pub async fn cancel_oauth_exchange(request_id: String) -> Result<bool, String> {
     let trimmed = request_id.trim().to_string();
@@ -99,6 +168,26 @@ pub async fn cancel_oauth_exchange(request_id: String) -> Result<bool, String> {
 
     let sender = {
         let mut registry = oauth_cancel_registry().lock().unwrap();
+        registry.remove(&trimmed)
+    };
+
+    if let Some(cancel_tx) = sender {
+        let _ = cancel_tx.send(true);
+        Ok(true)
+    } else {
+        Ok(false)
+    }
+}
+
+#[tauri::command]
+pub async fn cancel_http_request(request_id: String) -> Result<bool, String> {
+    let trimmed = request_id.trim().to_string();
+    if trimmed.is_empty() {
+        return Ok(false);
+    }
+
+    let sender = {
+        let mut registry = http_cancel_registry().lock().unwrap();
         registry.remove(&trimmed)
     };
 
@@ -406,6 +495,10 @@ pub async fn send_http_request(
     app: AppHandle,
     payload: RequestPayload,
 ) -> Result<ResponsePayload, String> {
+    let request_id = payload.request_id.trim().to_string();
+    let _cancel_guard = HttpCancelGuard::new(request_id.clone());
+    let mut cancel_rx = register_http_cancel(&request_id);
+
     let storage_root = get_storage_root(&app).unwrap_or_default();
     let workspace_path = storage_root.join(&payload.workspace_name);
     let collection_path = if payload.collection_name.is_empty() {
@@ -553,7 +646,7 @@ pub async fn send_http_request(
     }
 
     let started_at = Instant::now();
-    let response = request.send().await.map_err(|err| err.to_string())?;
+    let response = send_http_request_with_cancel(request, &mut cancel_rx).await?;
     let duration_ms = started_at.elapsed().as_millis();
 
     let status = response.status();

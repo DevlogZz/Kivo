@@ -54,6 +54,7 @@ export default function App() {
   const {
     store,
     isSending,
+    sendStartedAt,
     isSetupComplete,
     starCount,
     resizeRef,
@@ -83,6 +84,7 @@ export default function App() {
     togglePinRequestRecord,
     closeRequestTab,
     handleSend,
+    cancelSend,
     updateActiveRequest,
     checkSetup,
     duplicateCollectionRecord,
@@ -356,7 +358,9 @@ export default function App() {
                 <WorkspaceView
                   request={activeRequest}
                   isSending={isSending}
+                  sendStartedAt={sendStartedAt}
                   onSend={handleSend}
+                  onCancelSend={cancelSend}
                   onFieldChange={handleRequestFieldChange}
                   onUpdateActiveRequest={updateActiveRequest}
                   response={response}

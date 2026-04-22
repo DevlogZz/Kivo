@@ -4,6 +4,10 @@ export function sendHttpRequest(payload) {
   return invoke("send_http_request", { payload });
 }
 
+export function cancelHttpRequest(requestId) {
+  return invoke("cancel_http_request", { requestId });
+}
+
 export function exchangeOAuthToken(payload) {
   return invoke("oauth_exchange_token", { payload });
 }

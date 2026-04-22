@@ -1,7 +1,19 @@
 import { RequestPane } from "@/components/workspace/RequestPane.jsx";
 import { ResponsePane } from "@/components/workspace/ResponsePane.jsx";
 
-export function WorkspaceView({ request, isSending, onSend, onFieldChange, onUpdateActiveRequest, response, envVars, workspaceName, collectionName }) {
+export function WorkspaceView({
+  request,
+  isSending,
+  sendStartedAt,
+  onSend,
+  onCancelSend,
+  onFieldChange,
+  onUpdateActiveRequest,
+  response,
+  envVars,
+  workspaceName,
+  collectionName,
+}) {
   if (!request) return null;
 
   return (
@@ -22,6 +34,9 @@ export function WorkspaceView({ request, isSending, onSend, onFieldChange, onUpd
       />
       <ResponsePane
         response={response}
+        isSending={isSending}
+        sendStartedAt={sendStartedAt}
+        onCancelSend={onCancelSend}
         activeTab={request.activeResponseTab ?? "Body"}
         onTabChange={(tab) => onUpdateActiveRequest((r) => ({ ...r, activeResponseTab: tab }))}
         bodyView={request.responseBodyView ?? "Raw"}

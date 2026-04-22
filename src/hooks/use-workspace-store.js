@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import { invoke } from "@tauri-apps/api/core";
 
-import { loadAppState, saveAppState, sendHttpRequest } from "@/lib/http-client.js";
+import { cancelHttpRequest, loadAppState, saveAppState, sendHttpRequest } from "@/lib/http-client.js";
 import { buildRequestPayload, buildUrlWithParams, serializeHeaders } from "@/lib/http-ui.js";
 import {
   cloneRequest,
@@ -29,11 +29,13 @@ const SIDEBAR_REOPEN_WIDTH = 260;
 export function useWorkspaceStore() {
   const [store, setStore] = useState(createDefaultStore());
   const [isSending, setIsSending] = useState(false);
+  const [sendStartedAt, setSendStartedAt] = useState(0);
   const [isHydrated, setIsHydrated] = useState(false);
   const [isSetupComplete, setIsSetupComplete] = useState(true);
   const [starCount, setStarCount] = useState(null);
   const saveTimerRef = useRef(null);
   const resizeRef = useRef({ active: false, startX: 0, startWidth: 304 });
+  const activeHttpRequestIdRef = useRef("");
 
   useEffect(() => {
     async function checkSetup() {
@@ -739,7 +741,10 @@ export function useWorkspaceStore() {
       return;
     }
 
+    const requestId = `http-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+    activeHttpRequestIdRef.current = requestId;
     setIsSending(true);
+    setSendStartedAt(Date.now());
 
     try {
       const requestPayload = buildRequestPayload(
@@ -747,7 +752,11 @@ export function useWorkspaceStore() {
         activeWorkspace?.name ?? "",
         activeCollection?.name ?? ""
       );
-      const result = await sendHttpRequest(requestPayload);
+      const result = await sendHttpRequest({ ...requestPayload, requestId });
+
+      if (activeHttpRequestIdRef.current !== requestId) {
+        return;
+      }
 
       const rawBody = result.body || "";
       const formattedBody = formatResponseBody(rawBody);
@@ -798,7 +807,12 @@ export function useWorkspaceStore() {
         })
       }));
     } catch (error) {
+      if (activeHttpRequestIdRef.current !== requestId) {
+        return;
+      }
+
       const message = error?.toString?.() || "Request failed";
+
       const savedAt = formatSavedAt();
       const savedResponse = {
         status: 500,
@@ -839,13 +853,36 @@ export function useWorkspaceStore() {
         })
       }));
     } finally {
+      if (activeHttpRequestIdRef.current === requestId) {
+        activeHttpRequestIdRef.current = "";
+        setIsSending(false);
+        setSendStartedAt(0);
+      }
+    }
+  }
+
+  async function cancelSend() {
+    const requestId = activeHttpRequestIdRef.current;
+    if (!requestId) {
       setIsSending(false);
+      setSendStartedAt(0);
+      return;
+    }
+
+    activeHttpRequestIdRef.current = "";
+    setIsSending(false);
+    setSendStartedAt(0);
+
+    try {
+      await cancelHttpRequest(requestId);
+    } catch {
     }
   }
 
   return {
     store,
     isSending,
+    sendStartedAt,
     isHydrated,
     isSetupComplete,
     starCount,
@@ -881,6 +918,7 @@ export function useWorkspaceStore() {
     togglePinRequestRecord,
     closeRequestTab,
     handleSend,
+    cancelSend,
     checkSetup: async () => {
       try {
         const config = await invoke("get_app_config");

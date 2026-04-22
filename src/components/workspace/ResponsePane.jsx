@@ -1,7 +1,8 @@
-import { BadgeCheck, Clock3, Cookie, FileJson2, ListTree, Search, X } from "lucide-react";
+import { BadgeCheck, Clock3, Cookie, FileJson2, ListTree, LoaderCircle, Search, X } from "lucide-react";
 import { useState, useMemo, useEffect } from "react";
 
 import { CodeEditor } from "@/components/workspace/CodeEditor.jsx";
+import { Button } from "@/components/ui/button.jsx";
 import { Card } from "@/components/ui/card.jsx";
 import { cn } from "@/lib/utils.js";
 import { filterJson } from "@/lib/json-filter.js";
@@ -22,7 +23,16 @@ function getTone(status) {
   return "muted";
 }
 
-export function ResponsePane({ response, activeTab, onTabChange, bodyView, onBodyViewChange }) {
+export function ResponsePane({
+  response,
+  isSending = false,
+  sendStartedAt = 0,
+  onCancelSend,
+  activeTab,
+  onTabChange,
+  bodyView,
+  onBodyViewChange,
+}) {
   const tone = getTone(response.status);
 
   const contentType = Object.entries(response.headers).find(([k]) => k.toLowerCase() === 'content-type')?.[1]?.toLowerCase() || "";
@@ -52,6 +62,22 @@ export function ResponsePane({ response, activeTab, onTabChange, bodyView, onBod
 
   const [inputValue, setInputValue] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
+  const [elapsedMs, setElapsedMs] = useState(0);
+
+  useEffect(() => {
+    if (!isSending || !sendStartedAt) {
+      setElapsedMs(0);
+      return undefined;
+    }
+
+    const updateElapsed = () => {
+      setElapsedMs(Math.max(0, Date.now() - sendStartedAt));
+    };
+
+    updateElapsed();
+    const interval = window.setInterval(updateElapsed, 100);
+    return () => window.clearInterval(interval);
+  }, [isSending, sendStartedAt]);
 
   useEffect(() => {
     if (!inputValue.trim()) {
@@ -87,6 +113,7 @@ export function ResponsePane({ response, activeTab, onTabChange, bodyView, onBod
 
   const totalMatches = filteredJson ? (Array.isArray(filteredJson) ? filteredJson.length : Object.keys(filteredJson).length) : 0;
   const isResultCapped = searchQuery && Array.isArray(filteredJson) && filteredJson.length > MAX_DISPLAY;
+  const elapsedLabel = `${(elapsedMs / 1000).toFixed(1)}s`;
 
   return (
     <Card className="flex h-full min-h-0 flex-col gap-0 overflow-hidden border-0 bg-card/84 p-0 shadow-none">
@@ -128,7 +155,7 @@ export function ResponsePane({ response, activeTab, onTabChange, bodyView, onBod
         </div>
       </div>
 
-      <div className="min-h-0 flex-1 overflow-hidden p-3">
+      <div className="relative min-h-0 flex-1 overflow-hidden p-3">
         {activeTab === "Body" ? (
           <div className="grid h-full min-h-0 grid-rows-[auto_minmax(0,1fr)] gap-3">
             <div className="flex items-center justify-between text-[10px] uppercase tracking-[0.18em] text-muted-foreground">
@@ -270,7 +297,24 @@ export function ResponsePane({ response, activeTab, onTabChange, bodyView, onBod
             </div>
           </div>
         ) : null}
+
+        {isSending ? (
+          <div className="absolute inset-0 z-30 flex items-center justify-center backdrop-blur-md">
+            <div className="flex flex-col items-center gap-3 text-center">
+              <LoaderCircle className="h-7 w-7 animate-spin text-primary" />
+              <div className="text-sm font-semibold text-foreground">Sending request...</div>
+              <div className="inline-flex items-center gap-1.5 text-xs text-muted-foreground">
+                <Clock3 className="h-3.5 w-3.5" />
+                <span>{elapsedLabel}</span>
+              </div>
+              <Button type="button" size="sm" variant="ghost" onClick={onCancelSend}>
+                Cancel
+              </Button>
+            </div>
+          </div>
+        ) : null}
       </div>
+
     </Card>
   );
 }
