@@ -160,7 +160,7 @@ export function AppSettingsPage({ storagePath, onStoragePathChanged }) {
         </div>
       </div>
 
-      <div className="flex max-w-5xl flex-col gap-4">
+      <div className="flex w-full flex-col gap-4 lg:w-1/2">
         <Card className="border border-border/35 bg-gradient-to-b from-background/75 to-background/45 p-5 shadow-[0_10px_24px_hsl(var(--background)/0.28)]">
           <div className="mb-4 flex items-start justify-between gap-3">
             <div className="flex items-center gap-2 text-foreground">
