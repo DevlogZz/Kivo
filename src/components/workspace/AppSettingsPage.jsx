@@ -160,7 +160,7 @@ export function AppSettingsPage({ storagePath, onStoragePathChanged }) {
         </div>
       </div>
 
-      <div className="grid gap-4 2xl:grid-cols-[minmax(0,1.45fr)_minmax(0,1fr)]">
+      <div className="flex max-w-5xl flex-col gap-4">
         <Card className="border border-border/35 bg-gradient-to-b from-background/75 to-background/45 p-5 shadow-[0_10px_24px_hsl(var(--background)/0.28)]">
           <div className="mb-4 flex items-start justify-between gap-3">
             <div className="flex items-center gap-2 text-foreground">
@@ -247,102 +247,100 @@ export function AppSettingsPage({ storagePath, onStoragePathChanged }) {
           </div>
         </Card>
 
-        <div className="grid gap-4">
-          <Card className="border border-border/35 bg-gradient-to-b from-background/70 to-background/45 p-5 shadow-[0_8px_20px_hsl(var(--background)/0.2)]">
-            <div className="mb-4 flex items-center justify-between gap-2 text-foreground">
-              <div className="flex items-center gap-2">
-                <RefreshCw className="h-4 w-4 text-primary" />
-                <h3 className="text-[14px] font-semibold">Software Update</h3>
-              </div>
-              <div className={`rounded-full border px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.12em] ${statusTone}`}>
-                {updaterStatus}
-              </div>
+        <Card className="border border-border/35 bg-gradient-to-b from-background/70 to-background/45 p-5 shadow-[0_8px_20px_hsl(var(--background)/0.2)]">
+          <div className="mb-4 flex items-center justify-between gap-2 text-foreground">
+            <div className="flex items-center gap-2">
+              <RefreshCw className="h-4 w-4 text-primary" />
+              <h3 className="text-[14px] font-semibold">Software Update</h3>
             </div>
+            <div className={`rounded-full border px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.12em] ${statusTone}`}>
+              {updaterStatus}
+            </div>
+          </div>
 
-            <div className="space-y-3 text-[12px]">
-              <div className="rounded-lg border border-border/30 bg-accent/15 px-3 py-2.5 text-muted-foreground">
-                Current version: <span className="font-semibold text-foreground">v{appVersion}</span>
-              </div>
-              <div className="flex flex-wrap gap-2 pt-1">
+          <div className="space-y-3 text-[12px]">
+            <div className="rounded-lg border border-border/30 bg-accent/15 px-3 py-2.5 text-muted-foreground">
+              Current version: <span className="font-semibold text-foreground">v{appVersion}</span>
+            </div>
+            <div className="flex flex-wrap gap-2 pt-1">
+              <Button
+                type="button"
+                variant="secondary"
+                size="sm"
+                className="h-8 border border-border/40 bg-accent/40"
+                onClick={() => window.dispatchEvent(new CustomEvent("manual-update-check"))}
+                disabled={updaterStatus === "downloading"}
+              >
+                Check for Updates
+              </Button>
+              {updaterStatus === "available" ? (
                 <Button
                   type="button"
-                  variant="secondary"
                   size="sm"
-                  className="h-8 border border-border/40 bg-accent/40"
-                  onClick={() => window.dispatchEvent(new CustomEvent("manual-update-check"))}
-                  disabled={updaterStatus === "downloading"}
+                  className="h-8"
+                  onClick={() => window.dispatchEvent(new CustomEvent("manual-update-install"))}
                 >
-                  Check for Updates
+                  Restart to Update
                 </Button>
-                {updaterStatus === "available" ? (
-                  <Button
-                    type="button"
-                    size="sm"
-                    className="h-8"
-                    onClick={() => window.dispatchEvent(new CustomEvent("manual-update-install"))}
-                  >
-                    Restart to Update
-                  </Button>
-                ) : null}
-              </div>
+              ) : null}
             </div>
+          </div>
 
-          </Card>
+        </Card>
 
-          <Card className="border border-border/35 bg-gradient-to-b from-background/70 to-background/45 p-5 shadow-[0_8px_20px_hsl(var(--background)/0.2)]">
-            <div className="mb-4 flex items-center gap-2 text-foreground">
-              <BookOpen className="h-4 w-4 text-primary" />
-              <h3 className="text-[14px] font-semibold">Resources & Support</h3>
-            </div>
+        <Card className="border border-border/35 bg-gradient-to-b from-background/70 to-background/45 p-5 shadow-[0_8px_20px_hsl(var(--background)/0.2)]">
+          <div className="mb-4 flex items-center gap-2 text-foreground">
+            <BookOpen className="h-4 w-4 text-primary" />
+            <h3 className="text-[14px] font-semibold">Resources & Support</h3>
+          </div>
 
-            <div className="grid gap-2.5 text-[12px]">
-              <button
-                type="button"
-                onClick={() => handleOpenExternal("https://github.com/dexter-xD/Kivo/blob/main/CHANGELOG.md", "changelog")}
-                className="flex items-center justify-between rounded-lg border border-border/35 bg-accent/15 px-3 py-2.5 text-left transition-colors hover:bg-accent/30"
-              >
-                <span className="flex items-center gap-2 text-foreground"><BookOpen className="h-3.5 w-3.5 text-primary" />View Changelog</span>
-                <ExternalLink className="h-3.5 w-3.5 text-muted-foreground" />
-              </button>
+          <div className="grid gap-2.5 text-[12px]">
+            <button
+              type="button"
+              onClick={() => handleOpenExternal("https://github.com/dexter-xD/Kivo/blob/main/CHANGELOG.md", "changelog")}
+              className="flex items-center justify-between rounded-lg border border-border/35 bg-accent/15 px-3 py-2.5 text-left transition-colors hover:bg-accent/30"
+            >
+              <span className="flex items-center gap-2 text-foreground"><BookOpen className="h-3.5 w-3.5 text-primary" />View Changelog</span>
+              <ExternalLink className="h-3.5 w-3.5 text-muted-foreground" />
+            </button>
 
-              <button
-                type="button"
-                onClick={() => handleOpenExternal("https://github.com/dexter-xD/Kivo/blob/main/LICENSE.md", "license")}
-                className="flex items-center justify-between rounded-lg border border-border/35 bg-accent/15 px-3 py-2.5 text-left transition-colors hover:bg-accent/30"
-              >
-                <span className="flex items-center gap-2 text-foreground"><FileText className="h-3.5 w-3.5 text-primary" />View License</span>
-                <ExternalLink className="h-3.5 w-3.5 text-muted-foreground" />
-              </button>
+            <button
+              type="button"
+              onClick={() => handleOpenExternal("https://github.com/dexter-xD/Kivo/blob/main/LICENSE.md", "license")}
+              className="flex items-center justify-between rounded-lg border border-border/35 bg-accent/15 px-3 py-2.5 text-left transition-colors hover:bg-accent/30"
+            >
+              <span className="flex items-center gap-2 text-foreground"><FileText className="h-3.5 w-3.5 text-primary" />View License</span>
+              <ExternalLink className="h-3.5 w-3.5 text-muted-foreground" />
+            </button>
 
-              <button
-                type="button"
-                onClick={() => handleOpenExternal("https://github.com/dexter-xD/Kivo", "GitHub")}
-                className="flex items-center justify-between rounded-lg border border-border/35 bg-accent/15 px-3 py-2.5 text-left transition-colors hover:bg-accent/30"
-              >
-                <span className="flex items-center gap-2 text-foreground"><Star className="h-3.5 w-3.5 text-amber-400" />Give a Star on GitHub</span>
-                <Github className="h-3.5 w-3.5 text-muted-foreground" />
-              </button>
+            <button
+              type="button"
+              onClick={() => handleOpenExternal("https://github.com/dexter-xD/Kivo", "GitHub")}
+              className="flex items-center justify-between rounded-lg border border-border/35 bg-accent/15 px-3 py-2.5 text-left transition-colors hover:bg-accent/30"
+            >
+              <span className="flex items-center gap-2 text-foreground"><Star className="h-3.5 w-3.5 text-amber-400" />Give a Star on GitHub</span>
+              <Github className="h-3.5 w-3.5 text-muted-foreground" />
+            </button>
 
-              <button
-                type="button"
-                onClick={() => handleOpenExternal("https://github.com/sponsors/dexter-xD", "sponsorship page")}
-                className="flex items-center justify-between rounded-lg border border-border/35 bg-accent/15 px-3 py-2.5 text-left transition-colors hover:bg-accent/30"
-              >
-                <span className="flex items-center gap-2 text-foreground"><Heart className="h-3.5 w-3.5 text-rose-400" />Sponsor this Project</span>
-                <ExternalLink className="h-3.5 w-3.5 text-muted-foreground" />
-              </button>
+            <button
+              type="button"
+              onClick={() => handleOpenExternal("https://github.com/sponsors/dexter-xD", "sponsorship page")}
+              className="flex items-center justify-between rounded-lg border border-border/35 bg-accent/15 px-3 py-2.5 text-left transition-colors hover:bg-accent/30"
+            >
+              <span className="flex items-center gap-2 text-foreground"><Heart className="h-3.5 w-3.5 text-rose-400" />Sponsor this Project</span>
+              <ExternalLink className="h-3.5 w-3.5 text-muted-foreground" />
+            </button>
 
-              <button
-                type="button"
-                onClick={() => handleOpenExternal("https://github.com/dexter-xD/Kivo/issues/new", "issue form")}
-                className="flex items-center justify-between rounded-lg border border-border/35 bg-accent/15 px-3 py-2.5 text-left transition-colors hover:bg-accent/30"
-              >
-                <span className="flex items-center gap-2 text-foreground"><Siren className="h-3.5 w-3.5 text-orange-400" />Report Issue</span>
-                <ExternalLink className="h-3.5 w-3.5 text-muted-foreground" />
-              </button>
-            </div>
-          </Card>
-        </div>
+            <button
+              type="button"
+              onClick={() => handleOpenExternal("https://github.com/dexter-xD/Kivo/issues/new", "issue form")}
+              className="flex items-center justify-between rounded-lg border border-border/35 bg-accent/15 px-3 py-2.5 text-left transition-colors hover:bg-accent/30"
+            >
+              <span className="flex items-center gap-2 text-foreground"><Siren className="h-3.5 w-3.5 text-orange-400" />Report Issue</span>
+              <ExternalLink className="h-3.5 w-3.5 text-muted-foreground" />
+            </button>
+          </div>
+        </Card>
       </div>
     </div>
   );
