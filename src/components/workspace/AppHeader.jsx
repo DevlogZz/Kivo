@@ -8,7 +8,7 @@ import { useTheme } from "@/hooks/use-theme.js";
 
 export function AppHeader({ workspaceTitle, workspaceDescription, starCount }) {
   const { theme, toggleTheme } = useTheme();
-  const version = "0.2.0";
+  const version = "4.0.0";
 
   return (
     <Card className="flex items-center justify-between gap-4 border-0 border-b border-border/30 bg-card/55 px-3 py-2.5 shadow-none">
@@ -28,7 +28,7 @@ export function AppHeader({ workspaceTitle, workspaceDescription, starCount }) {
           variant="outline"
           size="sm"
           className="h-7 gap-1.5 rounded-sm border-border/40 bg-card/40 px-2.5 text-[11px] text-foreground"
-          onClick={() => openUrl("https://github.com/dexter-xD/Kivo")}
+          onClick={() => openUrl("https://github.com/DevlogZz/Kivo")}
         >
           <Github className="h-3.5 w-3.5" />
           {starCount !== null ? <span className="leading-none">{starCount.toLocaleString()}</span> : null}

@@ -67,7 +67,7 @@ export function useWorkspaceStore() {
   useEffect(() => {
     async function fetchStars() {
       try {
-        const res = await fetch("https://api.github.com/repos/dexter-xD/Kivo");
+        const res = await fetch("https://api.github.com/repos/DevlogZz/Kivo");
         const data = await res.json();
         if (data.stargazers_count !== undefined) {
           setStarCount(data.stargazers_count);

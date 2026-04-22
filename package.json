@@ -1,12 +1,12 @@
 {
   "name": "kivo",
-  "version": "0.3.6",
+  "version": "4.0.0",
   "description": "A minimal cross-platform HTTP client built with Rust and Tauri for fast and simple API testing.",
-  "author": "dexter-xD",
+  "author": "dexter-xD, Now part of DevlogZz",
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/dexter-xD/Kivo"
+    "url": "https://github.com/DevlogZz/Kivo"
   },
   "private": true,
   "type": "module",

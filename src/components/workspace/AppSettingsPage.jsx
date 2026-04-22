@@ -157,6 +157,7 @@ export function AppSettingsPage({ storagePath, onStoragePathChanged }) {
         <div>
           <h2 className="text-xl font-semibold tracking-tight text-foreground">App Settings</h2>
           <p className="text-[13px] text-muted-foreground">Storage, updates, and project resources.</p>
+          <p className="text-[11px] text-muted-foreground/60 mt-0.5 font-medium">Author: dexter-xD, Now part of DevlogZz</p>
         </div>
       </div>
 
@@ -297,7 +298,7 @@ export function AppSettingsPage({ storagePath, onStoragePathChanged }) {
           <div className="grid gap-2.5 text-[12px]">
             <button
               type="button"
-              onClick={() => handleOpenExternal("https://github.com/dexter-xD/Kivo/blob/main/CHANGELOG.md", "changelog")}
+              onClick={() => handleOpenExternal("https://github.com/DevlogZz/Kivo/blob/main/CHANGELOG.md", "changelog")}
               className="flex items-center justify-between rounded-lg border border-border/35 bg-accent/15 px-3 py-2.5 text-left transition-colors hover:bg-accent/30"
             >
               <span className="flex items-center gap-2 text-foreground"><BookOpen className="h-3.5 w-3.5 text-primary" />View Changelog</span>
@@ -306,7 +307,7 @@ export function AppSettingsPage({ storagePath, onStoragePathChanged }) {
 
             <button
               type="button"
-              onClick={() => handleOpenExternal("https://github.com/dexter-xD/Kivo/blob/main/LICENSE.md", "license")}
+              onClick={() => handleOpenExternal("https://github.com/DevlogZz/Kivo/blob/main/LICENSE.md", "license")}
               className="flex items-center justify-between rounded-lg border border-border/35 bg-accent/15 px-3 py-2.5 text-left transition-colors hover:bg-accent/30"
             >
               <span className="flex items-center gap-2 text-foreground"><FileText className="h-3.5 w-3.5 text-primary" />View License</span>
@@ -315,7 +316,7 @@ export function AppSettingsPage({ storagePath, onStoragePathChanged }) {
 
             <button
               type="button"
-              onClick={() => handleOpenExternal("https://github.com/dexter-xD/Kivo", "GitHub")}
+              onClick={() => handleOpenExternal("https://github.com/DevlogZz/Kivo", "GitHub")}
               className="flex items-center justify-between rounded-lg border border-border/35 bg-accent/15 px-3 py-2.5 text-left transition-colors hover:bg-accent/30"
             >
               <span className="flex items-center gap-2 text-foreground"><Star className="h-3.5 w-3.5 text-amber-400" />Give a Star on GitHub</span>
@@ -324,7 +325,7 @@ export function AppSettingsPage({ storagePath, onStoragePathChanged }) {
 
             <button
               type="button"
-              onClick={() => handleOpenExternal("https://github.com/sponsors/dexter-xD", "sponsorship page")}
+              onClick={() => handleOpenExternal("https://github.com/sponsors/DevlogZz", "sponsorship page")}
               className="flex items-center justify-between rounded-lg border border-border/35 bg-accent/15 px-3 py-2.5 text-left transition-colors hover:bg-accent/30"
             >
               <span className="flex items-center gap-2 text-foreground"><Heart className="h-3.5 w-3.5 text-rose-400" />Sponsor this Project</span>
@@ -333,7 +334,7 @@ export function AppSettingsPage({ storagePath, onStoragePathChanged }) {
 
             <button
               type="button"
-              onClick={() => handleOpenExternal("https://github.com/dexter-xD/Kivo/issues/new", "issue form")}
+              onClick={() => handleOpenExternal("https://github.com/DevlogZz/Kivo/issues/new", "issue form")}
               className="flex items-center justify-between rounded-lg border border-border/35 bg-accent/15 px-3 py-2.5 text-left transition-colors hover:bg-accent/30"
             >
               <span className="flex items-center gap-2 text-foreground"><Siren className="h-3.5 w-3.5 text-orange-400" />Report Issue</span>

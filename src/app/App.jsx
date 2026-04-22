@@ -292,7 +292,7 @@ export default function App() {
                   <button
                     type="button"
                     className="flex cursor-pointer items-center gap-1.5 rounded-full bg-accent/30 px-3 py-1.5 text-muted-foreground transition-all hover:bg-accent/50 hover:text-foreground"
-                    onClick={() => openUrl("https://github.com/dexter-xD/Kivo")}
+                    onClick={() => openUrl("https://github.com/DevlogZz/Kivo")}
                   >
                     <Github className="h-[16px] w-[16px]" />
                     <span className="text-[11px] font-semibold">{starCount ?? "..."}</span>
@@ -352,7 +352,7 @@ export default function App() {
                   <button
                     type="button"
                     className="flex cursor-pointer items-center gap-1.5 rounded-full bg-accent/30 px-3 py-1.5 text-muted-foreground transition-all hover:bg-accent/50 hover:text-foreground"
-                    onClick={() => openUrl("https://github.com/dexter-xD/Kivo")}
+                    onClick={() => openUrl("https://github.com/DevlogZz/Kivo")}
                   >
                     <Github className="h-[16px] w-[16px]" />
                     <span className="text-[11px] font-semibold">{starCount ?? "..."}</span>

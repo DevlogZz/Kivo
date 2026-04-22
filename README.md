@@ -4,6 +4,8 @@
   # Kivo
 
   **A minimal, fast, and modern desktop HTTP client built with Rust and Tauri**
+  
+  **Author**: dexter-xD, Now part of DevlogZz
 
   [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
   [![Rust](https://img.shields.io/badge/Rust-1.77+-orange.svg)](https://www.rust-lang.org/)
@@ -34,33 +36,33 @@ Kivo is a lightweight cross-platform HTTP client designed for developers who val
 - **Expanded Auth Support**: Comprehensive support for Basic Auth, API Key (Header/Query), and environment-aware token management with inheritance.
 - **Environment Autocomplete**: Real-time `{{variable}}` suggestions with arrow-key navigation for a faster workflow.
 
-## Download Kivo (v0.3.6)
+## Download Kivo (v4.0.0)
 
 Get the latest stable version for your operating system:
 
 | Platform | Installer | Architecture |
 | :--- | :--- | :--- |
-| **Windows** | [Download .exe](https://github.com/dexter-xD/Kivo/releases/download/v0.3.6/Kivo_0.3.6_x64-setup.exe) / [.msi](https://github.com/dexter-xD/Kivo/releases/download/v0.3.6/Kivo_0.3.6_x64_en-US.msi) | `x64` |
-| **macOS** | [Apple Silicon .dmg](https://github.com/dexter-xD/Kivo/releases/download/v0.3.6/Kivo_0.3.6_aarch64.dmg) | `arm64` |
-| **macOS** | [Intel .dmg](https://github.com/dexter-xD/Kivo/releases/download/v0.3.6/Kivo_0.3.6_x64.dmg) | `x64` |
-| **Linux** | [Download .deb](https://github.com/dexter-xD/Kivo/releases/download/v0.3.6/Kivo_0.3.6_amd64.deb) | `x64` |
-| **Linux** | [Download .rpm](https://github.com/dexter-xD/Kivo/releases/download/v0.3.6/Kivo-0.3.6-1.x86_64.rpm) | `x64` |
+| **Windows** | [Download .exe](https://github.com/DevlogZz/Kivo/releases/download/v4.0.0/Kivo_4.0.0_x64-setup.exe) / [.msi](https://github.com/DevlogZz/Kivo/releases/download/v4.0.0/Kivo_4.0.0_x64_en-US.msi) | `x64` |
+| **macOS** | [Apple Silicon .dmg](https://github.com/DevlogZz/Kivo/releases/download/v4.0.0/Kivo_4.0.0_aarch64.dmg) | `arm64` |
+| **macOS** | [Intel .dmg](https://github.com/DevlogZz/Kivo/releases/download/v4.0.0/Kivo_4.0.0_x64.dmg) | `x64` |
+| **Linux** | [Download .deb](https://github.com/DevlogZz/Kivo/releases/download/v4.0.0/Kivo_4.0.0_amd64.deb) | `x64` |
+| **Linux** | [Download .rpm](https://github.com/DevlogZz/Kivo/releases/download/v4.0.0/Kivo-4.0.0-1.x86_64.rpm) | `x64` |
 
-*For other formats and old releases, visit the [Releases page](https://github.com/dexter-xD/Kivo/releases).*
+*For other formats and old releases, visit the [Releases page](https://github.com/DevlogZz/Kivo/releases).*
 
 ### Linux Installation Guide
 
 - **Debian / Ubuntu**:
   ```bash
-  sudo apt install ./Kivo_0.3.6_amd64.deb
+  sudo apt install ./Kivo_4.0.0_amd64.deb
   ```
 - **Fedora / RHEL**:
   ```bash
-  sudo dnf install ./Kivo-0.3.6-1.x86_64.rpm
+  sudo dnf install ./Kivo-4.0.0-1.x86_64.rpm
   ```
 - **Arch / Other (RPM via rpm tool)**:
   ```bash
-  sudo rpm -i --nodeps --nosignature ./Kivo-0.3.6-1.x86_64.rpm
+  sudo rpm -i --nodeps --nosignature ./Kivo-4.0.0-1.x86_64.rpm
   ```
 
 ---
@@ -77,7 +79,7 @@ Get the latest stable version for your operating system:
 
 1. Clone the repository
    ```bash
-   git clone https://github.com/dexter-xD/Kivo.git
+   git clone https://github.com/DevlogZz/Kivo.git
    cd Kivo
    ```
 
@@ -113,6 +115,27 @@ Contributions are welcome! If you have suggestions for improvements or encounter
 
 ## Changelog
 
+### v4.0.0 (2026-04-23)
+
+- **feat**: add oauth2 auth flow with native exchange
+- **feat**: add app settings page with storage management
+- **feat**: modernize app settings UI & navigation
+- **feat**: add dot-path and prefix queries for JSON filtering
+- **feat**: add cancellable loading state for responses
+- **feat**: add report issue link & support resources
+- **feat**: add sonner toasts for improved notifications
+- **feat**: add exchange cancel support for OAuth flow
+- **fix**: major refactor to stabilize auth panel inputs
+- **fix**: align settings pane width and responsiveness
+- **fix**: stack app settings sections for better layout
+- **fix**: normalize storage path logic to Kivo root
+- **fix**: preserve settings sidebar tab state
+- **fix**: decouple sidebar select toggle logic
+- **fix**: resolve auth environment variable exporting
+- **fix**: update auth test fixtures and validation
+- **fix**: trim refresh inputs and handle cursor drift
+- **Note**: This project has officially migrated from `dexter-xD/Kivo` to `DevlogZz/Kivo`.
+
 ### v0.3.6 (2026-04-19)
 
 - **Expanded Auth Support**. Added Basic Auth and API Key (Header/Query) with collection-level inheritance.
@@ -125,13 +148,6 @@ Contributions are welcome! If you have suggestions for improvements or encounter
 - **Cross-Platform Storage Fixes**. Improved default storage path logic for macOS and Linux with robust fallbacks.
 - **Smart Setup Wizard**. Added a subfolder creation toggle and automatic directory detection to prevent data nesting.
 - **Native Experience Refinement**. Smarter path separator handling and dynamic placeholders based on detected OS.
-
-### v0.3.4 (2026-04-11)
-
-- **macOS Support**. Added native builds for both Apple Silicon (`aarch64`) and Intel (`x86_64`) Macs with a premium transparent titlebar experience.
-- **Linux RPM Expansion**. Added support for `.rpm` packages, bringing Kivo to Fedora, RHEL, openSUSE, and more.
-- **Improved Release Pipeline**. Automated build and release process for all major desktop platforms.
-
 
 See the full [CHANGELOG.md](CHANGELOG.md) for more details.
 
