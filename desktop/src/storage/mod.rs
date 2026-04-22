@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 use std::fs;
-use std::path::{Path, PathBuf};
+use std::path::{Component, Path, PathBuf};
 
 use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Manager};
@@ -694,6 +694,24 @@ fn paths_equal(left: &Path, right: &Path) -> bool {
     }
 }
 
+fn path_ends_with_kivo(path: &Path) -> bool {
+    path.components().rev().find_map(|component| {
+        if let Component::Normal(segment) = component {
+            return Some(segment.to_string_lossy().eq_ignore_ascii_case("kivo"));
+        }
+        None
+    }).unwrap_or(false)
+}
+
+fn resolve_kivo_storage_path(raw: &str) -> PathBuf {
+    let selected = PathBuf::from(raw.trim());
+    if path_ends_with_kivo(&selected) {
+        selected
+    } else {
+        selected.join("Kivo")
+    }
+}
+
 fn ensure_writable(path: &Path) -> bool {
     let probe = path.join(format!(".kivo-write-test-{}", std::process::id()));
     let can_write = fs::create_dir_all(&probe).is_ok();
@@ -741,13 +759,16 @@ pub fn validate_storage_path(path: String) -> Result<StoragePathValidationResult
         return Err("Path is required".to_string());
     }
 
-    let candidate = PathBuf::from(trimmed);
+    let candidate = resolve_kivo_storage_path(trimmed);
     let exists = candidate.exists();
     let is_directory = exists && candidate.is_dir();
-    let writable = if is_directory {
-        ensure_writable(&candidate)
+    let writable = if exists {
+        is_directory && ensure_writable(&candidate)
     } else {
-        false
+        match candidate.parent() {
+            Some(parent) if parent.exists() && parent.is_dir() => ensure_writable(parent),
+            _ => false,
+        }
     };
 
     Ok(StoragePathValidationResult {
@@ -764,13 +785,16 @@ pub fn switch_storage_path(app: AppHandle, payload: StorageSwitchPayload) -> Res
         return Err("Path is required".to_string());
     }
 
-    let next_root = PathBuf::from(next_path_raw);
-    if !next_root.exists() {
-        return Err("Selected path does not exist".to_string());
-    }
-    if !next_root.is_dir() {
+    let next_root = resolve_kivo_storage_path(next_path_raw);
+    if next_root.exists() && !next_root.is_dir() {
         return Err("Selected path must be a directory".to_string());
     }
+
+    if !next_root.exists() {
+        fs::create_dir_all(&next_root)
+            .map_err(|e| format!("Failed to create selected path: {e}"))?;
+    }
+
     if !ensure_writable(&next_root) {
         return Err("Selected path is not writable".to_string());
     }

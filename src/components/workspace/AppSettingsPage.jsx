@@ -13,6 +13,19 @@ function normalizePath(path) {
   return String(path ?? "").trim().replace(/[\\/]+$/, "").toLowerCase();
 }
 
+function resolveKivoStoragePath(base) {
+  const trimmed = String(base ?? "").trim();
+  if (!trimmed) return "";
+  const lastSegment = trimmed.replace(/[\\/]+$/, "").split(/[\\/]/).at(-1) ?? "";
+  if (lastSegment.toLowerCase() === "kivo") {
+    return trimmed;
+  }
+  const isWindows = /^[A-Za-z]:[/\\]/.test(trimmed);
+  const sep = isWindows ? "\\" : "/";
+  const baseWithoutTrailing = trimmed.replace(/[\\/]+$/, "");
+  return `${baseWithoutTrailing}${sep}Kivo`;
+}
+
 export function AppSettingsPage({ storagePath, onStoragePathChanged }) {
   const [pathInput, setPathInput] = useState(storagePath ?? "");
   const [mode, setMode] = useState("copy");
@@ -40,9 +53,11 @@ export function AppSettingsPage({ storagePath, onStoragePathChanged }) {
   }, []);
 
   const isSamePath = useMemo(
-    () => normalizePath(pathInput) === normalizePath(storagePath),
+    () => normalizePath(resolveKivoStoragePath(pathInput)) === normalizePath(storagePath),
     [pathInput, storagePath]
   );
+
+  const resolvedTargetPath = useMemo(() => resolveKivoStoragePath(pathInput), [pathInput]);
 
   async function handleBrowse() {
     try {
@@ -62,15 +77,14 @@ export function AppSettingsPage({ storagePath, onStoragePathChanged }) {
   }
 
   async function handleValidate() {
-    const trimmed = pathInput.trim();
-    if (!trimmed) {
+    if (!resolvedTargetPath) {
       setPathError("Path is required.");
       setPathValidation(null);
       return null;
     }
 
     try {
-      const result = await validateStoragePath(trimmed);
+      const result = await validateStoragePath(resolvedTargetPath);
       setPathValidation(result);
       setPathError("");
       return result;
@@ -91,11 +105,7 @@ export function AppSettingsPage({ storagePath, onStoragePathChanged }) {
     const validation = await handleValidate();
     if (!validation) return;
 
-    if (!validation.exists) {
-      setPathError("Selected path does not exist.");
-      return;
-    }
-    if (!validation.isDirectory) {
+    if (validation.exists && !validation.isDirectory) {
       setPathError("Selected path must be a directory.");
       return;
     }
@@ -106,8 +116,8 @@ export function AppSettingsPage({ storagePath, onStoragePathChanged }) {
 
     setIsSubmitting(true);
     try {
-      await switchStoragePath(pathInput.trim(), mode);
-      onStoragePathChanged?.(pathInput.trim());
+      await switchStoragePath(resolvedTargetPath, mode);
+      onStoragePathChanged?.(resolvedTargetPath);
       toast.success("Storage path updated.");
     } catch (error) {
       setPathError(String(error ?? "Failed to switch storage path."));
@@ -163,6 +173,11 @@ export function AppSettingsPage({ storagePath, onStoragePathChanged }) {
                     : "Path is not valid"}
                 </span>
               ) : null}
+            </div>
+
+            <div className="rounded-md border border-border/30 bg-accent/20 px-3 py-2">
+              <div className="text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">Resolved path</div>
+              <div className="mt-1 break-all font-mono text-[11px] text-foreground/90">{resolvedTargetPath || "-"}</div>
             </div>
 
             <div className="space-y-2 rounded-md border border-border/30 bg-accent/20 p-3">
