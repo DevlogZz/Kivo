@@ -86,8 +86,9 @@ function sanitizeGraphqlVariablesForSave(request) {
 
 function sanitizeRequestBodyForSave(request) {
   const raw = request?.body;
+  const bodyType = request?.bodyType;
 
-  if (request?.bodyType !== "json") {
+  if (bodyType !== "json" && bodyType !== "graphql") {
     return raw;
   }
 
