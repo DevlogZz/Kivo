@@ -61,6 +61,29 @@ function sanitizeAuthForSave(auth) {
   return { type: "none" };
 }
 
+function sanitizeGraphqlVariablesForSave(request) {
+  const raw = request?.graphqlVariables;
+
+  if (request?.bodyType !== "graphql") {
+    return raw;
+  }
+
+  if (typeof raw !== "string") {
+    return raw;
+  }
+
+  const trimmed = raw.trim();
+  if (!trimmed) {
+    return {};
+  }
+
+  try {
+    return JSON.parse(trimmed);
+  } catch {
+    return raw;
+  }
+}
+
 export function saveAppState(payload) {
   const cleanPayload = {
     ...payload,
@@ -71,6 +94,7 @@ export function saveAppState(payload) {
         requests: collection.requests?.map((request) => ({
           ...request,
           auth: sanitizeAuthForSave(request?.auth),
+          graphqlVariables: sanitizeGraphqlVariablesForSave(request),
           lastResponse: null
         }))
       }))

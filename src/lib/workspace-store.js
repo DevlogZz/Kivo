@@ -126,6 +126,17 @@ export function orderRequests(requests = []) {
 }
 
 export function normalizeRequestRecord(request) {
+  let normalizedGraphqlVariables = "{\n\n}";
+  if (typeof request?.graphqlVariables === "string") {
+    normalizedGraphqlVariables = request.graphqlVariables;
+  } else if (request?.graphqlVariables && typeof request.graphqlVariables === "object") {
+    try {
+      normalizedGraphqlVariables = JSON.stringify(request.graphqlVariables, null, 2);
+    } catch {
+      normalizedGraphqlVariables = "{\n\n}";
+    }
+  }
+
   return {
     ...request,
     pinned: Boolean(request?.pinned),
@@ -133,7 +144,7 @@ export function normalizeRequestRecord(request) {
     queryParams: Array.isArray(request?.queryParams) ? request.queryParams : [],
     headers: Array.isArray(request?.headers) ? request.headers : [],
     bodyRows: Array.isArray(request?.bodyRows) ? request.bodyRows : [],
-    graphqlVariables: typeof request?.graphqlVariables === "string" ? request.graphqlVariables : "{\n\n}",
+    graphqlVariables: normalizedGraphqlVariables,
     auth: normalizeAuthState(request?.auth)
   };
 }
