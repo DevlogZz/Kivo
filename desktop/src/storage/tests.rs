@@ -65,6 +65,7 @@ fn col(name: &str, requests: Vec<RequestRecord>) -> CollectionRecord {
     CollectionRecord {
         name: name.to_string(),
         folders: vec![],
+        folder_settings: vec![],
         requests,
     }
 }
@@ -420,7 +421,12 @@ mod save_load_tests {
         let col_path = dir.path().join("ws").join("collections").join("users");
         let json_files: Vec<_> = fs::read_dir(&col_path).unwrap()
             .flatten()
-            .filter(|e| e.path().extension().map_or(false, |x| x == "json"))
+            .filter(|e| {
+                let path = e.path();
+                let is_json = path.extension().map_or(false, |x| x == "json");
+                let file_name = path.file_name().and_then(|n| n.to_str()).unwrap_or("");
+                is_json && file_name != "collection.json" && file_name != ".kivo-collection-state.json"
+            })
             .collect();
         assert_eq!(json_files.len(), 2);
     }
@@ -472,7 +478,12 @@ mod save_load_tests {
         let col_path = dir.path().join("ws").join("collections").join("api");
         let json_files: Vec<_> = fs::read_dir(&col_path).unwrap()
             .flatten()
-            .filter(|e| e.path().extension().map_or(false, |x| x == "json"))
+            .filter(|e| {
+                let path = e.path();
+                let is_json = path.extension().map_or(false, |x| x == "json");
+                let file_name = path.file_name().and_then(|n| n.to_str()).unwrap_or("");
+                is_json && file_name != "collection.json" && file_name != ".kivo-collection-state.json"
+            })
             .collect();
         assert!(json_files.is_empty());
     }
