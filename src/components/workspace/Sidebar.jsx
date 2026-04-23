@@ -7,17 +7,291 @@ import { CodeEditor } from "@/components/workspace/CodeEditor.jsx";
 import { Button } from "@/components/ui/button.jsx";
 import { Card } from "@/components/ui/card.jsx";
 import { Input } from "@/components/ui/input.jsx";
+import { EnvHighlightInput } from "@/components/ui/EnvHighlightInput.jsx";
+import { OAuth2Panel } from "@/components/workspace/OAuth2Panel.jsx";
 import { getCollectionConfig, getEnvVars } from "@/lib/http-client.js";
 import { buildCurlCommand, codegenLanguageOptions, generateCodeSnippet, getMethodTone } from "@/lib/http-ui.js";
+import { createDefaultAuthState, normalizeAuthState } from "@/lib/oauth.js";
 import { cn } from "@/lib/utils.js";
 import { getUniqueName } from "@/lib/workspace-store.js";
 import { WorkspaceModal } from "./WorkspaceModal.jsx";
+
+const AUTH_MODES = [
+  { value: "inherit", label: "Inherit" },
+  { value: "none", label: "No Auth" },
+  { value: "basic", label: "Basic Auth" },
+  { value: "bearer", label: "Bearer Token" },
+  { value: "apikey", label: "API Key" },
+  { value: "oauth2", label: "OAuth 2.0" },
+];
+
+function normalizeFolderPath(path) {
+  return String(path ?? "")
+    .split("/")
+    .map((segment) => segment.trim())
+    .filter(Boolean)
+    .join("/");
+}
+
+function getFolderParentPath(path) {
+  const normalized = normalizeFolderPath(path);
+  if (!normalized.includes("/")) return "";
+  return normalized.split("/").slice(0, -1).join("/");
+}
+
+function getFolderLabel(path) {
+  const normalized = normalizeFolderPath(path);
+  const parts = normalized.split("/").filter(Boolean);
+  return parts.at(-1) || normalized;
+}
 
 function getRequestRecord(workspaces, workspaceName, collectionName, requestName) {
   return workspaces
     .find((w) => w.name === workspaceName)
     ?.collections?.find((c) => c.name === collectionName)
     ?.requests?.find((r) => r.name === requestName) ?? null;
+}
+
+function FolderContextMenu({ menu, onCreateRequest, onCreateFolder, onOpenSettings, onCopyFolder, onPasteIntoFolder, onRevealFolder, onRename, onDelete, onClose, canPaste }) {
+  useEffect(() => {
+    if (!menu) return;
+    function handlePointer() { onClose(); }
+    function handleEscape(event) { if (event.key === "Escape") onClose(); }
+    window.addEventListener("mousedown", handlePointer);
+    window.addEventListener("keydown", handleEscape);
+    return () => { window.removeEventListener("mousedown", handlePointer); window.removeEventListener("keydown", handleEscape); };
+  }, [menu, onClose]);
+
+  if (!menu) return null;
+
+  return createPortal(
+    <div className="fixed z-[210] min-w-[180px] border border-border/60 bg-popover p-1 shadow-2xl" style={{ left: menu.x, top: menu.y }} onMouseDown={(e) => e.stopPropagation()} onContextMenu={(e) => e.preventDefault()}>
+      <button type="button" className="flex w-full items-center gap-2 px-3 py-2 text-left text-[12px] text-foreground hover:bg-accent/45" onClick={() => { onCreateRequest(menu.workspaceName, menu.collectionName, menu.folderPath); onClose(); }}>
+        <Plus className="h-3.5 w-3.5" /> New Request
+      </button>
+      <button type="button" className="flex w-full items-center gap-2 px-3 py-2 text-left text-[12px] text-foreground hover:bg-accent/45" onClick={() => { onCreateFolder(menu.workspaceName, menu.collectionName, menu.folderPath); onClose(); }}>
+        <FolderPlus className="h-3.5 w-3.5" /> New Folder
+      </button>
+      <button type="button" className="flex w-full items-center gap-2 px-3 py-2 text-left text-[12px] text-foreground hover:bg-accent/45" onClick={() => { onOpenSettings(menu.workspaceName, menu.collectionName, menu.folderPath); onClose(); }}>
+        <Settings className="h-3.5 w-3.5" /> Settings
+      </button>
+      <div className="my-1 border-t border-border/40" />
+      <button type="button" className="flex w-full items-center gap-2 px-3 py-2 text-left text-[12px] text-foreground hover:bg-accent/45" onClick={() => { onCopyFolder(menu.workspaceName, menu.collectionName, menu.folderPath); onClose(); }}>
+        <Copy className="h-3.5 w-3.5" /> Copy Folder
+      </button>
+      <button type="button" disabled={!canPaste} className={cn("flex w-full items-center gap-2 px-3 py-2 text-left text-[12px] transition-colors", canPaste ? "text-foreground hover:bg-accent/45" : "text-muted-foreground opacity-50 cursor-not-allowed")} onClick={() => { if (canPaste) { onPasteIntoFolder(menu.workspaceName, menu.collectionName, menu.folderPath); onClose(); } }}>
+        <Copy className="h-3.5 w-3.5" /> Paste
+      </button>
+      <button type="button" className="flex w-full items-center gap-2 px-3 py-2 text-left text-[12px] text-foreground hover:bg-accent/45" onClick={() => { onRevealFolder(menu.workspaceName, menu.collectionName, menu.folderPath); onClose(); }}>
+        <FolderKanban className="h-3.5 w-3.5" /> Show in Files
+      </button>
+      <div className="my-1 border-t border-border/40" />
+      <button type="button" className="flex w-full items-center gap-2 px-3 py-2 text-left text-[12px] text-foreground hover:bg-accent/45" onClick={() => { onRename(menu.workspaceName, menu.collectionName, menu.folderPath); onClose(); }}>
+        <Pencil className="h-3.5 w-3.5" /> Rename
+      </button>
+      <button type="button" className="flex w-full items-center gap-2 px-3 py-2 text-left text-[12px] text-red-500 hover:bg-accent/45" onClick={() => { onDelete(menu.workspaceName, menu.collectionName, menu.folderPath); onClose(); }}>
+        <Trash2 className="h-3.5 w-3.5" /> Delete
+      </button>
+    </div>,
+    document.body
+  );
+}
+
+function FolderSettingsModal({
+  open,
+  target,
+  currentSetting,
+  envVars,
+  onClose,
+  onSave,
+}) {
+  const [activeTab, setActiveTab] = useState("Headers");
+  const [draft, setDraft] = useState({ defaultHeaders: [], defaultAuth: { type: "inherit" } });
+
+  useEffect(() => {
+    if (!open) return;
+    setDraft({
+      defaultHeaders: Array.isArray(currentSetting?.defaultHeaders) ? currentSetting.defaultHeaders : [],
+      defaultAuth: normalizeAuthState(currentSetting?.defaultAuth ?? { type: "inherit" })
+    });
+    setActiveTab("Headers");
+  }, [open, currentSetting]);
+
+  if (!open || !target) return null;
+
+  const auth = normalizeAuthState(draft.defaultAuth ?? { type: "inherit" });
+
+  return createPortal(
+    <div className="fixed inset-0 z-[220] flex items-center justify-center bg-background/70 p-6 backdrop-blur-sm" onMouseDown={(event) => event.target === event.currentTarget && onClose()}>
+      <Card className="grid h-[min(720px,92vh)] w-[min(860px,92vw)] grid-rows-[auto_auto_minmax(0,1fr)_auto] gap-3 border border-border/50 bg-card/95 p-5 shadow-2xl">
+        <div className="flex items-start justify-between gap-4">
+          <div>
+            <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">Folder Settings</div>
+            <div className="mt-1 text-[18px] font-semibold text-foreground">{getFolderLabel(target.folderPath)}</div>
+            <div className="text-[11px] text-muted-foreground">{target.folderPath}</div>
+          </div>
+          <Button type="button" size="sm" variant="ghost" className="h-8 px-3" onClick={onClose}>Close</Button>
+        </div>
+
+        <div className="flex items-center gap-1 border-b border-border/30 pb-2">
+          {["Headers", "Auth"].map((tab) => (
+            <button
+              key={tab}
+              type="button"
+              onClick={() => setActiveTab(tab)}
+              className={cn(
+                "rounded px-3 py-1.5 text-[12px] transition-colors",
+                activeTab === tab ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-accent/35 hover:text-foreground"
+              )}
+            >
+              {tab}
+            </button>
+          ))}
+        </div>
+
+        <div className="min-h-0 overflow-auto">
+          {activeTab === "Headers" ? (
+            <div className="space-y-2">
+              {(draft.defaultHeaders || []).map((row, index) => (
+                <div key={`folder-hdr-${index}`} className="grid grid-cols-[1fr_1fr_auto] gap-2">
+                  <Input
+                    className="h-8"
+                    value={row.key ?? ""}
+                    onChange={(event) => {
+                      const next = [...(draft.defaultHeaders || [])];
+                      next[index] = { ...next[index], key: event.target.value };
+                      setDraft((prev) => ({ ...prev, defaultHeaders: next }));
+                    }}
+                    placeholder="Header name"
+                  />
+                  <Input
+                    className="h-8"
+                    value={row.value ?? ""}
+                    onChange={(event) => {
+                      const next = [...(draft.defaultHeaders || [])];
+                      next[index] = { ...next[index], value: event.target.value };
+                      setDraft((prev) => ({ ...prev, defaultHeaders: next }));
+                    }}
+                    placeholder="Header value"
+                  />
+                  <button
+                    type="button"
+                    className="h-8 px-2 text-red-500 hover:bg-accent/35"
+                    onClick={() => {
+                      const next = [...(draft.defaultHeaders || [])];
+                      next.splice(index, 1);
+                      setDraft((prev) => ({ ...prev, defaultHeaders: next }));
+                    }}
+                  >
+                    <Trash2 className="h-3.5 w-3.5" />
+                  </button>
+                </div>
+              ))}
+              <Button
+                type="button"
+                variant="outline"
+                className="h-8 text-[12px]"
+                onClick={() => setDraft((prev) => ({ ...prev, defaultHeaders: [...(prev.defaultHeaders || []), { key: "", value: "", enabled: true }] }))}
+              >
+                <Plus className="mr-1 h-3.5 w-3.5" /> Add Header
+              </Button>
+            </div>
+          ) : (
+            <div className="space-y-4">
+              <div className="flex flex-wrap items-center gap-2 rounded-lg border border-border/20 bg-accent/30 p-1 w-fit">
+                {AUTH_MODES.map((mode) => (
+                  <button
+                    key={mode.value}
+                    type="button"
+                    onClick={() => setDraft((prev) => ({ ...prev, defaultAuth: { ...auth, type: mode.value } }))}
+                    className={cn(
+                      "px-3 py-1.5 rounded-md text-[12px] font-medium transition-all",
+                      auth.type === mode.value ? "bg-primary text-primary-foreground shadow-sm" : "text-muted-foreground hover:text-foreground hover:bg-accent/50"
+                    )}
+                  >
+                    {mode.label}
+                  </button>
+                ))}
+              </div>
+
+              {auth.type === "bearer" ? (
+                <EnvHighlightInput
+                  value={auth.token ?? ""}
+                  onValueChange={(value) => setDraft((prev) => ({ ...prev, defaultAuth: { ...auth, token: value } }))}
+                  placeholder="Bearer token"
+                  inputClassName="h-10"
+                  envVars={envVars}
+                />
+              ) : null}
+
+              {auth.type === "basic" ? (
+                <div className="grid grid-cols-1 gap-2">
+                  <EnvHighlightInput value={auth.username ?? ""} onValueChange={(value) => setDraft((prev) => ({ ...prev, defaultAuth: { ...auth, username: value } }))} placeholder="Username" inputClassName="h-10" envVars={envVars} />
+                  <EnvHighlightInput value={auth.password ?? ""} onValueChange={(value) => setDraft((prev) => ({ ...prev, defaultAuth: { ...auth, password: value } }))} placeholder="Password" inputClassName="h-10" envVars={envVars} />
+                </div>
+              ) : null}
+
+              {auth.type === "apikey" ? (
+                <div className="grid grid-cols-1 gap-2">
+                  <EnvHighlightInput value={auth.apiKeyName ?? ""} onValueChange={(value) => setDraft((prev) => ({ ...prev, defaultAuth: { ...auth, apiKeyName: value } }))} placeholder="API key name" inputClassName="h-10" envVars={envVars} />
+                  <EnvHighlightInput value={auth.apiKeyValue ?? ""} onValueChange={(value) => setDraft((prev) => ({ ...prev, defaultAuth: { ...auth, apiKeyValue: value } }))} placeholder="API key value" inputClassName="h-10" envVars={envVars} />
+                  <div className="flex items-center gap-2">
+                    {["header", "query"].map((position) => (
+                      <button
+                        key={position}
+                        type="button"
+                        onClick={() => setDraft((prev) => ({ ...prev, defaultAuth: { ...auth, apiKeyIn: position } }))}
+                        className={cn(
+                          "px-3 py-1.5 rounded-md text-[12px]",
+                          (auth.apiKeyIn ?? "header") === position ? "bg-primary text-primary-foreground" : "bg-accent/30 text-muted-foreground"
+                        )}
+                      >
+                        {position === "header" ? "Header" : "Query"}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              ) : null}
+
+              {auth.type === "oauth2" ? (
+                <OAuth2Panel
+                  auth={auth}
+                  envVars={envVars}
+                  workspaceName={target.workspaceName}
+                  collectionName={target.collectionName}
+                  scopeLabel="folder"
+                  onChange={(nextAuth) => setDraft((prev) => ({ ...prev, defaultAuth: nextAuth }))}
+                  onPersist={async (nextAuth) => setDraft((prev) => ({ ...prev, defaultAuth: nextAuth }))}
+                />
+              ) : null}
+            </div>
+          )}
+        </div>
+
+        <div className="flex items-center justify-end gap-2">
+          <Button type="button" variant="outline" className="h-9 px-4 text-[12px]" onClick={onClose}>Cancel</Button>
+          <Button
+            type="button"
+            className="h-9 px-4 text-[12px]"
+            onClick={() => {
+              onSave({
+                defaultHeaders: (draft.defaultHeaders || []).map((row) => ({
+                  key: String(row.key ?? "").trim(),
+                  value: String(row.value ?? ""),
+                  enabled: row.enabled ?? true
+                })).filter((row) => row.key),
+                defaultAuth: normalizeAuthState(draft.defaultAuth ?? createDefaultAuthState())
+              });
+              onClose();
+            }}
+          >
+            Save
+          </Button>
+        </div>
+      </Card>
+    </div>,
+    document.body
+  );
 }
 
 function WorkspaceForm({ initialValues, submitLabel, onSubmit, onCancel }) {
@@ -333,11 +607,15 @@ export function RequestsView({
   onDeleteCollection,
   onDuplicateCollection,
   onCreateFolder,
+  onRenameFolder,
+  onDeleteFolder,
+  onUpdateFolderSettings,
   onCreateRequest,
   onRenameRequest,
   onDeleteRequest,
   onDuplicateRequest,
   onPasteRequest,
+  onPasteFolder,
   onTogglePinRequest
 }) {
   const [showWorkspaceForm, setShowWorkspaceForm] = useState(false);
@@ -353,7 +631,7 @@ export function RequestsView({
   const [expandedCollectionNames, setExpandedCollectionNames] = useState([]);
   const [isCreatingCollection, setIsCreatingCollection] = useState(false);
   const [creatingRequestInCollection, setCreatingRequestInCollection] = useState(null);
-  const [creatingFolderInCollection, setCreatingFolderInCollection] = useState(null);
+  const [creatingFolderTarget, setCreatingFolderTarget] = useState(null);
   const [creatingRequestInFolder, setCreatingRequestInFolder] = useState(null);
   const [expandedFolderKeys, setExpandedFolderKeys] = useState([]);
   const [searchQuery, setSearchQuery] = useState("");
@@ -362,6 +640,9 @@ export function RequestsView({
   const [duplicationTarget, setDuplicationTarget] = useState(null);
   const [clipboard, setClipboard] = useState(null);
   const [collectionContextMenu, setCollectionContextMenu] = useState(null);
+  const [folderContextMenu, setFolderContextMenu] = useState(null);
+  const [folderSettingsTarget, setFolderSettingsTarget] = useState(null);
+  const [folderSettingsEnv, setFolderSettingsEnv] = useState({ merged: {} });
 
   const activeWorkspace = useMemo(() => workspaces.find(w => w.name === activeWorkspaceName), [workspaces, activeWorkspaceName]);
   const effectiveWorkspaceName = activeWorkspace?.name ?? "";
@@ -474,6 +755,99 @@ export function RequestsView({
     }
   }
 
+  function buildFolderSnapshot(workspaceName, collectionName, folderPath) {
+    const workspace = workspaces.find((item) => item.name === workspaceName);
+    const collection = workspace?.collections?.find((item) => item.name === collectionName);
+    const normalizedFolderPath = normalizeFolderPath(folderPath);
+    if (!collection || !normalizedFolderPath) {
+      return null;
+    }
+
+    const rootName = getFolderLabel(normalizedFolderPath);
+    const subtreeFolders = (Array.isArray(collection.folders) ? collection.folders : [])
+      .map((path) => normalizeFolderPath(path))
+      .filter((path) => path === normalizedFolderPath || path.startsWith(`${normalizedFolderPath}/`));
+    const allFolders = Array.from(new Set([normalizedFolderPath, ...subtreeFolders]));
+
+    const requests = collection.requests
+      .filter((request) => {
+        const requestFolder = normalizeFolderPath(request.folderPath);
+        return requestFolder === normalizedFolderPath || requestFolder.startsWith(`${normalizedFolderPath}/`);
+      })
+      .map((request) => {
+        const requestFolder = normalizeFolderPath(request.folderPath);
+        const relativePath = requestFolder === normalizedFolderPath
+          ? ""
+          : requestFolder.slice(normalizedFolderPath.length + 1);
+        return {
+          relativePath,
+          request
+        };
+      });
+
+    const settings = (Array.isArray(collection.folderSettings) ? collection.folderSettings : [])
+      .filter((setting) => {
+        const path = normalizeFolderPath(setting.path);
+        return path === normalizedFolderPath || path.startsWith(`${normalizedFolderPath}/`);
+      })
+      .map((setting) => {
+        const path = normalizeFolderPath(setting.path);
+        const relativePath = path === normalizedFolderPath ? "" : path.slice(normalizedFolderPath.length + 1);
+        return {
+          relativePath,
+          defaultHeaders: Array.isArray(setting.defaultHeaders) ? setting.defaultHeaders.map((row) => ({ ...row })) : [],
+          defaultAuth: normalizeAuthState(setting.defaultAuth ?? { type: "inherit" })
+        };
+      });
+
+    const folders = allFolders.map((path) => (
+      path === normalizedFolderPath ? "" : path.slice(normalizedFolderPath.length + 1)
+    ));
+
+    return {
+      rootName,
+      folders,
+      requests,
+      settings
+    };
+  }
+
+  function handleCopyFolder(workspaceName, collectionName, folderPath) {
+    const snapshot = buildFolderSnapshot(workspaceName, collectionName, folderPath);
+    if (!snapshot) {
+      return;
+    }
+
+    setClipboard({
+      type: "folder",
+      snapshot,
+      workspaceName,
+      collectionName
+    });
+    setFeedbackMessage(`Copied folder ${snapshot.rootName}.`);
+    setTimeout(() => setFeedbackMessage(""), 2000);
+  }
+
+  function handlePasteIntoFolder(workspaceName, collectionName, folderPath) {
+    const normalizedFolderPath = normalizeFolderPath(folderPath);
+    if (!clipboard) {
+      return;
+    }
+
+    if (clipboard.type === "req") {
+      onPasteRequest(workspaceName, collectionName, clipboard.request, normalizedFolderPath);
+      setFeedbackMessage(`Pasted ${clipboard.request.name} into ${getFolderLabel(normalizedFolderPath)}.`);
+      setTimeout(() => setFeedbackMessage(""), 2000);
+      return;
+    }
+
+    if (clipboard.type === "folder") {
+      onPasteFolder(workspaceName, collectionName, clipboard.snapshot, normalizedFolderPath);
+      setFeedbackMessage(`Pasted folder ${clipboard.snapshot.rootName} into ${getFolderLabel(normalizedFolderPath)}.`);
+      setTimeout(() => setFeedbackMessage(""), 2000);
+    }
+  }
+
   function handlePasteRequest(workspaceName, collectionName) {
     if (clipboard?.type === 'req') {
 
@@ -514,7 +888,48 @@ export function RequestsView({
 
   function handleStartCreateFolder(workspaceName, collectionName) {
     setExpandedCollectionNames((names) => Array.from(new Set([...names, collectionName])));
-    setCreatingFolderInCollection(collectionName);
+    setCreatingFolderTarget({ workspaceName, collectionName, parentPath: "" });
+  }
+
+  function handleStartCreateSubfolder(workspaceName, collectionName, parentPath) {
+    const folderKey = makeFolderKey(collectionName, parentPath);
+    setExpandedCollectionNames((names) => Array.from(new Set([...names, collectionName])));
+    setExpandedFolderKeys((keys) => Array.from(new Set([...keys, folderKey])));
+    setCreatingFolderTarget({ workspaceName, collectionName, parentPath: normalizeFolderPath(parentPath) });
+  }
+
+  function handleStartCreateFolderRequest(workspaceName, collectionName, folderPath) {
+    const normalizedFolderPath = normalizeFolderPath(folderPath);
+    const folderKey = makeFolderKey(collectionName, normalizedFolderPath);
+    setExpandedCollectionNames((names) => Array.from(new Set([...names, collectionName])));
+    setExpandedFolderKeys((keys) => Array.from(new Set([...keys, folderKey])));
+    setCreatingRequestInFolder(folderKey);
+  }
+
+  function openFolderContextMenu(event, workspaceName, collectionName, folderPath) {
+    event.preventDefault();
+    setFolderContextMenu({
+      x: event.clientX,
+      y: event.clientY,
+      workspaceName,
+      collectionName,
+      folderPath: normalizeFolderPath(folderPath)
+    });
+  }
+
+  function startRenameFolder(collectionName, folderPath) {
+    setEditingItemId(`fld:${collectionName}:${normalizeFolderPath(folderPath)}`);
+  }
+
+  async function handleOpenFolderSettings(workspaceName, collectionName, folderPath) {
+    const normalizedFolderPath = normalizeFolderPath(folderPath);
+    setFolderSettingsTarget({ workspaceName, collectionName, folderPath: normalizedFolderPath });
+    try {
+      const vars = await getEnvVars(workspaceName, collectionName);
+      setFolderSettingsEnv(vars ?? { merged: {} });
+    } catch {
+      setFolderSettingsEnv({ merged: {} });
+    }
   }
 
   function makeFolderKey(collectionName, folderPath) {
@@ -771,12 +1186,35 @@ export function RequestsView({
                           new Set([
                             ...(Array.isArray(col.folders) ? col.folders : []),
                             ...col.requests
-                              .map((request) => String(request.folderPath ?? "").trim())
+                              .map((request) => normalizeFolderPath(request.folderPath))
                               .filter(Boolean)
                           ])
-                        ).sort((left, right) => left.localeCompare(right));
+                        )
+                          .map((path) => normalizeFolderPath(path))
+                          .filter(Boolean)
+                          .sort((left, right) => left.localeCompare(right));
 
-                        const rootRequests = col.requests.filter((request) => !String(request.folderPath ?? "").trim());
+                        const childFoldersByParent = folders.reduce((accumulator, folderPath) => {
+                          const parentPath = getFolderParentPath(folderPath);
+                          if (!accumulator[parentPath]) {
+                            accumulator[parentPath] = [];
+                          }
+                          accumulator[parentPath].push(folderPath);
+                          return accumulator;
+                        }, {});
+
+                        Object.values(childFoldersByParent).forEach((folderList) => folderList.sort((left, right) => left.localeCompare(right)));
+
+                        const requestsByFolder = col.requests.reduce((accumulator, request) => {
+                          const path = normalizeFolderPath(request.folderPath);
+                          if (!accumulator[path]) {
+                            accumulator[path] = [];
+                          }
+                          accumulator[path].push(request);
+                          return accumulator;
+                        }, {});
+
+                        const rootRequests = requestsByFolder[""] ?? [];
 
                         function renderRequestRow(req, reqIdx) {
                           const isReqEditing = editingItemId === `req:${col.name}:${req.name}`;
@@ -821,59 +1259,117 @@ export function RequestsView({
 
                         return (
                           <>
-                            {folders.map((folderPath) => {
-                              const folderKey = makeFolderKey(col.name, folderPath);
-                              const isFolderExpanded = expandedFolderKeys.includes(folderKey) || searchQuery.trim() !== "";
-                              const folderRequests = col.requests.filter((request) => String(request.folderPath ?? "").trim() === folderPath);
-                              const folderLabel = folderPath.split("/").filter(Boolean).at(-1) || folderPath;
-                              return (
-                                <div key={`folder-${folderKey}`}>
-                                  <div
-                                    className="group flex items-center gap-1 px-1.5 py-1 text-[11.5px] text-muted-foreground rounded hover:bg-accent/25"
-                                  >
-                                    <button
-                                      type="button"
-                                      onClick={(event) => {
-                                        event.stopPropagation();
-                                        setExpandedFolderKeys((keys) =>
-                                          keys.includes(folderKey) ? keys.filter((key) => key !== folderKey) : [...keys, folderKey]
-                                        );
-                                      }}
-                                      className="text-muted-foreground hover:text-foreground p-0.5"
-                                    >
-                                      {isFolderExpanded ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />}
-                                    </button>
-                                    <Folder className="h-3.5 w-3.5 shrink-0" />
-                                    <span className="truncate flex-1">{folderLabel}</span>
-                                    <button
-                                      type="button"
-                                      onClick={() => setCreatingRequestInFolder(folderKey)}
-                                      className="p-0.5 text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100 hover:text-foreground"
-                                      title="New request"
-                                    >
-                                      <Plus className="h-3.5 w-3.5" />
-                                    </button>
-                                  </div>
+                            {(childFoldersByParent[""] || []).map((folderPath) => {
+                              function renderFolderNode(path) {
+                                const folderPath = normalizeFolderPath(path);
+                                const folderKey = makeFolderKey(col.name, folderPath);
+                                const isFolderExpanded = expandedFolderKeys.includes(folderKey) || searchQuery.trim() !== "";
+                                const isFolderEditing = editingItemId === `fld:${col.name}:${folderPath}`;
+                                const childFolders = childFoldersByParent[folderPath] || [];
+                                const folderRequests = requestsByFolder[folderPath] || [];
 
-                                  {isFolderExpanded ? (
-                                    <div className="ml-3 space-y-0.5 border-l border-border/20 pl-2">
-                                      {folderRequests.map((request, index) => renderRequestRow(request, index))}
-                                      {creatingRequestInFolder === folderKey ? (
-                                        <CreationField
-                                          initialValue="New Request"
-                                          existingNames={col.requests.map((request) => request.name)}
-                                          onSubmit={(name) => {
-                                            onCreateRequest(effectiveWorkspaceName, col.name, name, folderPath);
-                                            setCreatingRequestInFolder(null);
+                                return (
+                                  <div key={`folder-${folderKey}`}>
+                                    {isFolderEditing ? (
+                                      <RenameField
+                                        value={getFolderLabel(folderPath)}
+                                        onSubmit={(newName) => {
+                                          onRenameFolder(effectiveWorkspaceName, col.name, folderPath, newName);
+                                          setEditingItemId(null);
+                                        }}
+                                        onCancel={() => setEditingItemId(null)}
+                                      />
+                                    ) : (
+                                      <div
+                                        className="group flex items-center gap-1 px-1.5 py-1 text-[11.5px] text-muted-foreground rounded hover:bg-accent/25"
+                                        onContextMenu={(event) => openFolderContextMenu(event, effectiveWorkspaceName, col.name, folderPath)}
+                                        onDoubleClick={(event) => {
+                                          event.stopPropagation();
+                                          startRenameFolder(col.name, folderPath);
+                                        }}
+                                      >
+                                        <button
+                                          type="button"
+                                          onClick={(event) => {
+                                            event.stopPropagation();
+                                            setExpandedFolderKeys((keys) =>
+                                              keys.includes(folderKey) ? keys.filter((key) => key !== folderKey) : [...keys, folderKey]
+                                            );
                                           }}
-                                          onCancel={() => setCreatingRequestInFolder(null)}
-                                          placeholder="Request name"
-                                        />
-                                      ) : null}
-                                    </div>
-                                  ) : null}
-                                </div>
-                              );
+                                          className="text-muted-foreground hover:text-foreground p-0.5"
+                                        >
+                                          {isFolderExpanded ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />}
+                                        </button>
+                                        <Folder className="h-3.5 w-3.5 shrink-0" />
+                                        <span className="truncate flex-1">{getFolderLabel(folderPath)}</span>
+                                        <div className="flex items-center gap-0.5 opacity-0 transition-opacity group-hover:opacity-100" onClick={(event) => event.stopPropagation()}>
+                                          <button
+                                            type="button"
+                                            onClick={() => handleStartCreateFolderRequest(effectiveWorkspaceName, col.name, folderPath)}
+                                            className="p-0.5 text-muted-foreground hover:text-foreground"
+                                            title="New request"
+                                          >
+                                            <Plus className="h-3.5 w-3.5" />
+                                          </button>
+                                          <button
+                                            type="button"
+                                            onClick={() => startRenameFolder(col.name, folderPath)}
+                                            className="p-0.5 text-muted-foreground hover:text-foreground"
+                                            title="Rename"
+                                          >
+                                            <Pencil className="h-3.5 w-3.5" />
+                                          </button>
+                                          <button
+                                            type="button"
+                                            onClick={() => onDeleteFolder(effectiveWorkspaceName, col.name, folderPath)}
+                                            className="p-0.5 text-muted-foreground hover:text-red-500"
+                                            title="Delete"
+                                          >
+                                            <Trash2 className="h-3.5 w-3.5" />
+                                          </button>
+                                        </div>
+                                      </div>
+                                    )}
+
+                                    {isFolderExpanded ? (
+                                      <div className="ml-3 space-y-0.5 border-l border-border/20 pl-2">
+                                        {childFolders.map((childPath) => renderFolderNode(childPath))}
+                                        {folderRequests.map((request, index) => renderRequestRow(request, index))}
+
+                                        {creatingRequestInFolder === folderKey ? (
+                                          <CreationField
+                                            initialValue="New Request"
+                                            existingNames={col.requests.map((request) => request.name)}
+                                            onSubmit={(name) => {
+                                              onCreateRequest(effectiveWorkspaceName, col.name, name, folderPath);
+                                              setCreatingRequestInFolder(null);
+                                            }}
+                                            onCancel={() => setCreatingRequestInFolder(null)}
+                                            placeholder="Request name"
+                                          />
+                                        ) : null}
+
+                                        {creatingFolderTarget?.collectionName === col.name && creatingFolderTarget?.parentPath === folderPath ? (
+                                          <CreationField
+                                            initialValue="New Folder"
+                                            existingNames={folders.filter((existingPath) => getFolderParentPath(existingPath) === folderPath).map((existingPath) => getFolderLabel(existingPath))}
+                                            onSubmit={(folderName) => {
+                                              const fullPath = normalizeFolderPath(`${folderPath}/${folderName}`);
+                                              onCreateFolder(effectiveWorkspaceName, col.name, fullPath);
+                                              setCreatingFolderTarget(null);
+                                              setExpandedFolderKeys((keys) => Array.from(new Set([...keys, makeFolderKey(col.name, fullPath)])));
+                                            }}
+                                            onCancel={() => setCreatingFolderTarget(null)}
+                                            placeholder="Folder name"
+                                          />
+                                        ) : null}
+                                      </div>
+                                    ) : null}
+                                  </div>
+                                );
+                              }
+
+                              return renderFolderNode(folderPath);
                             })}
 
                             {rootRequests.map((req, reqIdx) => renderRequestRow(req, reqIdx))}
@@ -881,16 +1377,17 @@ export function RequestsView({
                         );
                       })()}
 
-                      {creatingFolderInCollection === col.name ? (
+                      {creatingFolderTarget?.collectionName === col.name && creatingFolderTarget?.parentPath === "" ? (
                         <CreationField
                           initialValue="New Folder"
-                          existingNames={Array.from(new Set(Array.isArray(col.folders) ? col.folders : []))}
+                          existingNames={Array.from(new Set((Array.isArray(col.folders) ? col.folders : []).map((folderPath) => getFolderLabel(folderPath))))}
                           onSubmit={(folderName) => {
-                            onCreateFolder(effectiveWorkspaceName, col.name, folderName);
-                            setCreatingFolderInCollection(null);
-                            setExpandedFolderKeys((keys) => Array.from(new Set([...keys, makeFolderKey(col.name, folderName)])));
+                            const fullPath = normalizeFolderPath(folderName);
+                            onCreateFolder(effectiveWorkspaceName, col.name, fullPath);
+                            setCreatingFolderTarget(null);
+                            setExpandedFolderKeys((keys) => Array.from(new Set([...keys, makeFolderKey(col.name, fullPath)])));
                           }}
-                          onCancel={() => setCreatingFolderInCollection(null)}
+                          onCancel={() => setCreatingFolderTarget(null)}
                           placeholder="Folder name"
                         />
                       ) : null}
@@ -960,6 +1457,42 @@ export function RequestsView({
         onClose={() => setCollectionContextMenu(null)}
         canPaste={Boolean(clipboard) && (clipboard.workspaceName !== collectionContextMenu?.workspaceName || clipboard.collectionName !== collectionContextMenu?.collectionName)}
       />
+      <FolderContextMenu
+        menu={folderContextMenu}
+        onCreateRequest={handleStartCreateFolderRequest}
+        onCreateFolder={handleStartCreateSubfolder}
+        onOpenSettings={handleOpenFolderSettings}
+        onCopyFolder={handleCopyFolder}
+        onPasteIntoFolder={handlePasteIntoFolder}
+        onRevealFolder={(workspaceName, collectionName) => handleReveal(workspaceName, collectionName, null)}
+        onRename={(workspaceName, collectionName, folderPath) => startRenameFolder(collectionName, folderPath)}
+        onDelete={onDeleteFolder}
+        onClose={() => setFolderContextMenu(null)}
+        canPaste={Boolean(clipboard)}
+      />
+      <FolderSettingsModal
+        open={Boolean(folderSettingsTarget)}
+        target={folderSettingsTarget}
+        envVars={folderSettingsEnv}
+        currentSetting={
+          folderSettingsTarget
+            ? workspaces
+              .find((workspace) => workspace.name === folderSettingsTarget.workspaceName)
+              ?.collections?.find((collection) => collection.name === folderSettingsTarget.collectionName)
+              ?.folderSettings?.find((setting) => normalizeFolderPath(setting.path) === folderSettingsTarget.folderPath)
+            : null
+        }
+        onClose={() => setFolderSettingsTarget(null)}
+        onSave={(settings) => {
+          if (!folderSettingsTarget) return;
+          onUpdateFolderSettings(
+            folderSettingsTarget.workspaceName,
+            folderSettingsTarget.collectionName,
+            folderSettingsTarget.folderPath,
+            settings
+          );
+        }}
+      />
       {duplicationTarget && (
         <WorkspaceModal
           title={duplicationTarget.type === 'col' ? "Duplicate Collection" : "Duplicate Request"}
@@ -999,7 +1532,10 @@ export function Sidebar({
   onCreateWorkspace, onRenameWorkspace, onDeleteWorkspace,
   onCreateCollection, onRenameCollection, onDeleteCollection, onDuplicateCollection,
   onCreateFolder,
-  onCreateRequest, onRenameRequest, onDeleteRequest, onDuplicateRequest, onPasteRequest, onTogglePinRequest,
+  onRenameFolder,
+  onDeleteFolder,
+  onUpdateFolderSettings,
+  onCreateRequest, onRenameRequest, onDeleteRequest, onDuplicateRequest, onPasteRequest, onPasteFolder, onTogglePinRequest,
   onOpenCollectionSettings,
   onOpenAppSettings,
 }) {
@@ -1030,11 +1566,15 @@ export function Sidebar({
             onDeleteCollection={onDeleteCollection}
             onDuplicateCollection={onDuplicateCollection}
             onCreateFolder={onCreateFolder}
+            onRenameFolder={onRenameFolder}
+            onDeleteFolder={onDeleteFolder}
+            onUpdateFolderSettings={onUpdateFolderSettings}
             onCreateRequest={onCreateRequest}
             onRenameRequest={onRenameRequest}
             onDeleteRequest={onDeleteRequest}
             onDuplicateRequest={onDuplicateRequest}
             onPasteRequest={onPasteRequest}
+            onPasteFolder={onPasteFolder}
             onTogglePinRequest={onTogglePinRequest}
           />
         </Card>

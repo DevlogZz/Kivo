@@ -21,10 +21,70 @@ import {
 import { clampSidebarWidth, normalizeStore, parseCookies } from "@/lib/workspace-utils.js";
 import { formatResponseBody, isJsonText } from "@/lib/formatters.js";
 import { normalizeUrl } from "@/lib/http-ui.js";
+import { normalizeAuthState } from "@/lib/oauth.js";
 
 const SIDEBAR_COLLAPSED_WIDTH = 52;
 const SIDEBAR_MIN_WIDTH = 220;
 const SIDEBAR_REOPEN_WIDTH = 260;
+
+function normalizeFolderPath(path) {
+  return String(path ?? "")
+    .split("/")
+    .map((segment) => segment.trim())
+    .filter(Boolean)
+    .join("/");
+}
+
+function getFolderAncestors(folderPath) {
+  const normalized = normalizeFolderPath(folderPath);
+  if (!normalized) return [];
+  const segments = normalized.split("/");
+  return segments.map((_, index) => segments.slice(0, index + 1).join("/"));
+}
+
+function renamePathPrefix(path, oldPrefix, newPrefix) {
+  if (path === oldPrefix) return newPrefix;
+  if (path.startsWith(`${oldPrefix}/`)) {
+    return `${newPrefix}${path.slice(oldPrefix.length)}`;
+  }
+  return path;
+}
+
+function resolveFolderHeaderRows(collection, folderPath) {
+  const folderSettings = Array.isArray(collection?.folderSettings) ? collection.folderSettings : [];
+  return getFolderAncestors(folderPath).flatMap((path) => {
+    const setting = folderSettings.find((entry) => normalizeFolderPath(entry?.path) === path);
+    return Array.isArray(setting?.defaultHeaders) ? setting.defaultHeaders : [];
+  });
+}
+
+function resolveFolderAuth(collection, folderPath) {
+  const folderSettings = Array.isArray(collection?.folderSettings) ? collection.folderSettings : [];
+  const ancestors = getFolderAncestors(folderPath);
+
+  for (let index = ancestors.length - 1; index >= 0; index -= 1) {
+    const setting = folderSettings.find((entry) => normalizeFolderPath(entry?.path) === ancestors[index]);
+    if (!setting) continue;
+    const auth = normalizeAuthState(setting.defaultAuth ?? { type: "inherit" });
+    if (auth.type && auth.type !== "inherit") {
+      return auth;
+    }
+  }
+
+  return { type: "inherit" };
+}
+
+function getFolderParentPath(path) {
+  const normalized = normalizeFolderPath(path);
+  if (!normalized.includes("/")) return "";
+  return normalized.split("/").slice(0, -1).join("/");
+}
+
+function getFolderLabel(path) {
+  const normalized = normalizeFolderPath(path);
+  const parts = normalized.split("/").filter(Boolean);
+  return parts.at(-1) || normalized;
+}
 
 export function useWorkspaceStore() {
   const [store, setStore] = useState(createDefaultStore());
@@ -229,6 +289,103 @@ export function useWorkspaceStore() {
     });
   }
 
+  function pasteFolderRecord(workspaceName, collectionName, folderSnapshot, targetParentPath = "") {
+    const snapshot = folderSnapshot && typeof folderSnapshot === "object" ? folderSnapshot : null;
+    if (!snapshot?.rootName) {
+      return;
+    }
+
+    updateStore((current) => {
+      const targetWorkspaceName = workspaceName || current.activeWorkspaceName;
+      const workspace = current.workspaces.find((w) => w.name === targetWorkspaceName);
+      const targetCollectionName = collectionName || current.activeCollectionName || workspace?.collections?.[0]?.name;
+      if (!workspace || !targetCollectionName) {
+        return current;
+      }
+
+      let nextActiveRequestName = current.activeRequestName;
+      const normalizedTargetParent = normalizeFolderPath(targetParentPath);
+
+      const nextWorkspaces = current.workspaces.map((w) => {
+        if (w.name !== targetWorkspaceName) return w;
+        return {
+          ...w,
+          collections: w.collections.map((c) => {
+            if (c.name !== targetCollectionName) return c;
+
+            const existingFolders = (Array.isArray(c.folders) ? c.folders : []).map((path) => normalizeFolderPath(path));
+            const siblingNames = existingFolders
+              .filter((path) => getFolderParentPath(path) === normalizedTargetParent)
+              .map((path) => getFolderLabel(path));
+            const uniqueRootName = getUniqueName(String(snapshot.rootName).trim() || "New Folder", siblingNames);
+            const pastedRootPath = normalizeFolderPath(normalizedTargetParent ? `${normalizedTargetParent}/${uniqueRootName}` : uniqueRootName);
+
+            const relativeFolders = Array.isArray(snapshot.folders) ? snapshot.folders : [""];
+            const nextFolderSet = new Set(existingFolders);
+            relativeFolders.forEach((relativePath) => {
+              const normalizedRelative = normalizeFolderPath(relativePath);
+              const fullPath = normalizedRelative ? `${pastedRootPath}/${normalizedRelative}` : pastedRootPath;
+              nextFolderSet.add(normalizeFolderPath(fullPath));
+            });
+
+            const existingRequestNames = c.requests.map((request) => request.name);
+            const nextRequests = [...c.requests];
+            const pastedRequests = Array.isArray(snapshot.requests) ? snapshot.requests : [];
+            pastedRequests.forEach((entry) => {
+              const sourceRequest = entry?.request;
+              if (!sourceRequest) return;
+              const normalizedRelative = normalizeFolderPath(entry.relativePath);
+              const fullPath = normalizedRelative ? `${pastedRootPath}/${normalizedRelative}` : pastedRootPath;
+              const requestName = getUniqueName(sourceRequest.name || "New Request", existingRequestNames);
+              existingRequestNames.push(requestName);
+              const cloned = cloneRequest({ ...sourceRequest, name: requestName, folderPath: normalizeFolderPath(fullPath) });
+              nextRequests.push(cloned);
+              if (!nextActiveRequestName) {
+                nextActiveRequestName = cloned.name;
+              }
+            });
+
+            const existingSettings = Array.isArray(c.folderSettings) ? c.folderSettings : [];
+            const settingsByPath = new Map();
+            existingSettings.forEach((setting) => {
+              settingsByPath.set(normalizeFolderPath(setting.path), {
+                ...setting,
+                path: normalizeFolderPath(setting.path)
+              });
+            });
+
+            const pastedSettings = Array.isArray(snapshot.settings) ? snapshot.settings : [];
+            pastedSettings.forEach((setting) => {
+              const normalizedRelative = normalizeFolderPath(setting?.relativePath);
+              const fullPath = normalizedRelative ? `${pastedRootPath}/${normalizedRelative}` : pastedRootPath;
+              const normalizedPath = normalizeFolderPath(fullPath);
+              settingsByPath.set(normalizedPath, {
+                path: normalizedPath,
+                defaultHeaders: Array.isArray(setting?.defaultHeaders) ? setting.defaultHeaders.map((row) => ({ ...row })) : [],
+                defaultAuth: normalizeAuthState(setting?.defaultAuth ?? { type: "inherit" })
+              });
+            });
+
+            return {
+              ...c,
+              folders: Array.from(nextFolderSet),
+              folderSettings: Array.from(settingsByPath.values()),
+              requests: orderRequests(nextRequests)
+            };
+          })
+        };
+      });
+
+      return {
+        ...current,
+        activeWorkspaceName: targetWorkspaceName,
+        activeCollectionName: targetCollectionName,
+        activeRequestName: nextActiveRequestName,
+        workspaces: nextWorkspaces
+      };
+    });
+  }
+
   function renameWorkspaceRecord(oldName, values) {
     updateStore((current) => {
       const nextName = values.name.trim();
@@ -384,7 +541,7 @@ export function useWorkspaceStore() {
   }
 
   function createFolderRecord(workspaceName, collectionName, folderPath) {
-    const nextFolderPath = String(folderPath ?? "").trim();
+    const nextFolderPath = normalizeFolderPath(folderPath);
     if (!nextFolderPath) {
       return;
     }
@@ -398,7 +555,7 @@ export function useWorkspaceStore() {
       }
 
       const collection = workspace.collections.find((c) => c.name === targetCollectionName);
-      const existingFolders = Array.isArray(collection?.folders) ? collection.folders : [];
+      const existingFolders = (Array.isArray(collection?.folders) ? collection.folders : []).map((path) => normalizeFolderPath(path));
       if (existingFolders.includes(nextFolderPath)) {
         return current;
       }
@@ -424,6 +581,138 @@ export function useWorkspaceStore() {
     });
   }
 
+  function renameFolderRecord(workspaceName, collectionName, oldFolderPath, newFolderName) {
+    const oldPath = normalizeFolderPath(oldFolderPath);
+    const newName = String(newFolderName ?? "").trim();
+    if (!oldPath || !newName) {
+      return;
+    }
+
+    const parts = oldPath.split("/");
+    parts[parts.length - 1] = newName;
+    const newPath = normalizeFolderPath(parts.join("/"));
+    if (!newPath || newPath === oldPath) {
+      return;
+    }
+
+    updateStore((current) => ({
+      ...current,
+      workspaces: current.workspaces.map((workspace) => {
+        if (workspace.name !== workspaceName) return workspace;
+        return {
+          ...workspace,
+          collections: workspace.collections.map((collection) => {
+            if (collection.name !== collectionName) return collection;
+
+            const folders = Array.isArray(collection.folders) ? collection.folders.map((path) => normalizeFolderPath(path)) : [];
+            if (folders.includes(newPath)) {
+              return collection;
+            }
+
+            const nextFolders = Array.from(new Set(
+              folders.map((path) => renamePathPrefix(path, oldPath, newPath))
+            ));
+
+            const nextFolderSettings = (collection.folderSettings || []).map((setting) => ({
+              ...setting,
+              path: renamePathPrefix(normalizeFolderPath(setting.path), oldPath, newPath)
+            }));
+
+            const nextRequests = collection.requests.map((request) => ({
+              ...request,
+              folderPath: renamePathPrefix(normalizeFolderPath(request.folderPath), oldPath, newPath)
+            }));
+
+            return {
+              ...collection,
+              folders: nextFolders,
+              folderSettings: nextFolderSettings,
+              requests: nextRequests
+            };
+          })
+        };
+      })
+    }));
+  }
+
+  function deleteFolderRecord(workspaceName, collectionName, folderPath) {
+    const targetPath = normalizeFolderPath(folderPath);
+    if (!targetPath) {
+      return;
+    }
+
+    updateStore((current) => ({
+      ...current,
+      workspaces: current.workspaces.map((workspace) => {
+        if (workspace.name !== workspaceName) return workspace;
+        return {
+          ...workspace,
+          collections: workspace.collections.map((collection) => {
+            if (collection.name !== collectionName) return collection;
+
+            const shouldDrop = (path) => path === targetPath || path.startsWith(`${targetPath}/`);
+
+            return {
+              ...collection,
+              folders: (collection.folders || []).filter((path) => !shouldDrop(normalizeFolderPath(path))),
+              folderSettings: (collection.folderSettings || []).filter((setting) => !shouldDrop(normalizeFolderPath(setting.path))),
+              requests: collection.requests.map((request) => {
+                const requestFolderPath = normalizeFolderPath(request.folderPath);
+                if (shouldDrop(requestFolderPath)) {
+                  return { ...request, folderPath: "" };
+                }
+                return request;
+              })
+            };
+          })
+        };
+      })
+    }));
+  }
+
+  function updateFolderSettingsRecord(workspaceName, collectionName, folderPath, nextSettings) {
+    const targetPath = normalizeFolderPath(folderPath);
+    if (!targetPath) {
+      return;
+    }
+
+    updateStore((current) => ({
+      ...current,
+      workspaces: current.workspaces.map((workspace) => {
+        if (workspace.name !== workspaceName) return workspace;
+        return {
+          ...workspace,
+          collections: workspace.collections.map((collection) => {
+            if (collection.name !== collectionName) return collection;
+
+            const settings = Array.isArray(collection.folderSettings) ? collection.folderSettings : [];
+            const normalizedSetting = {
+              path: targetPath,
+              defaultHeaders: Array.isArray(nextSettings?.defaultHeaders) ? nextSettings.defaultHeaders : [],
+              defaultAuth: normalizeAuthState(nextSettings?.defaultAuth ?? { type: "inherit" })
+            };
+
+            const exists = settings.some((setting) => normalizeFolderPath(setting.path) === targetPath);
+            const nextFolderSettings = exists
+              ? settings.map((setting) => (
+                normalizeFolderPath(setting.path) === targetPath ? normalizedSetting : setting
+              ))
+              : [...settings, normalizedSetting];
+
+            const folders = Array.isArray(collection.folders) ? collection.folders : [];
+            const nextFolders = folders.includes(targetPath) ? folders : [...folders, targetPath];
+
+            return {
+              ...collection,
+              folders: nextFolders,
+              folderSettings: nextFolderSettings
+            };
+          })
+        };
+      })
+    }));
+  }
+
   function createRequestRecord(workspaceName, collectionName, name, folderPath = "") {
     updateStore((current) => {
       const targetWorkspaceName = workspaceName || current.activeWorkspaceName;
@@ -445,7 +734,7 @@ export function useWorkspaceStore() {
         return current;
       }
       
-      const nextFolderPath = String(folderPath ?? "").trim();
+      const nextFolderPath = normalizeFolderPath(folderPath);
       const nextRequest = {
         ...createRequest(uniqueName),
         folderPath: nextFolderPath
@@ -516,7 +805,7 @@ export function useWorkspaceStore() {
     });
   }
 
-  function pasteRequestRecord(workspaceName, collectionName, request) {
+  function pasteRequestRecord(workspaceName, collectionName, request, folderPath = "") {
     updateStore((current) => {
       const targetWorkspaceName = workspaceName || current.activeWorkspaceName;
       const workspace = current.workspaces.find(w => w.name === targetWorkspaceName);
@@ -527,8 +816,9 @@ export function useWorkspaceStore() {
       const collection = workspace.collections.find(c => c.name === targetCollectionName);
       const existingNames = collection?.requests.map(r => r.name) || [];
       const uniqueName = getUniqueName(request.name, existingNames);
+      const nextFolderPath = normalizeFolderPath(folderPath);
 
-      const pastedRequest = cloneRequest({ ...request, name: uniqueName });
+      const pastedRequest = cloneRequest({ ...request, name: uniqueName, folderPath: nextFolderPath });
 
       return {
         ...current,
@@ -541,8 +831,13 @@ export function useWorkspaceStore() {
             ...w,
             collections: w.collections.map((c) => {
               if (c.name !== targetCollectionName) return c;
+              const folders = Array.isArray(c.folders) ? c.folders : [];
+              const nextFolders = nextFolderPath && !folders.includes(nextFolderPath)
+                ? [...folders, nextFolderPath]
+                : folders;
               return {
                 ...c,
+                folders: nextFolders,
                 requests: orderRequests([...c.requests, pastedRequest]),
                 openRequestNames: [...(c.openRequestNames || []), pastedRequest.name]
               };
@@ -797,8 +1092,16 @@ export function useWorkspaceStore() {
     setSendStartedAt(Date.now());
 
     try {
+      const folderHeaderRows = resolveFolderHeaderRows(activeCollection, activeRequest.folderPath);
+      const resolvedFolderAuth = resolveFolderAuth(activeCollection, activeRequest.folderPath);
+      const effectiveRequest = {
+        ...activeRequest,
+        headers: [...folderHeaderRows, ...(activeRequest.headers || [])],
+        auth: activeRequest?.auth?.type === "inherit" ? resolvedFolderAuth : activeRequest.auth
+      };
+
       const requestPayload = buildRequestPayload(
-        activeRequest,
+        effectiveRequest,
         activeWorkspace?.name ?? "",
         activeCollection?.name ?? ""
       );
@@ -958,9 +1261,13 @@ export function useWorkspaceStore() {
     deleteCollectionRecord,
     duplicateCollectionRecord,
     createFolderRecord,
+    renameFolderRecord,
+    deleteFolderRecord,
+    updateFolderSettingsRecord,
     createRequestRecord,
     duplicateRequestRecord,
     pasteRequestRecord,
+    pasteFolderRecord,
     renameRequestRecord,
     deleteRequestRecord,
     selectWorkspace,

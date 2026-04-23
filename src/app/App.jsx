@@ -75,9 +75,13 @@ export default function App() {
     renameCollectionRecord,
     deleteCollectionRecord,
     createFolderRecord,
+    renameFolderRecord,
+    deleteFolderRecord,
+    updateFolderSettingsRecord,
     createRequestRecord,
     duplicateRequestRecord,
     pasteRequestRecord,
+    pasteFolderRecord,
     renameRequestRecord,
     deleteRequestRecord,
     selectWorkspace,
@@ -214,11 +218,15 @@ export default function App() {
             onDeleteCollection={deleteCollectionRecord}
             onDuplicateCollection={duplicateCollectionRecord}
             onCreateFolder={createFolderRecord}
+            onRenameFolder={renameFolderRecord}
+            onDeleteFolder={deleteFolderRecord}
+            onUpdateFolderSettings={updateFolderSettingsRecord}
             onCreateRequest={createRequestRecord}
             onRenameRequest={renameRequestRecord}
             onDeleteRequest={deleteRequestRecord}
             onDuplicateRequest={duplicateRequestRecord}
             onPasteRequest={pasteRequestRecord}
+            onPasteFolder={pasteFolderRecord}
             onTogglePinRequest={togglePinRequestRecord}
           />
         </div>

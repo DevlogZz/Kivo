@@ -10,12 +10,26 @@ mod tests;
 
 const WORKSPACE_FILE_NAME: &str = "workspace.json";
 const COLLECTION_CONFIG_FILE_NAME: &str = "collection.json";
+const COLLECTION_STATE_FILE_NAME: &str = ".kivo-collection-state.json";
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct EnvVar {
     pub key: String,
     pub value: String,
+}
+
+fn default_inherit_auth_record() -> AuthRecord {
+    AuthRecord {
+        auth_type: "inherit".to_string(),
+        token: String::new(),
+        username: String::new(),
+        password: String::new(),
+        api_key_name: String::new(),
+        api_key_value: String::new(),
+        api_key_in: "header".to_string(),
+        oauth2: OAuthConfig::default(),
+    }
 }
 
 fn is_default_oauth_config(value: &OAuthConfig) -> bool {
@@ -236,7 +250,28 @@ pub struct CollectionRecord {
     pub name: String,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub folders: Vec<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub folder_settings: Vec<FolderSettingsRecord>,
     pub requests: Vec<RequestRecord>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct FolderSettingsRecord {
+    pub path: String,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub default_headers: Vec<KeyValueRow>,
+    #[serde(default = "default_inherit_auth_record")]
+    pub default_auth: AuthRecord,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[serde(rename_all = "camelCase")]
+struct CollectionStateFile {
+    #[serde(default)]
+    folders: Vec<String>,
+    #[serde(default)]
+    folder_settings: Vec<FolderSettingsRecord>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -519,9 +554,11 @@ pub(crate) fn fs_load_workspaces(root: &Path) -> Result<Vec<WorkspaceRecord>, St
                 let req_entry = req_entry.map_err(|e| format!("Failed to read request entry: {e}"))?;
                 let req_path = req_entry.path();
                 let is_config = req_path.file_name().map_or(false, |n| n == COLLECTION_CONFIG_FILE_NAME);
+                let is_state = req_path.file_name().map_or(false, |n| n == COLLECTION_STATE_FILE_NAME);
                 if req_path.is_file()
                     && req_path.extension().map_or(false, |e| e == "json")
                     && !is_config
+                    && !is_state
                 {
                     let req_json = fs::read_to_string(&req_path)
                         .map_err(|e| format!("Failed to read request file: {e}"))?;
@@ -531,9 +568,22 @@ pub(crate) fn fs_load_workspaces(root: &Path) -> Result<Vec<WorkspaceRecord>, St
                     }
                 }
             }
+            let collection_state = {
+                let state_path = col_path.join(COLLECTION_STATE_FILE_NAME);
+                if state_path.exists() {
+                    fs::read_to_string(&state_path)
+                        .ok()
+                        .and_then(|json| serde_json::from_str::<CollectionStateFile>(&json).ok())
+                        .unwrap_or_default()
+                } else {
+                    CollectionStateFile::default()
+                }
+            };
+
             collections.push(CollectionRecord {
                 name: col_meta.name,
-                folders: vec![],
+                folders: collection_state.folders,
+                folder_settings: collection_state.folder_settings,
                 requests,
             });
         }
@@ -603,7 +653,8 @@ pub(crate) fn fs_save_workspaces(root: &Path, workspaces: &[WorkspaceRecord]) ->
                 let ep = entry.path();
                 if ep.is_file() && ep.extension().map_or(false, |e| e == "json") {
                     let is_config = ep.file_name().map_or(false, |n| n == COLLECTION_CONFIG_FILE_NAME);
-                    if !is_config {
+                    let is_state = ep.file_name().map_or(false, |n| n == COLLECTION_STATE_FILE_NAME);
+                    if !is_config && !is_state {
                         let _ = fs::remove_file(&ep);
                     }
                 }
@@ -616,6 +667,16 @@ pub(crate) fn fs_save_workspaces(root: &Path, workspaces: &[WorkspaceRecord]) ->
                 fs::write(req_path, req_json)
                     .map_err(|e| format!("Failed to write request file: {e}"))?;
             }
+
+            let collection_state_json = serde_json::to_string_pretty(&CollectionStateFile {
+                folders: collection.folders.clone(),
+                folder_settings: collection.folder_settings.clone(),
+            })
+            .map_err(|e| format!("Failed to serialize collection state: {e}"))?;
+
+            fs::write(col_path.join(COLLECTION_STATE_FILE_NAME), collection_state_json)
+                .map_err(|e| format!("Failed to write collection state file: {e}"))?;
+
             collections_meta.push(CollectionMeta { name: collection.name.clone(), path: col_dir_name });
         }
         let ws_file = WorkspaceFile {

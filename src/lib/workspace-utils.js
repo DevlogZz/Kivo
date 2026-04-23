@@ -1,4 +1,5 @@
 import { createDefaultStore, normalizeRequestRecord, orderRequests } from "./workspace-store.js";
+import { normalizeAuthState } from "./oauth.js";
 
 export const SIDEBAR_COLLAPSED_WIDTH = 52;
 export const SIDEBAR_MIN_WIDTH = 220;
@@ -32,6 +33,15 @@ export function normalizeStore(store) {
         ? workspace.collections.map((collection) => ({
           ...collection,
           folders: Array.isArray(collection.folders) ? collection.folders.map((folder) => String(folder)) : [],
+          folderSettings: Array.isArray(collection.folderSettings)
+            ? collection.folderSettings
+              .map((setting) => ({
+                path: String(setting?.path ?? "").trim(),
+                defaultHeaders: Array.isArray(setting?.defaultHeaders) ? setting.defaultHeaders : [],
+                defaultAuth: normalizeAuthState(setting?.defaultAuth ?? { type: "inherit" })
+              }))
+              .filter((setting) => Boolean(setting.path))
+            : [],
           requests: orderRequests((collection.requests ?? []).map((request) => normalizeRequestRecord(request))),
           openRequestNames: Array.isArray(collection.openRequestNames) ? collection.openRequestNames : (collection.requests ?? []).map((request) => request.name)
         }))

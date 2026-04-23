@@ -73,6 +73,7 @@ export function createCollection(name = "New Collection") {
   return {
     name,
     folders: [],
+    folderSettings: [],
     requests: [],
     openRequestNames: []
   };
