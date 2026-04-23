@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { Check, ChevronDown, ChevronRight, Code2, Copy, FolderKanban, Layers, MoreVertical, Pencil, Pin, Plus, Search, Settings, SquareKanban, Trash2, X } from "lucide-react";
+import { Check, ChevronDown, ChevronRight, Code2, Copy, Folder, FolderKanban, FolderPlus, Layers, MoreVertical, Pencil, Pin, Plus, Search, Settings, SquareKanban, Trash2, X } from "lucide-react";
 import { invoke } from "@tauri-apps/api/core";
 
 import { CodeEditor } from "@/components/workspace/CodeEditor.jsx";
@@ -275,7 +275,7 @@ function RequestContextMenu({ menu, onGenerateCode, onCopyCurl, onRename, onDupl
   );
 }
 
-function CollectionContextMenu({ menu, onCreateRequest, onRename, onDuplicate, onPaste, onReveal, onDelete, onClose, canPaste, onOpenSettings }) {
+function CollectionContextMenu({ menu, onCreateRequest, onCreateFolder, onRename, onDuplicate, onPaste, onReveal, onDelete, onClose, canPaste, onOpenSettings }) {
   useEffect(() => {
     if (!menu) return;
     function handlePointer() { onClose(); }
@@ -291,6 +291,9 @@ function CollectionContextMenu({ menu, onCreateRequest, onRename, onDuplicate, o
     <div className="fixed z-[210] min-w-[180px] border border-border/60 bg-popover p-1 shadow-2xl" style={{ left: menu.x, top: menu.y }} onMouseDown={(e) => e.stopPropagation()} onContextMenu={(e) => e.preventDefault()}>
       <button type="button" className="flex w-full items-center gap-2 px-3 py-2 text-left text-[12px] text-foreground hover:bg-accent/45" onClick={() => { onCreateRequest(menu.workspaceName, menu.collectionName); onClose(); }}>
         <Plus className="h-3.5 w-3.5" /> New Request
+      </button>
+      <button type="button" className="flex w-full items-center gap-2 px-3 py-2 text-left text-[12px] text-foreground hover:bg-accent/45" onClick={() => { onCreateFolder(menu.workspaceName, menu.collectionName); onClose(); }}>
+        <FolderPlus className="h-3.5 w-3.5" /> New Folder
       </button>
       <button type="button" className="flex w-full items-center gap-2 px-3 py-2 text-left text-[12px] text-foreground hover:bg-accent/45" onClick={() => { onOpenSettings?.(); onClose(); }}>
         <Settings className="h-3.5 w-3.5" /> Settings
@@ -329,6 +332,7 @@ export function RequestsView({
   onRenameCollection,
   onDeleteCollection,
   onDuplicateCollection,
+  onCreateFolder,
   onCreateRequest,
   onRenameRequest,
   onDeleteRequest,
@@ -349,6 +353,9 @@ export function RequestsView({
   const [expandedCollectionNames, setExpandedCollectionNames] = useState([]);
   const [isCreatingCollection, setIsCreatingCollection] = useState(false);
   const [creatingRequestInCollection, setCreatingRequestInCollection] = useState(null);
+  const [creatingFolderInCollection, setCreatingFolderInCollection] = useState(null);
+  const [creatingRequestInFolder, setCreatingRequestInFolder] = useState(null);
+  const [expandedFolderKeys, setExpandedFolderKeys] = useState([]);
   const [searchQuery, setSearchQuery] = useState("");
   const [isSearchVisible, setIsSearchVisible] = useState(false);
   const [isWorkspaceSwitcherOpen, setIsWorkspaceSwitcherOpen] = useState(false);
@@ -503,6 +510,15 @@ export function RequestsView({
       workspaceName,
       collectionName
     });
+  }
+
+  function handleStartCreateFolder(workspaceName, collectionName) {
+    setExpandedCollectionNames((names) => Array.from(new Set([...names, collectionName])));
+    setCreatingFolderInCollection(collectionName);
+  }
+
+  function makeFolderKey(collectionName, folderPath) {
+    return `${collectionName}::${folderPath}`;
   }
 
   const filteredCollections = useMemo(() => {
@@ -750,46 +766,135 @@ export function RequestsView({
                   )}
                   {isColExpanded && (
                     <div className="space-y-0.5 ml-3 pl-2 border-l border-border/30">
-                      {col.requests.map((req, reqIdx) => {
-                        const isReqEditing = editingItemId === `req:${col.name}:${req.name}`;
-                        const isReqActive = req.name === activeRequestName && col.name === activeCollectionName;
+                      {(() => {
+                        const folders = Array.from(
+                          new Set([
+                            ...(Array.isArray(col.folders) ? col.folders : []),
+                            ...col.requests
+                              .map((request) => String(request.folderPath ?? "").trim())
+                              .filter(Boolean)
+                          ])
+                        ).sort((left, right) => left.localeCompare(right));
+
+                        const rootRequests = col.requests.filter((request) => !String(request.folderPath ?? "").trim());
+
+                        function renderRequestRow(req, reqIdx) {
+                          const isReqEditing = editingItemId === `req:${col.name}:${req.name}`;
+                          const isReqActive = req.name === activeRequestName && col.name === activeCollectionName;
+                          return (
+                            <div key={`req-${col.name}-${req.name}-${reqIdx}`}>
+                              {isReqEditing ? (
+                                <RenameField
+                                  value={req.name}
+                                  onSubmit={(n) => {
+                                    onRenameRequest(effectiveWorkspaceName, col.name, req.name, n);
+                                    setEditingItemId(null);
+                                  }}
+                                  onCancel={() => setEditingItemId(null)}
+                                />
+                              ) : (
+                                <div
+                                  onClick={() => onSelectRequest(effectiveWorkspaceName, col.name, req.name)}
+                                  onDoubleClick={(e) => {
+                                    e.stopPropagation();
+                                    setEditingItemId(`req:${col.name}:${req.name}`);
+                                  }}
+                                  className={cn(
+                                    "group flex items-center gap-2 px-2 py-1 text-[12px] rounded transition-colors cursor-pointer select-none",
+                                    isReqActive ? "bg-primary/15 text-foreground" : "text-muted-foreground hover:bg-accent/35 hover:text-foreground"
+                                  )}
+                                  onContextMenu={(e) => openRequestContextMenu(e, effectiveWorkspaceName, col.name, req)}
+                                >
+                                  <div className="flex min-w-0 flex-1 items-center gap-2 text-left">
+                                    <span className={cn("text-[10px] font-bold uppercase w-8 shrink-0", getMethodTone(req.method).split(" ")[0])}>{req.method}</span>
+                                    {req.pinned && <Pin className="h-3 w-3 text-primary shrink-0" />}
+                                    <span className="truncate">{req.name}</span>
+                                  </div>
+                                  <div className="flex items-center opacity-0 group-hover:opacity-100" onClick={(e) => e.stopPropagation()}>
+                                    <button type="button" className="p-1 text-muted-foreground hover:text-red-500" onClick={() => onDeleteRequest(effectiveWorkspaceName, col.name, req.name)}><Trash2 className="h-3.5 w-3.5" /></button>
+                                  </div>
+                                </div>
+                              )}
+                            </div>
+                          );
+                        }
+
                         return (
-                          <div key={`req-${col.name}-${req.name}-${reqIdx}`}>
-                            {isReqEditing ? (
-                              <RenameField
-                                value={req.name}
-                                onSubmit={(n) => {
-                                  onRenameRequest(effectiveWorkspaceName, col.name, req.name, n);
-                                  setEditingItemId(null);
-                                }}
-                                onCancel={() => setEditingItemId(null)}
-                              />
-                            ) : (
-                              <div
-                                onClick={() => onSelectRequest(effectiveWorkspaceName, col.name, req.name)}
-                                onDoubleClick={(e) => {
-                                  e.stopPropagation();
-                                  setEditingItemId(`req:${col.name}:${req.name}`);
-                                }}
-                                className={cn(
-                                  "group flex items-center gap-2 px-2 py-1 text-[12px] rounded transition-colors cursor-pointer select-none",
-                                  isReqActive ? "bg-primary/15 text-foreground" : "text-muted-foreground hover:bg-accent/35 hover:text-foreground"
-                                )}
-                                onContextMenu={(e) => openRequestContextMenu(e, effectiveWorkspaceName, col.name, req)}
-                              >
-                                <div className="flex min-w-0 flex-1 items-center gap-2 text-left">
-                                  <span className={cn("text-[10px] font-bold uppercase w-8 shrink-0", getMethodTone(req.method).split(" ")[0])}>{req.method}</span>
-                                  {req.pinned && <Pin className="h-3 w-3 text-primary shrink-0" />}
-                                  <span className="truncate">{req.name}</span>
+                          <>
+                            {folders.map((folderPath) => {
+                              const folderKey = makeFolderKey(col.name, folderPath);
+                              const isFolderExpanded = expandedFolderKeys.includes(folderKey) || searchQuery.trim() !== "";
+                              const folderRequests = col.requests.filter((request) => String(request.folderPath ?? "").trim() === folderPath);
+                              const folderLabel = folderPath.split("/").filter(Boolean).at(-1) || folderPath;
+                              return (
+                                <div key={`folder-${folderKey}`}>
+                                  <div
+                                    className="group flex items-center gap-1 px-1.5 py-1 text-[11.5px] text-muted-foreground rounded hover:bg-accent/25"
+                                  >
+                                    <button
+                                      type="button"
+                                      onClick={(event) => {
+                                        event.stopPropagation();
+                                        setExpandedFolderKeys((keys) =>
+                                          keys.includes(folderKey) ? keys.filter((key) => key !== folderKey) : [...keys, folderKey]
+                                        );
+                                      }}
+                                      className="text-muted-foreground hover:text-foreground p-0.5"
+                                    >
+                                      {isFolderExpanded ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />}
+                                    </button>
+                                    <Folder className="h-3.5 w-3.5 shrink-0" />
+                                    <span className="truncate flex-1">{folderLabel}</span>
+                                    <button
+                                      type="button"
+                                      onClick={() => setCreatingRequestInFolder(folderKey)}
+                                      className="p-0.5 text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100 hover:text-foreground"
+                                      title="New request"
+                                    >
+                                      <Plus className="h-3.5 w-3.5" />
+                                    </button>
+                                  </div>
+
+                                  {isFolderExpanded ? (
+                                    <div className="ml-3 space-y-0.5 border-l border-border/20 pl-2">
+                                      {folderRequests.map((request, index) => renderRequestRow(request, index))}
+                                      {creatingRequestInFolder === folderKey ? (
+                                        <CreationField
+                                          initialValue="New Request"
+                                          existingNames={col.requests.map((request) => request.name)}
+                                          onSubmit={(name) => {
+                                            onCreateRequest(effectiveWorkspaceName, col.name, name, folderPath);
+                                            setCreatingRequestInFolder(null);
+                                          }}
+                                          onCancel={() => setCreatingRequestInFolder(null)}
+                                          placeholder="Request name"
+                                        />
+                                      ) : null}
+                                    </div>
+                                  ) : null}
                                 </div>
-                                <div className="flex items-center opacity-0 group-hover:opacity-100" onClick={(e) => e.stopPropagation()}>
-                                  <button type="button" className="p-1 text-muted-foreground hover:text-red-500" onClick={() => onDeleteRequest(effectiveWorkspaceName, col.name, req.name)}><Trash2 className="h-3.5 w-3.5" /></button>
-                                </div>
-                              </div>
-                            )}
-                          </div>
+                              );
+                            })}
+
+                            {rootRequests.map((req, reqIdx) => renderRequestRow(req, reqIdx))}
+                          </>
                         );
-                      })}
+                      })()}
+
+                      {creatingFolderInCollection === col.name ? (
+                        <CreationField
+                          initialValue="New Folder"
+                          existingNames={Array.from(new Set(Array.isArray(col.folders) ? col.folders : []))}
+                          onSubmit={(folderName) => {
+                            onCreateFolder(effectiveWorkspaceName, col.name, folderName);
+                            setCreatingFolderInCollection(null);
+                            setExpandedFolderKeys((keys) => Array.from(new Set([...keys, makeFolderKey(col.name, folderName)])));
+                          }}
+                          onCancel={() => setCreatingFolderInCollection(null)}
+                          placeholder="Folder name"
+                        />
+                      ) : null}
+
                       {creatingRequestInCollection === col.name && (
                         <CreationField
                           initialValue="New Request"
@@ -845,6 +950,7 @@ export function RequestsView({
       <CollectionContextMenu
         menu={collectionContextMenu}
         onCreateRequest={onCreateRequest}
+        onCreateFolder={handleStartCreateFolder}
         onRename={(workspaceName, collectionName) => setEditingItemId(`col:${collectionName}`)}
         onDuplicate={handleDuplicateCollection}
         onPaste={handlePasteRequest}
@@ -892,6 +998,7 @@ export function Sidebar({
   onSidebarTabChange, onSelectWorkspace, onSelectCollection, onSelectRequest,
   onCreateWorkspace, onRenameWorkspace, onDeleteWorkspace,
   onCreateCollection, onRenameCollection, onDeleteCollection, onDuplicateCollection,
+  onCreateFolder,
   onCreateRequest, onRenameRequest, onDeleteRequest, onDuplicateRequest, onPasteRequest, onTogglePinRequest,
   onOpenCollectionSettings,
   onOpenAppSettings,
@@ -922,6 +1029,7 @@ export function Sidebar({
             onRenameCollection={onRenameCollection}
             onDeleteCollection={onDeleteCollection}
             onDuplicateCollection={onDuplicateCollection}
+            onCreateFolder={onCreateFolder}
             onCreateRequest={onCreateRequest}
             onRenameRequest={onRenameRequest}
             onDeleteRequest={onDeleteRequest}

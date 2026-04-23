@@ -30,6 +30,7 @@ fn make_request(name: &str) -> RequestRecord {
         follow_redirects: true,
         max_redirects: 5,
         timeout_ms: 0,
+        folder_path: String::new(),
         active_editor_tab: "Params".to_string(),
         active_response_tab: "Body".to_string(),
         response_body_view: "JSON".to_string(),
@@ -61,7 +62,11 @@ fn ws(name: &str, collections: Vec<CollectionRecord>) -> WorkspaceRecord {
 }
 
 fn col(name: &str, requests: Vec<RequestRecord>) -> CollectionRecord {
-    CollectionRecord { name: name.to_string(), requests }
+    CollectionRecord {
+        name: name.to_string(),
+        folders: vec![],
+        requests,
+    }
 }
 
 #[cfg(test)]

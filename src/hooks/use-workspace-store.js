@@ -383,7 +383,48 @@ export function useWorkspaceStore() {
     });
   }
 
-  function createRequestRecord(workspaceName, collectionName, name) {
+  function createFolderRecord(workspaceName, collectionName, folderPath) {
+    const nextFolderPath = String(folderPath ?? "").trim();
+    if (!nextFolderPath) {
+      return;
+    }
+
+    updateStore((current) => {
+      const targetWorkspaceName = workspaceName || current.activeWorkspaceName;
+      const workspace = current.workspaces.find((w) => w.name === targetWorkspaceName);
+      const targetCollectionName = collectionName || current.activeCollectionName || workspace?.collections?.[0]?.name;
+      if (!workspace || !targetCollectionName) {
+        return current;
+      }
+
+      const collection = workspace.collections.find((c) => c.name === targetCollectionName);
+      const existingFolders = Array.isArray(collection?.folders) ? collection.folders : [];
+      if (existingFolders.includes(nextFolderPath)) {
+        return current;
+      }
+
+      return {
+        ...current,
+        activeWorkspaceName: targetWorkspaceName,
+        activeCollectionName: targetCollectionName,
+        workspaces: current.workspaces.map((w) => {
+          if (w.name !== targetWorkspaceName) return w;
+          return {
+            ...w,
+            collections: w.collections.map((c) => {
+              if (c.name !== targetCollectionName) return c;
+              return {
+                ...c,
+                folders: [...existingFolders, nextFolderPath]
+              };
+            })
+          };
+        })
+      };
+    });
+  }
+
+  function createRequestRecord(workspaceName, collectionName, name, folderPath = "") {
     updateStore((current) => {
       const targetWorkspaceName = workspaceName || current.activeWorkspaceName;
       const workspace = current.workspaces.find(w => w.name === targetWorkspaceName);
@@ -404,7 +445,11 @@ export function useWorkspaceStore() {
         return current;
       }
       
-      const nextRequest = createRequest(uniqueName);
+      const nextFolderPath = String(folderPath ?? "").trim();
+      const nextRequest = {
+        ...createRequest(uniqueName),
+        folderPath: nextFolderPath
+      };
 
       return {
         ...current,
@@ -417,8 +462,13 @@ export function useWorkspaceStore() {
             ...workspace,
             collections: workspace.collections.map((collection) => {
               if (collection.name !== targetCollectionName) return collection;
+              const folders = Array.isArray(collection.folders) ? collection.folders : [];
+              const nextFolders = nextFolderPath && !folders.includes(nextFolderPath)
+                ? [...folders, nextFolderPath]
+                : folders;
               return {
                 ...collection,
+                folders: nextFolders,
                 requests: orderRequests([...collection.requests, nextRequest]),
                 openRequestNames: [...(collection.openRequestNames || []), nextRequest.name]
               };
@@ -907,6 +957,7 @@ export function useWorkspaceStore() {
     renameCollectionRecord,
     deleteCollectionRecord,
     duplicateCollectionRecord,
+    createFolderRecord,
     createRequestRecord,
     duplicateRequestRecord,
     pasteRequestRecord,

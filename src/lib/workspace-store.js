@@ -64,6 +64,7 @@ export function createRequest(name = "New Request") {
     followRedirects: true,
     maxRedirects: 5,
     timeoutMs: 0,
+    folderPath: "",
     lastResponse: null
   };
 }
@@ -71,6 +72,7 @@ export function createRequest(name = "New Request") {
 export function createCollection(name = "New Collection") {
   return {
     name,
+    folders: [],
     requests: [],
     openRequestNames: []
   };
@@ -169,6 +171,7 @@ export function normalizeRequestRecord(request) {
     followRedirects: request?.followRedirects ?? true,
     maxRedirects: Number.isFinite(request?.maxRedirects) ? Number(request.maxRedirects) : 5,
     timeoutMs: Number.isFinite(request?.timeoutMs) ? Number(request.timeoutMs) : 0,
+    folderPath: typeof request?.folderPath === "string" ? request.folderPath : "",
     auth: normalizeAuthState(request?.auth)
   };
 }

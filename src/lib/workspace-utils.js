@@ -31,6 +31,7 @@ export function normalizeStore(store) {
       collections: Array.isArray(workspace.collections)
         ? workspace.collections.map((collection) => ({
           ...collection,
+          folders: Array.isArray(collection.folders) ? collection.folders.map((folder) => String(folder)) : [],
           requests: orderRequests((collection.requests ?? []).map((request) => normalizeRequestRecord(request))),
           openRequestNames: Array.isArray(collection.openRequestNames) ? collection.openRequestNames : (collection.requests ?? []).map((request) => request.name)
         }))

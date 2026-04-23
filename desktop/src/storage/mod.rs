@@ -234,6 +234,8 @@ pub struct WorkspaceFile {
 #[serde(rename_all = "camelCase")]
 pub struct CollectionRecord {
     pub name: String,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub folders: Vec<String>,
     pub requests: Vec<RequestRecord>,
 }
 
@@ -290,6 +292,8 @@ pub struct RequestRecord {
     pub max_redirects: u32,
     #[serde(default)]
     pub timeout_ms: u64,
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub folder_path: String,
     #[serde(default)]
     pub active_editor_tab: String,
     #[serde(default)]
@@ -527,7 +531,11 @@ pub(crate) fn fs_load_workspaces(root: &Path) -> Result<Vec<WorkspaceRecord>, St
                     }
                 }
             }
-            collections.push(CollectionRecord { name: col_meta.name, requests });
+            collections.push(CollectionRecord {
+                name: col_meta.name,
+                folders: vec![],
+                requests,
+            });
         }
         workspaces.push(WorkspaceRecord {
             name: ws_file.info.name,

@@ -74,6 +74,7 @@ export default function App() {
     createCollectionRecord,
     renameCollectionRecord,
     deleteCollectionRecord,
+    createFolderRecord,
     createRequestRecord,
     duplicateRequestRecord,
     pasteRequestRecord,
@@ -212,6 +213,7 @@ export default function App() {
             onRenameCollection={renameCollectionRecord}
             onDeleteCollection={deleteCollectionRecord}
             onDuplicateCollection={duplicateCollectionRecord}
+            onCreateFolder={createFolderRecord}
             onCreateRequest={createRequestRecord}
             onRenameRequest={renameRequestRecord}
             onDeleteRequest={deleteRequestRecord}

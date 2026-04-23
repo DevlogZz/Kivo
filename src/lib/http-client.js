@@ -26,6 +26,7 @@ function sanitizeRequestForSave(request) {
     followRedirects: request?.followRedirects ?? true,
     maxRedirects: Number.isFinite(request?.maxRedirects) ? Number(request.maxRedirects) : 5,
     timeoutMs: Number.isFinite(request?.timeoutMs) ? Number(request.timeoutMs) : 0,
+    folderPath: String(request?.folderPath ?? ""),
     lastResponse: null
   };
 
