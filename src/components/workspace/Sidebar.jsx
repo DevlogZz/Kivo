@@ -45,13 +45,36 @@ function ImportExportModal({ open: isOpen, mode, scope, targetName, defaultFileN
   const [filePath, setFilePath] = useState("");
   const [format, setFormat] = useState("postman");
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isFormatMenuOpen, setIsFormatMenuOpen] = useState(false);
+  const formatMenuRef = useRef(null);
 
   useEffect(() => {
     if (!isOpen) return;
     setFilePath("");
     setFormat("postman");
     setIsSubmitting(false);
+    setIsFormatMenuOpen(false);
   }, [isOpen]);
+
+  useEffect(() => {
+    if (!isFormatMenuOpen) return;
+    function handlePointer(event) {
+      if (formatMenuRef.current && !formatMenuRef.current.contains(event.target)) {
+        setIsFormatMenuOpen(false);
+      }
+    }
+    function handleEscape(event) {
+      if (event.key === "Escape") {
+        setIsFormatMenuOpen(false);
+      }
+    }
+    window.addEventListener("mousedown", handlePointer);
+    window.addEventListener("keydown", handleEscape);
+    return () => {
+      window.removeEventListener("mousedown", handlePointer);
+      window.removeEventListener("keydown", handleEscape);
+    };
+  }, [isFormatMenuOpen]);
 
   if (!isOpen) return null;
 
@@ -106,9 +129,37 @@ function ImportExportModal({ open: isOpen, mode, scope, targetName, defaultFileN
         {mode === "export" ? (
           <div className="mb-3 grid gap-2">
             <label className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">Format</label>
-            <select value={format} onChange={(event) => setFormat(event.target.value)} className="h-10 border border-border/40 bg-background/50 px-3 text-[13px] text-foreground outline-none">
-              {IMPORT_EXPORT_FORMATS.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}
-            </select>
+            <div ref={formatMenuRef} className="relative">
+              <button
+                type="button"
+                onClick={() => setIsFormatMenuOpen((open) => !open)}
+                className="flex h-10 w-full items-center justify-between border border-border/40 bg-background/50 px-3 text-[13px] text-foreground outline-none transition-colors hover:bg-accent/35"
+              >
+                <span>{IMPORT_EXPORT_FORMATS.find((item) => item.value === format)?.label || "Select format"}</span>
+                <ChevronDown className={cn("h-3.5 w-3.5 text-muted-foreground transition-transform", isFormatMenuOpen && "rotate-180")} />
+              </button>
+              {isFormatMenuOpen && (
+                <div className="absolute left-0 right-0 top-[calc(100%+6px)] z-20 border border-border/60 bg-popover p-1 shadow-2xl">
+                  {IMPORT_EXPORT_FORMATS.map((item) => (
+                    <button
+                      key={item.value}
+                      type="button"
+                      className={cn(
+                        "flex w-full items-center justify-between px-3 py-2 text-left text-[12px] transition-colors",
+                        item.value === format ? "bg-accent/55 text-foreground" : "text-foreground hover:bg-accent/35"
+                      )}
+                      onClick={() => {
+                        setFormat(item.value);
+                        setIsFormatMenuOpen(false);
+                      }}
+                    >
+                      <span>{item.label}</span>
+                      {item.value === format ? <Check className="h-3.5 w-3.5" /> : null}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
           </div>
         ) : null}
 
@@ -670,7 +721,7 @@ function RequestContextMenu({ menu, onGenerateCode, onCopyCurl, onRename, onDupl
   );
 }
 
-function CollectionContextMenu({ menu, onCreateRequest, onCreateFolder, onRename, onDuplicate, onPaste, onImportCollection, onImportRequest, onExportCollection, onReveal, onDelete, onClose, canPaste, onOpenSettings }) {
+function CollectionContextMenu({ menu, onCreateRequest, onCreateFolder, onRename, onDuplicate, onPaste, onImportRequest, onExportCollection, onReveal, onDelete, onClose, canPaste, onOpenSettings }) {
   useEffect(() => {
     if (!menu) return;
     function handlePointer() { onClose(); }
@@ -706,9 +757,6 @@ function CollectionContextMenu({ menu, onCreateRequest, onCreateFolder, onRename
       </button>
       <button type="button" className="flex w-full items-center gap-2 px-3 py-2 text-left text-[12px] text-foreground hover:bg-accent/45" onClick={() => { onImportRequest(menu.workspaceName, menu.collectionName, ""); onClose(); }}>
         <Plus className="h-3.5 w-3.5" /> Import Request
-      </button>
-      <button type="button" className="flex w-full items-center gap-2 px-3 py-2 text-left text-[12px] text-foreground hover:bg-accent/45" onClick={() => { onImportCollection(menu.workspaceName); onClose(); }}>
-        <Plus className="h-3.5 w-3.5" /> Import Collection
       </button>
       <button type="button" className="flex w-full items-center gap-2 px-3 py-2 text-left text-[12px] text-foreground hover:bg-accent/45" onClick={() => { onExportCollection(menu.workspaceName, menu.collectionName); onClose(); }}>
         <Copy className="h-3.5 w-3.5" /> Export Collection
@@ -1706,7 +1754,6 @@ export function RequestsView({
         onRename={(workspaceName, collectionName) => setEditingItemId(`col:${collectionName}`)}
         onDuplicate={handleDuplicateCollection}
         onPaste={handlePasteCollectionRoot}
-        onImportCollection={handleImportCollection}
         onImportRequest={handleImportRequest}
         onExportCollection={handleExportCollection}
         onReveal={handleReveal}

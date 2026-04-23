@@ -129,6 +129,16 @@ fn parse_headers_any(value: Option<&serde_json::Value>) -> Vec<KeyValueRow> {
     parse_headers_object(value)
 }
 
+fn parse_url_value(value: Option<&serde_json::Value>) -> String {
+    let Some(value) = value else { return String::new(); };
+    if let Some(url) = value.as_str() {
+        return url.to_string();
+    }
+    as_str(value.get("raw"))
+        .if_empty_then(|| as_str(value.get("url")))
+        .if_empty_then(|| as_str(value.get("href")))
+}
+
 fn parse_postman_url(url: Option<&serde_json::Value>) -> String {
     let Some(url) = url else { return String::new(); };
     if let Some(raw) = url.as_str() {
@@ -339,12 +349,110 @@ fn import_bruno(value: &serde_json::Value) -> CollectionRecord {
     let name = value
         .get("name")
         .and_then(|v| v.as_str())
+        .or_else(|| value.get("info").and_then(|v| v.get("name")).and_then(|v| v.as_str()))
         .or_else(|| value.get("collection").and_then(|v| v.get("name")).and_then(|v| v.as_str()))
         .unwrap_or("Bruno Import")
         .to_string();
 
     let mut requests = vec![];
     let mut folders = BTreeSet::new();
+
+    fn collect_bruno_items(
+        items: &[serde_json::Value],
+        folder_prefix: &str,
+        folders: &mut BTreeSet<String>,
+        requests: &mut Vec<RequestRecord>,
+    ) {
+        for item in items {
+            let name = as_str(item.get("name"))
+                .if_empty_then(|| as_str(item.get("info").and_then(|info| info.get("name"))));
+            let node_type = as_str(item.get("type"))
+                .if_empty_then(|| as_str(item.get("info").and_then(|info| info.get("type"))))
+                .to_lowercase();
+            let child_items = item
+                .get("items")
+                .and_then(|v| v.as_array())
+                .or_else(|| item.get("item").and_then(|v| v.as_array()))
+                .or_else(|| item.get("requests").and_then(|v| v.as_array()));
+
+            if child_items.is_some() && (node_type == "folder" || node_type == "group" || node_type == "collection" || item.get("request").is_none()) {
+                let next_folder = if folder_prefix.is_empty() {
+                    name.clone()
+                } else {
+                    format!("{}/{}", folder_prefix, name)
+                };
+                if !next_folder.trim().is_empty() {
+                    folders.insert(next_folder.clone());
+                }
+                if let Some(children) = child_items {
+                    collect_bruno_items(children, &next_folder, folders, requests);
+                }
+                continue;
+            }
+
+            let method = as_str(item.get("method"))
+                .if_empty_then(|| as_str(item.get("request").and_then(|req| req.get("method"))))
+                .if_empty_then(|| as_str(item.get("http").and_then(|http| http.get("method"))))
+                .if_empty_then(|| as_str(item.get("graphql").and_then(|graphql| graphql.get("method"))))
+                .to_uppercase();
+            let url = parse_url_value(item.get("url"))
+                .if_empty_then(|| parse_url_value(item.get("request").and_then(|req| req.get("url"))))
+                .if_empty_then(|| as_str(item.get("request").and_then(|req| req.get("rawUrl"))))
+                .if_empty_then(|| parse_url_value(item.get("http").and_then(|http| http.get("url"))))
+                .if_empty_then(|| parse_url_value(item.get("graphql").and_then(|graphql| graphql.get("url"))));
+
+            if method.trim().is_empty() && url.trim().is_empty() {
+                continue;
+            }
+
+            let mut request = empty_request(
+                name.if_empty_then(|| format!("{} {}", if method.is_empty() { "GET" } else { &method }, if url.is_empty() { "/" } else { &url })),
+                if method.is_empty() { "GET".to_string() } else { method },
+                url,
+            );
+
+            request.folder_path = as_str(item.get("folder"));
+            if request.folder_path.trim().is_empty() {
+                request.folder_path = folder_prefix.to_string();
+            }
+            if !request.folder_path.is_empty() {
+                folders.insert(request.folder_path.clone());
+            }
+
+            request.headers = parse_headers_any(
+                item.get("headers")
+                    .or_else(|| item.get("request").and_then(|req| req.get("headers")))
+                    .or_else(|| item.get("http").and_then(|http| http.get("headers"))),
+            );
+
+            if let Some(body) = item
+                .get("body")
+                .and_then(|v| v.as_str())
+                .or_else(|| item.get("request").and_then(|req| req.get("body")).and_then(|v| v.as_str()))
+                .or_else(|| item.get("request").and_then(|req| req.get("body")).and_then(|v| v.get("raw")).and_then(|v| v.as_str()))
+                .or_else(|| item.get("http").and_then(|http| http.get("body")).and_then(|v| v.get("raw")).and_then(|v| v.as_str()))
+                .or_else(|| item.get("http").and_then(|http| http.get("body")).and_then(|v| v.get("data")).and_then(|v| v.as_str()))
+                .or_else(|| item.get("graphql").and_then(|graphql| graphql.get("body")).and_then(|v| v.get("query")).and_then(|v| v.as_str()))
+            {
+                request.body_type = if node_type == "graphql" { "graphql".to_string() } else { "json".to_string() };
+                request.body = RequestTextOrJson::Text(body.to_string());
+            }
+
+            if node_type == "graphql" {
+                if request.url.trim().is_empty() {
+                    request.url = as_str(item.get("graphql").and_then(|graphql| graphql.get("url")));
+                }
+                if request.method.trim().is_empty() {
+                    request.method = as_str(item.get("graphql").and_then(|graphql| graphql.get("method"))).to_uppercase();
+                }
+                if request.method.trim().is_empty() {
+                    request.method = "POST".to_string();
+                }
+            }
+
+            requests.push(request);
+        }
+    }
 
     let items = value
         .get("requests")
@@ -354,38 +462,7 @@ fn import_bruno(value: &serde_json::Value) -> CollectionRecord {
         .or_else(|| value.get("item").and_then(|v| v.as_array()));
 
     if let Some(items) = items {
-        for item in items {
-            let method = as_str(item.get("method"))
-                .if_empty_then(|| as_str(item.get("request").and_then(|req| req.get("method"))))
-                .to_uppercase();
-            let url = as_str(item.get("url"))
-                .if_empty_then(|| as_str(item.get("request").and_then(|req| req.get("url"))))
-                .if_empty_then(|| as_str(item.get("request").and_then(|req| req.get("rawUrl"))));
-            let mut request = empty_request(
-                as_str(item.get("name")).if_empty_then(|| format!("{} {}", if method.is_empty() { "GET" } else { &method }, if url.is_empty() { "/" } else { &url })),
-                if method.is_empty() { "GET".to_string() } else { method },
-                url,
-            );
-
-            request.folder_path = as_str(item.get("folder"));
-            if !request.folder_path.is_empty() {
-                folders.insert(request.folder_path.clone());
-            }
-
-            request.headers = parse_headers_any(item.get("headers").or_else(|| item.get("request").and_then(|req| req.get("headers"))));
-
-            if let Some(body) = item
-                .get("body")
-                .and_then(|v| v.as_str())
-                .or_else(|| item.get("request").and_then(|req| req.get("body")).and_then(|v| v.as_str()))
-                .or_else(|| item.get("request").and_then(|req| req.get("body")).and_then(|v| v.get("raw")).and_then(|v| v.as_str()))
-            {
-                request.body_type = "json".to_string();
-                request.body = RequestTextOrJson::Text(body.to_string());
-            }
-
-            requests.push(request);
-        }
+        collect_bruno_items(items, "", &mut folders, &mut requests);
     }
 
     CollectionRecord {
@@ -522,30 +599,105 @@ fn requests_to_openapi_doc(requests: &[RequestRecord], title: &str, version: &st
 }
 
 fn requests_to_bruno_doc(requests: &[RequestRecord], name: &str) -> serde_json::Value {
+    fn request_body_as_text(request: &RequestRecord) -> String {
+        match &request.body {
+            RequestTextOrJson::Text(text) => text.clone(),
+            RequestTextOrJson::Json(json) => serde_json::to_string_pretty(json).unwrap_or_default(),
+        }
+    }
+
+    fn default_item_settings() -> serde_json::Value {
+        serde_json::json!({
+            "encodeUrl": true,
+            "timeout": 0,
+            "followRedirects": true,
+            "maxRedirects": 5,
+        })
+    }
+
+    fn request_to_open_collection_item(request: &RequestRecord, seq: usize) -> serde_json::Value {
+        let body_text = request_body_as_text(request);
+        let is_graphql = request.body_type == "graphql";
+
+        if is_graphql {
+            return serde_json::json!({
+                "info": {
+                    "name": request.name,
+                    "type": "graphql",
+                    "seq": seq,
+                },
+                "graphql": {
+                    "url": request.url,
+                    "method": if request.method.trim().is_empty() { "POST" } else { request.method.as_str() },
+                    "body": {
+                        "query": body_text,
+                        "variables": "",
+                    },
+                    "auth": "inherit",
+                },
+                "settings": default_item_settings(),
+            });
+        }
+
+        let http_body = if body_text.trim().is_empty() {
+            serde_json::Value::Null
+        } else {
+            serde_json::json!({
+                "type": if request.body_type == "json" { "json" } else { "text" },
+                "data": body_text,
+            })
+        };
+
+        let mut http = serde_json::Map::new();
+        http.insert("method".to_string(), serde_json::Value::String(if request.method.trim().is_empty() { "GET".to_string() } else { request.method.clone() }));
+        http.insert("url".to_string(), serde_json::Value::String(request.url.clone()));
+        http.insert("auth".to_string(), serde_json::Value::String("inherit".to_string()));
+        if !http_body.is_null() {
+            http.insert("body".to_string(), http_body);
+        }
+
+        serde_json::json!({
+            "info": {
+                "name": request.name,
+                "type": "http",
+                "seq": seq,
+            },
+            "http": serde_json::Value::Object(http),
+            "settings": default_item_settings(),
+        })
+    }
+
     serde_json::json!({
-        "bruno": {
-            "version": "1"
-        },
-        "collection": {
+        "opencollection": "1.0.0",
+        "info": {
             "name": name
         },
-        "name": name,
-        "requests": requests.iter().map(|req| {
-            let body = match &req.body {
-                RequestTextOrJson::Text(text) => text.clone(),
-                RequestTextOrJson::Json(json) => serde_json::to_string_pretty(json).unwrap_or_default(),
-            };
-            serde_json::json!({
-                "name": req.name,
-                "method": req.method,
-                "url": req.url,
-                "folder": req.folder_path,
-                "headers": req.headers.iter().filter(|h| h.enabled && !h.key.trim().is_empty()).map(|h| serde_json::json!({ "key": h.key, "value": h.value })).collect::<Vec<_>>(),
-                "body": {
-                    "raw": body,
-                },
-            })
-        }).collect::<Vec<_>>()
+        "config": {
+            "proxy": {
+                "inherit": true,
+                "config": {
+                    "protocol": "http",
+                    "hostname": "",
+                    "port": "",
+                    "auth": {
+                        "username": "",
+                        "password": ""
+                    },
+                    "bypassProxy": ""
+                }
+            }
+        },
+        "items": requests.iter().enumerate().map(|(index, req)| request_to_open_collection_item(req, index + 1)).collect::<Vec<_>>(),
+        "request": {
+            "auth": "inherit"
+        },
+        "bundled": true,
+        "extensions": {
+            "bruno": {
+                "ignore": ["node_modules", ".git"],
+                "exportedUsing": "Kivo"
+            }
+        }
     })
 }
 
