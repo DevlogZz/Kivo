@@ -528,7 +528,7 @@ function RequestContextMenu({ menu, onGenerateCode, onCopyCurl, onRename, onDupl
         <Copy className="h-3.5 w-3.5" /> Copy Request
       </button>
       <button type="button" disabled={!canPaste} className={cn("flex w-full items-center gap-2 px-3 py-2 text-left text-[12px] transition-colors", canPaste ? "text-foreground hover:bg-accent/45" : "text-muted-foreground opacity-50 cursor-not-allowed")} onClick={() => { if (canPaste) { onPaste(menu.workspaceName, menu.collectionName); onClose(); } }}>
-        <Copy className="h-3.5 w-3.5" /> Paste Request
+        <Copy className="h-3.5 w-3.5" /> Paste
       </button>
       <div className="my-1 border-t border-border/40" />
       <button type="button" className="flex w-full items-center gap-2 px-3 py-2 text-left text-[12px] text-foreground hover:bg-accent/45" onClick={() => { onRename(menu.workspaceName, menu.collectionName, menu.requestName); onClose(); }}>
@@ -574,7 +574,7 @@ function CollectionContextMenu({ menu, onCreateRequest, onCreateFolder, onRename
       </button>
       <div className="my-1 border-t border-border/40" />
       <button type="button" disabled={!canPaste} className={cn("flex w-full items-center gap-2 px-3 py-2 text-left text-[12px] transition-colors", canPaste ? "text-foreground hover:bg-accent/45" : "text-muted-foreground opacity-50 cursor-not-allowed")} onClick={() => { if (canPaste) { onPaste(menu.workspaceName, menu.collectionName); onClose(); } }}>
-        <Copy className="h-3.5 w-3.5" /> Paste Request
+        <Copy className="h-3.5 w-3.5" /> Paste
       </button>
       <div className="my-1 border-t border-border/40" />
       <button type="button" className="flex w-full items-center gap-2 px-3 py-2 text-left text-[12px] text-foreground hover:bg-accent/45" onClick={() => { onRename(menu.workspaceName, menu.collectionName); onClose(); }}>
@@ -858,6 +858,25 @@ export function RequestsView({
       }
       onPasteRequest(workspaceName, collectionName, clipboard.request);
       setFeedbackMessage(`Pasted ${clipboard.request.name} into ${collectionName}.`);
+      setTimeout(() => setFeedbackMessage(""), 2000);
+    }
+  }
+
+  function handlePasteCollectionRoot(workspaceName, collectionName) {
+    if (!clipboard) {
+      return;
+    }
+
+    if (clipboard.type === "req") {
+      onPasteRequest(workspaceName, collectionName, clipboard.request);
+      setFeedbackMessage(`Pasted ${clipboard.request.name} into ${collectionName}.`);
+      setTimeout(() => setFeedbackMessage(""), 2000);
+      return;
+    }
+
+    if (clipboard.type === "folder") {
+      onPasteFolder(workspaceName, collectionName, clipboard.snapshot, "");
+      setFeedbackMessage(`Pasted folder ${clipboard.snapshot.rootName} into ${collectionName}.`);
       setTimeout(() => setFeedbackMessage(""), 2000);
     }
   }
@@ -1450,12 +1469,12 @@ export function RequestsView({
         onCreateFolder={handleStartCreateFolder}
         onRename={(workspaceName, collectionName) => setEditingItemId(`col:${collectionName}`)}
         onDuplicate={handleDuplicateCollection}
-        onPaste={handlePasteRequest}
+        onPaste={handlePasteCollectionRoot}
         onReveal={handleReveal}
         onDelete={onDeleteCollection}
         onOpenSettings={onOpenCollectionSettings}
         onClose={() => setCollectionContextMenu(null)}
-        canPaste={Boolean(clipboard) && (clipboard.workspaceName !== collectionContextMenu?.workspaceName || clipboard.collectionName !== collectionContextMenu?.collectionName)}
+        canPaste={Boolean(clipboard)}
       />
       <FolderContextMenu
         menu={folderContextMenu}
