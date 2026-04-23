@@ -64,26 +64,16 @@ jobs:
           generateReleaseNotes: true
           args: ${{ matrix.args }}
           releaseBody: |
-            ### v0.4.0: OAuth 2.0 Integration & Modernized Workspace
-            - **feat**: add oauth2 auth flow with native exchange
-            - **feat**: add app settings page with storage management
-            - **feat**: modernize app settings UI & navigation
-            - **feat**: add dot-path and prefix queries for JSON filtering
-            - **feat**: add cancellable loading state for responses
-            - **feat**: add report issue link & support resources
-            - **feat**: add sonner toasts for improved notifications
-            - **feat**: add exchange cancel support for OAuth flow
-            - **fix**: major refactor to stabilize auth panel inputs
-            - **fix**: align settings pane width and responsiveness
-            - **fix**: stack app settings sections for better layout
-            - **fix**: normalize storage path logic to Kivo root
-            - **fix**: preserve settings sidebar tab state
-            - **fix**: decouple sidebar select toggle logic
-            - **fix**: resolve auth environment variable exporting
-            - **fix**: update auth test fixtures and validation
-            - **fix**: trim refresh inputs and handle cursor drift
-            
-            **Note**: This project has officially migrated from `dexter-xD/Kivo` to `DevlogZz/Kivo`.
+            ### v0.4.1: Folder Hierarchy, Settings, and Workflow Refinements
+            - **feat**: add collection folders with nested structure support
+            - **feat**: add request settings improvements and folder-level controls
+            - **feat**: add folder menu parity with copy/paste and show-in-files actions
+            - **feat**: add collection-level folder paste support for cross-collection workflows
+            - **fix**: preserve scope body state and stabilize JSON persistence
+            - **fix**: persist and normalize GraphQL body/variables more reliably
+            - **fix**: trim auth payload values before save/send
+            - **chore**: restore newline storage handling
+
             **Author**: dexter-xD, Now part of DevlogZz.
           projectPath: desktop
 

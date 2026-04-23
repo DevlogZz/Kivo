@@ -36,17 +36,17 @@ Kivo is a lightweight cross-platform HTTP client designed for developers who val
 - **Expanded Auth Support**: Comprehensive support for Basic Auth, API Key (Header/Query), and environment-aware token management with inheritance.
 - **Environment Autocomplete**: Real-time `{{variable}}` suggestions with arrow-key navigation for a faster workflow.
 
-## Download Kivo (v0.4.0)
+## Download Kivo (v0.4.1)
 
 Get the latest stable version for your operating system:
 
 | Platform | Installer | Architecture |
 | :--- | :--- | :--- |
-| **Windows** | [Download .exe](https://github.com/DevlogZz/Kivo/releases/download/v0.4.0/Kivo_0.4.0_x64-setup.exe) / [.msi](https://github.com/DevlogZz/Kivo/releases/download/v0.4.0/Kivo_0.4.0_x64_en-US.msi) | `x64` |
-| **macOS** | [Apple Silicon .dmg](https://github.com/DevlogZz/Kivo/releases/download/v0.4.0/Kivo_0.4.0_aarch64.dmg) | `arm64` |
-| **macOS** | [Intel .dmg](https://github.com/DevlogZz/Kivo/releases/download/v0.4.0/Kivo_0.4.0_x64.dmg) | `x64` |
-| **Linux** | [Download .deb](https://github.com/DevlogZz/Kivo/releases/download/v0.4.0/Kivo_0.4.0_amd64.deb) | `x64` |
-| **Linux** | [Download .rpm](https://github.com/DevlogZz/Kivo/releases/download/v0.4.0/Kivo-0.4.0-1.x86_64.rpm) | `x64` |
+| **Windows** | [Download .exe](https://github.com/DevlogZz/Kivo/releases/download/v0.4.1/Kivo_0.4.1_x64-setup.exe) / [.msi](https://github.com/DevlogZz/Kivo/releases/download/v0.4.1/Kivo_0.4.1_x64_en-US.msi) | `x64` |
+| **macOS** | [Apple Silicon .dmg](https://github.com/DevlogZz/Kivo/releases/download/v0.4.1/Kivo_0.4.1_aarch64.dmg) | `arm64` |
+| **macOS** | [Intel .dmg](https://github.com/DevlogZz/Kivo/releases/download/v0.4.1/Kivo_0.4.1_x64.dmg) | `x64` |
+| **Linux** | [Download .deb](https://github.com/DevlogZz/Kivo/releases/download/v0.4.1/Kivo_0.4.1_amd64.deb) | `x64` |
+| **Linux** | [Download .rpm](https://github.com/DevlogZz/Kivo/releases/download/v0.4.1/Kivo-0.4.1-1.x86_64.rpm) | `x64` |
 
 *For other formats and old releases, visit the [Releases page](https://github.com/DevlogZz/Kivo/releases).*
 
@@ -54,15 +54,15 @@ Get the latest stable version for your operating system:
 
 - **Debian / Ubuntu**:
   ```bash
-  sudo apt install ./Kivo_0.4.0_amd64.deb
+  sudo apt install ./Kivo_0.4.1_amd64.deb
   ```
 - **Fedora / RHEL**:
   ```bash
-  sudo dnf install ./Kivo-0.4.0-1.x86_64.rpm
+  sudo dnf install ./Kivo-0.4.1-1.x86_64.rpm
   ```
 - **Arch / Other (RPM via rpm tool)**:
   ```bash
-  sudo rpm -i --nodeps --nosignature ./Kivo-0.4.0-1.x86_64.rpm
+  sudo rpm -i --nodeps --nosignature ./Kivo-0.4.1-1.x86_64.rpm
   ```
 
 ---
@@ -115,7 +115,18 @@ Contributions are welcome! If you have suggestions for improvements or encounter
 
 ## Changelog
 
-### v0.4.0 (2026-04-23)
+### v0.4.1 (2026-04-23)
+
+- **feat**: add collection folders with nested structure support
+- **feat**: add request settings improvements and folder-level controls
+- **feat**: add folder menu parity with copy/paste and show-in-files actions
+- **feat**: add collection-level folder paste support for cross-collection workflows
+- **fix**: preserve scope body state and stabilize JSON persistence
+- **fix**: persist and normalize GraphQL body/variables more reliably
+- **fix**: trim auth payload values before save/send
+- **chore**: restore newline storage handling
+
+### v0.4.0 (2026-04-22)
 
 - **feat**: add oauth2 auth flow with native exchange
 - **feat**: add app settings page with storage management
@@ -142,12 +153,6 @@ Contributions are welcome! If you have suggestions for improvements or encounter
 - **JSON Query Engine v1**. Integrated a high-performance, index-backed engine for real-time response filtering.
 - **Smart Env Autocomplete**. Added `{{` triggered suggestions with arrow-key navigation and Tab selection.
 - **UI & Performance**. Refined JSON tree visualization, added bulk-edit mode, and fixed state normalization bugs.
-
-### v0.3.5 (2026-04-12)
-
-- **Cross-Platform Storage Fixes**. Improved default storage path logic for macOS and Linux with robust fallbacks.
-- **Smart Setup Wizard**. Added a subfolder creation toggle and automatic directory detection to prevent data nesting.
-- **Native Experience Refinement**. Smarter path separator handling and dynamic placeholders based on detected OS.
 
 See the full [CHANGELOG.md](CHANGELOG.md) for more details.
 
