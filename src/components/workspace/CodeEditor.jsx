@@ -167,7 +167,7 @@ export function CodeEditor({
 
   if (readOnly) {
     return (
-      <div className={cn("relative min-h-0 flex-1 overflow-hidden bg-background/20", className)}>
+      <div className={cn("relative min-h-0 flex-1 overflow-hidden bg-transparent", className)}>
         <pre
           className={cn(
             "thin-scrollbar h-full px-4 py-3 font-mono text-[12px] leading-6 text-foreground",
@@ -195,7 +195,7 @@ export function CodeEditor({
         disabled={disabled}
         spellCheck={false}
         className={cn(
-          "thin-scrollbar h-full w-full resize-none overflow-auto border-0 bg-background/20 px-4 py-3 font-mono text-[12px] leading-6 text-foreground outline-none placeholder:text-muted-foreground/60 disabled:cursor-not-allowed disabled:opacity-50",
+          "thin-scrollbar h-full w-full resize-none overflow-auto border-0 bg-transparent px-4 py-3 font-mono text-[12px] leading-6 text-foreground outline-none placeholder:text-muted-foreground/60 disabled:cursor-not-allowed disabled:opacity-50",
           className
         )}
       />
@@ -203,7 +203,7 @@ export function CodeEditor({
   }
 
   return (
-    <div className={cn("relative min-h-0 flex-1 overflow-hidden bg-background/20", className)}>
+    <div className={cn("relative min-h-0 flex-1 overflow-hidden bg-transparent", className)}>
       <pre
         ref={highlightRef}
         aria-hidden="true"

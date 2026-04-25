@@ -81,11 +81,11 @@ function RequestSettingsPanel({ state, onChange }) {
               value={tagsText}
               onChange={(event) => handleTagsChange(event.target.value)}
               placeholder="e.g., create, update"
-              className="h-10 border-border/40 bg-background/20"
+              className="h-10 border-border/40 bg-transparent"
             />
           </div>
 
-          <div className="grid gap-3 border border-border/30 bg-background/10 p-3">
+          <div className="grid gap-3 border border-border/30 bg-transparent p-3">
             <div className="flex items-start justify-between gap-4">
               <div>
                 <div className="text-[12px] font-medium text-foreground">URL Encoding</div>
@@ -122,7 +122,7 @@ function RequestSettingsPanel({ state, onChange }) {
                   const value = Number.parseInt(event.target.value, 10);
                   onChange("maxRedirects", Number.isFinite(value) && value >= 0 ? value : 0);
                 }}
-                className="h-10 border-border/40 bg-background/20 max-w-[180px]"
+                className="h-10 border-border/40 bg-transparent max-w-[180px]"
               />
             </div>
 
@@ -136,7 +136,7 @@ function RequestSettingsPanel({ state, onChange }) {
                   const value = Number.parseInt(event.target.value, 10);
                   onChange("timeoutMs", Number.isFinite(value) && value >= 0 ? value : 0);
                 }}
-                className="h-10 border-border/40 bg-background/20 max-w-[180px]"
+                className="h-10 border-border/40 bg-transparent max-w-[180px]"
               />
             </div>
           </div>
@@ -164,7 +164,7 @@ function GrpcHeadersPanel({ headers, onHeadersChange }) {
             <div className="text-muted-foreground">{row.value}</div>
           </div>
         ))}
-        <div className="border-t border-border/20">
+        <div>
           <TableEditor
             rows={headers}
             onChange={onHeadersChange}
@@ -355,7 +355,7 @@ function WebSocketHeadersPanel({ headers, onHeadersChange }) {
       <div className="border-b border-border/20 px-3 py-2 text-[10px] uppercase tracking-[0.16em] text-muted-foreground">
         Handshake Headers
       </div>
-      <div className="thin-scrollbar min-h-0 overflow-auto bg-background/20">
+      <div className="thin-scrollbar min-h-0 overflow-auto bg-transparent">
         {systemHeaders.map((row) => (
           <div key={row.key} className="grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)] border-b border-border/10 px-3 py-2 text-[12px]">
             <div className="text-foreground">{row.key}</div>
@@ -454,7 +454,7 @@ function TableEditor({
   const activeCount = rows.filter((row) => row.enabled && row.key.trim()).length;
 
   return (
-    <div className="grid min-h-0 grid-rows-[auto_minmax(0,1fr)] overflow-hidden bg-background/20">
+    <div className="grid min-h-0 grid-rows-[auto_minmax(0,1fr)] overflow-hidden bg-transparent">
       <div className="flex items-center justify-between border-b border-border/20 px-3 py-2 text-[11px] text-muted-foreground lg:text-[12px]">
         <div className="flex items-center gap-3">
           <span className="font-medium text-foreground">{title}</span>
@@ -565,7 +565,7 @@ function GraphQLEditor({ query, variables, onQueryChange, onVariablesChange, dis
   }
 
   return (
-    <div className="grid h-full min-h-0 grid-rows-[minmax(0,1fr)_auto_minmax(0,1fr)] overflow-hidden bg-background/20">
+    <div className="grid h-full min-h-0 grid-rows-[minmax(0,1fr)_auto_minmax(0,1fr)] overflow-hidden bg-transparent">
       <div className="grid min-h-0 grid-rows-[auto_minmax(0,1fr)]">
         <div className="flex items-center justify-between border-b border-border/20 px-3 py-2 text-[11px] text-muted-foreground lg:text-[12px]">
           <span className="font-medium text-foreground">Query</span>
@@ -633,7 +633,7 @@ function SelectMenu({ value, options, onChange, className, renderValue, renderOp
   }, []);
 
   return (
-    <div ref={rootRef} className={cn("relative", className)}>
+    <div ref={rootRef} className={cn("relative", open && !disabled && "z-[320]", className)}>
       <button
         type="button"
         onClick={() => {
@@ -642,7 +642,7 @@ function SelectMenu({ value, options, onChange, className, renderValue, renderOp
         }}
         disabled={disabled}
         className={cn(
-          "flex h-8 w-full items-center justify-between border border-border/35 bg-background/30 px-3 text-left text-[12px] text-foreground outline-none transition-colors hover:bg-background/45 focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-70",
+          "flex h-8 w-full items-center justify-between border border-border/35 bg-transparent px-3 text-left text-[12px] text-foreground outline-none transition-colors focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-70",
           buttonClassName
         )}
       >
@@ -651,7 +651,7 @@ function SelectMenu({ value, options, onChange, className, renderValue, renderOp
       </button>
 
       {open && !disabled ? (
-        <div className="absolute left-0 top-[calc(100%+4px)] z-30 min-w-full overflow-hidden border border-border/45 bg-popover">
+        <div className="absolute left-0 top-[calc(100%+4px)] z-[330] min-w-full overflow-hidden border border-border/45 bg-background shadow-xl">
           {options.map((option) => {
             const active = option.value === value;
 
@@ -665,7 +665,7 @@ function SelectMenu({ value, options, onChange, className, renderValue, renderOp
                 }}
                 className={cn(
                   "flex w-full items-center justify-between px-3 py-2 text-left text-[12px] transition-colors",
-                  active ? "bg-secondary/55 text-foreground" : "text-muted-foreground hover:bg-secondary/30 hover:text-foreground"
+                  active ? "text-foreground" : "text-muted-foreground hover:text-foreground"
                 )}
               >
                 {renderOption ? renderOption(option, active) : <span>{option.label}</span>}
@@ -746,14 +746,14 @@ function AuthPanel({ state, onAuthChange, envVars, response, workspaceName, coll
               <button
                 type="button"
                 onClick={() => setShowPassword(!showPassword)}
-                className="absolute right-2 top-1/2 -translate-y-1/2 flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-foreground z-10"
+                className="absolute right-2 top-1/2 z-10 flex h-7 w-7 -translate-y-1/2 items-center justify-center rounded-md text-muted-foreground transition-colors hover:text-foreground"
               >
                 {showPassword ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
               </button>
             </div>
           </div>
           <p className="text-[11px] text-muted-foreground/70">
-            Generates <code className="text-[10px] bg-primary/10 text-primary px-1 py-0.5 rounded-sm">Authorization: Basic base64(user:pass)</code> header. Supports <code className="text-[10px] bg-primary/10 text-primary px-1 py-0.5 rounded-sm">{"{{variables}}"}</code>.
+            Generates <code className="rounded-sm border border-border/30 px-1 py-0.5 text-[10px] text-foreground">Authorization: Basic base64(user:pass)</code> header. Supports <code className="rounded-sm border border-border/30 px-1 py-0.5 text-[10px] text-foreground">{"{{variables}}"}</code>.
           </p>
         </div>
       )}
@@ -768,7 +768,7 @@ function AuthPanel({ state, onAuthChange, envVars, response, workspaceName, coll
             envVars={envVars}
           />
           <p className="text-[11px] text-muted-foreground/70">
-            Generates <code className="text-[10px] bg-primary/10 text-primary px-1 py-0.5 rounded-sm">Authorization: Bearer &lt;token&gt;</code> header. Supports <code className="text-[10px] bg-primary/10 text-primary px-1 py-0.5 rounded-sm">{"{{variables}}"}</code>.
+            Generates <code className="rounded-sm border border-border/30 px-1 py-0.5 text-[10px] text-foreground">Authorization: Bearer &lt;token&gt;</code> header. Supports <code className="rounded-sm border border-border/30 px-1 py-0.5 text-[10px] text-foreground">{"{{variables}}"}</code>.
           </p>
         </div>
       )}
@@ -805,7 +805,7 @@ function AuthPanel({ state, onAuthChange, envVars, response, workspaceName, coll
             {auth.apiKeyIn === "query"
               ? "Key-value pair will be appended to the URL query string."
               : "Key-value pair will be sent as an HTTP header."}
-            {" "}Supports <code className="text-[10px] bg-primary/10 text-primary px-1 py-0.5 rounded-sm">{"{{variables}}"}</code>.
+            {" "}Supports <code className="rounded-sm border border-border/30 px-1 py-0.5 text-[10px] text-foreground">{"{{variables}}"}</code>.
           </p>
         </div>
       )}
@@ -822,7 +822,7 @@ function AuthPanel({ state, onAuthChange, envVars, response, workspaceName, coll
       )}
 
       {(auth.type === "none" || auth.type === "inherit") && (
-        <div className="mx-3 bg-background/20 p-3">
+        <div className="mx-3 border border-border/30 bg-transparent p-3">
           {auth.type === "inherit"
             ? "This request will use the authentication configured on the parent collection."
             : "No authentication will be applied to this request."}
@@ -1222,9 +1222,9 @@ export function RequestPane({
   }
 
   return (
-    <Card className="flex h-full min-h-0 flex-col gap-0 overflow-hidden border-0 border-r border-border/30 bg-card/84 p-0 shadow-none">
+    <Card className="flex h-full min-h-0 flex-col gap-0 overflow-hidden border-0 border-r border-border/30 bg-background p-0 shadow-none">
       <div className={cn(
-        "grid gap-px border-b border-border/25 bg-border/20",
+        "grid gap-px border-b border-border/25 bg-transparent",
         isGrpcRequest
           ? "grid-cols-[88px_minmax(0,1fr)_200px_34px_34px_92px] lg:grid-cols-[100px_minmax(0,1fr)_260px_40px_40px_108px]"
           : "grid-cols-[108px_minmax(0,1fr)_92px] lg:grid-cols-[124px_minmax(0,1fr)_108px]"
@@ -1242,7 +1242,7 @@ export function RequestPane({
         )}
 
         <EnvHighlightInput
-          inputClassName="h-8 rounded-none border-0 bg-input/60 text-[12.5px] lg:h-10 lg:text-[14px]"
+          inputClassName="h-8 rounded-none border-0 bg-transparent text-[12.5px] lg:h-10 lg:text-[14px]"
           value={state.url}
           onValueChange={(val) => onChange("url", val)}
           placeholder={isWebSocketRequest ? "wss://example.com/chat" : isGrpcRequest ? "grpcb.in:9000" : "https://api.example.com/v1/users"}
@@ -1255,10 +1255,10 @@ export function RequestPane({
               value={state.grpcMethodPath || ""}
               options={grpcMethodOptions.length > 0 ? grpcMethodOptions : [{ value: "", label: isGrpcMethodsLoading ? "Loading methods..." : "No methods found" }]}
               onChange={(methodPath) => onChange("grpcMethodPath", methodPath)}
-              buttonClassName="h-8 rounded-none border-0 bg-input/60 text-[12px] lg:h-10 lg:text-[13px]"
+              buttonClassName="h-8 rounded-none border-0 bg-transparent text-[12px] lg:h-10 lg:text-[13px]"
             />
           ) : (
-            <div className="flex h-8 items-center border-0 bg-input/60 px-3 text-[12px] text-muted-foreground lg:h-10 lg:text-[13px]">
+            <div className="flex h-8 items-center border-0 bg-transparent px-3 text-[12px] text-muted-foreground lg:h-10 lg:text-[13px]">
               Select method
             </div>
           )
@@ -1308,7 +1308,7 @@ export function RequestPane({
       </div>
 
       {isGrpcRequest ? (
-        <div className="flex items-center justify-between border-b border-border/20 bg-background/20 px-3 py-2 text-[11px] text-muted-foreground">
+        <div className="flex items-center justify-between border-b border-border/20 bg-transparent px-3 py-2 text-[11px] text-muted-foreground">
           <div className="flex min-w-0 items-center gap-2 truncate">
             <FileText className="h-3.5 w-3.5 shrink-0 text-cyan-300" />
             <span className="truncate">{grpcSelectedProtoFileName || "No .proto file selected"}</span>
@@ -1348,7 +1348,7 @@ export function RequestPane({
               key={tab}
               type="button"
               onClick={() => onTabChange(tab)}
-              className={cn("px-2 py-1 text-muted-foreground transition-colors lg:px-3 lg:py-1.5", activeTab === tab && "bg-secondary/35 text-foreground")}
+              className={cn("px-2 py-1 text-muted-foreground transition-colors lg:px-3 lg:py-1.5", activeTab === tab && "text-foreground")}
             >
               {tab}
             </button>
@@ -1356,12 +1356,12 @@ export function RequestPane({
         </div>
       </div>
 
-      <div className="min-h-0 flex-1 overflow-hidden bg-background/20">
+      <div className="min-h-0 flex-1 overflow-hidden bg-transparent">
         {activeTab === "Params" ? (
           <div className="grid h-full min-h-0 grid-rows-[auto_minmax(0,1fr)] text-[12px]">
             <div className="border-b border-border/20 px-3 py-3">
               <div className="mb-1 text-[10px] uppercase tracking-[0.18em] text-muted-foreground">URL Preview</div>
-              <div className="bg-background/20 px-3 py-2 text-foreground">{state.url}</div>
+              <div className="bg-transparent px-3 py-2 text-foreground">{state.url}</div>
             </div>
             <TableEditor rows={state.queryParams} onChange={onParamsChange} title="Query Parameters" addLabel="Add" />
           </div>
@@ -1374,7 +1374,7 @@ export function RequestPane({
             <GrpcHeadersPanel headers={state.headers} onHeadersChange={onHeadersChange} />
           ) : (
             <div className="grid h-full min-h-0 grid-rows-[auto_minmax(0,1fr)]">
-              <label className="flex items-center gap-2 border-b border-border/20 bg-background/20 px-4 py-2.5 text-[11px] text-muted-foreground lg:text-[12px] cursor-pointer">
+              <label className="flex items-center gap-2 border-b border-border/20 bg-transparent px-4 py-2.5 text-[11px] text-muted-foreground lg:text-[12px] cursor-pointer">
                 <input
                   type="checkbox"
                   className="accent-primary w-3 h-3.5 outline-none"
@@ -1418,7 +1418,7 @@ export function RequestPane({
                   onChange={handleBodyTypeChange}
                   className="min-w-[180px]"
                 />
-                <div className="flex items-center gap-1 border border-border/25 bg-background/20 px-2.5 py-1.5 uppercase tracking-[0.14em]">
+                <div className="flex items-center gap-1 border border-border/25 bg-transparent px-2.5 py-1.5 uppercase tracking-[0.14em]">
                   <Braces className="h-3 w-3" />
                   <span>{isWebSocketRequest ? "WebSocket Message" : (isGraphqlBody ? "GraphQL Request" : isTableBody ? "Form Request" : isFileBody ? "Binary/File Upload" : isJsonBody ? "JSON Highlight" : "Plain Editor")}</span>
                 </div>
@@ -1458,7 +1458,7 @@ export function RequestPane({
             ) : null}
 
             {isFileBody ? (
-              <div className="grid h-full min-h-0 grid-rows-[auto_minmax(0,1fr)] bg-background/20">
+              <div className="grid h-full min-h-0 grid-rows-[auto_minmax(0,1fr)] bg-transparent">
                 <div className="flex items-center justify-between border-b border-border/20 px-3 py-2 text-[11px] text-muted-foreground lg:text-[12px]">
                   <span className="font-medium text-foreground">Request File</span>
                   <div className="flex items-center gap-2">
@@ -1494,7 +1494,7 @@ export function RequestPane({
         ) : null}
 
         {activeTab === "Auth" ? (
-          <div className="h-full bg-background/20">
+          <div className="h-full bg-transparent">
             <AuthPanel
               state={state}
               onAuthChange={onAuthChange}
@@ -1510,7 +1510,7 @@ export function RequestPane({
           <div className="grid h-full min-h-0 grid-rows-[auto_minmax(0,1fr)] px-3 py-3">
             <div className="text-[10px] uppercase tracking-[0.18em] text-muted-foreground">Notes</div>
             <textarea
-              className="thin-scrollbar min-h-0 flex-1 resize-none border-0 bg-background/20 p-3 text-[12px] leading-5 text-foreground outline-none"
+              className="thin-scrollbar min-h-0 flex-1 resize-none border-0 bg-transparent p-3 text-[12px] leading-5 text-foreground outline-none"
               value={state.docs}
               onChange={(event) => onChange("docs", event.target.value)}
               placeholder="Request notes, examples, reminders..."

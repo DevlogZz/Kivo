@@ -21,7 +21,7 @@ export function WorkspaceView({
   if (!request) return null;
 
   return (
-    <div className="grid h-full min-h-0 overflow-hidden lg:grid-cols-[minmax(0,1fr)_1fr]">
+    <div className="grid h-full min-h-0 overflow-hidden bg-background lg:grid-cols-[minmax(0,1fr)_1fr]">
       <RequestPane
         state={request}
         isSending={isSending}

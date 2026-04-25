@@ -116,7 +116,7 @@ export function ResponsePane({
   const elapsedLabel = `${(elapsedMs / 1000).toFixed(1)}s`;
 
   return (
-    <Card className="flex h-full min-h-0 flex-col gap-0 overflow-hidden border-0 bg-card/84 p-0 shadow-none">
+    <Card className="flex h-full min-h-0 flex-col gap-0 overflow-hidden border-0 bg-background p-0 shadow-none">
       <div className="flex items-center justify-between border-b border-border/25 px-3 py-2 text-[11px] text-muted-foreground lg:py-2.5 lg:text-[12px]">
         <div className="flex items-center gap-3">
           <div className="flex items-center gap-1.5">
@@ -145,7 +145,7 @@ export function ResponsePane({
               key={tab}
               type="button"
               onClick={() => onTabChange(tab)}
-              className={cn("px-2 py-1 text-muted-foreground transition-colors lg:px-3 lg:py-1.5", activeTab === tab && "bg-secondary/35 text-foreground")}
+              className={cn("px-2 py-1 text-muted-foreground transition-colors lg:px-3 lg:py-1.5", activeTab === tab && "text-foreground")}
             >
               {tab}
               {tab === "Headers" ? ` ${Object.keys(response.headers).length}` : ""}
@@ -165,7 +165,7 @@ export function ResponsePane({
                   <span>Body</span>
                 </div>
                 {currentView === "Tree" && (
-                  <div className="flex items-center gap-1.5 border border-border/20 rounded pl-2.5 pr-1.5 py-[3px] w-48 bg-background/30 transition-colors focus-within:border-primary/50 shadow-sm ml-2 normal-case tracking-normal">
+                  <div className="ml-2 flex w-48 items-center gap-1.5 rounded border border-border/20 bg-transparent py-[3px] pl-2.5 pr-1.5 normal-case tracking-normal transition-colors focus-within:border-primary/50 shadow-sm">
                     <Search className="h-[11px] w-[11px] text-muted-foreground shrink-0" />
                     <input
                       type="text"
@@ -190,7 +190,7 @@ export function ResponsePane({
                     onClick={() => onBodyViewChange(view)}
                     className={cn(
                       "px-2 py-1 text-muted-foreground disabled:opacity-40 transition-colors",
-                      currentView === view && "bg-secondary/35 text-foreground"
+                      currentView === view && "text-foreground"
                     )}
                   >
                     {view}
@@ -199,7 +199,7 @@ export function ResponsePane({
               </div>
             </div>
             {currentView === "Tree" && parsedJson !== null ? (
-              <div className="h-full overflow-auto thin-scrollbar bg-background/20 rounded p-4 border border-border/10 shadow-inner">
+              <div className="thin-scrollbar h-full overflow-auto rounded border border-border/10 bg-transparent p-4 shadow-inner">
                 {(Array.isArray(displayJson) ? displayJson.length > 0 : Object.keys(displayJson || {}).length > 0) ? (
                   <div className="flex flex-col gap-0">
                     {searchQuery && (
@@ -242,7 +242,7 @@ export function ResponsePane({
         {activeTab === "Headers" ? (
           <div className="grid h-full min-h-0 grid-rows-[auto_minmax(0,1fr)] gap-3">
             <div className="text-[10px] uppercase tracking-[0.18em] text-muted-foreground">Headers</div>
-            <div className="thin-scrollbar min-h-0 overflow-auto bg-background/20">
+            <div className="thin-scrollbar min-h-0 overflow-auto bg-transparent">
               {Object.entries(response.headers).length ? (
                 Object.entries(response.headers).map(([key, value]) => (
                   <div key={key} className="grid grid-cols-[220px_minmax(0,1fr)] border-b border-border/10 text-[12px]">
@@ -263,7 +263,7 @@ export function ResponsePane({
               <Cookie className="h-3 w-3" />
               <span>Cookies</span>
             </div>
-            <div className="thin-scrollbar min-h-0 overflow-auto bg-background/20 p-3 text-[12px] text-foreground">
+            <div className="thin-scrollbar min-h-0 overflow-auto bg-transparent p-3 text-[12px] text-foreground">
               {response.cookies.length ? response.cookies.join("\n\n") : "No cookies were returned by this response."}
             </div>
           </div>
@@ -275,7 +275,7 @@ export function ResponsePane({
               <ListTree className="h-3 w-3" />
               <span>Meta</span>
             </div>
-            <div className="bg-background/20 p-3 text-[12px] text-muted-foreground">
+            <div className="bg-transparent p-3 text-[12px] text-muted-foreground">
               <div className="grid gap-2">
                 <div className="flex items-center justify-between">
                   <span>Method</span>

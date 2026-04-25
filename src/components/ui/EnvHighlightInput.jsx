@@ -186,7 +186,7 @@ export function EnvHighlightInput({
   }, []);
 
   const finalInputClass = cn(
-    "flex h-10 w-full border border-border/40 bg-accent/20 px-2.5 py-2 text-[13px] font-mono shadow-inner outline-none transition-colors",
+    "flex h-10 w-full border border-border/40 bg-transparent px-2.5 py-2 text-[13px] font-mono outline-none transition-colors",
     "focus-visible:border-primary/50 focus-visible:ring-1 focus-visible:ring-primary/20",
     "placeholder:text-muted-foreground/50",
     "[&::-ms-reveal]:hidden [&::-webkit-contacts-auto-fill-button]:hidden [&::-webkit-credentials-auto-fill-button]:hidden",
@@ -231,10 +231,10 @@ export function EnvHighlightInput({
       {showSuggestions && filteredKeys.length > 0 && (
         <div
           ref={dropdownRef}
-          className="absolute left-0 top-[calc(100%+2px)] z-[100] min-w-[240px] max-w-full overflow-hidden border border-border/40 bg-popover shadow-2xl rounded-md animate-in fade-in zoom-in-95 duration-100"
+          className="absolute left-0 top-[calc(100%+2px)] z-[360] min-w-[240px] max-w-full overflow-hidden rounded-md border border-border/40 bg-background/20 shadow-2xl animate-in fade-in zoom-in-95 duration-100"
           style={{ maxHeight: 220, overflowY: "auto" }}
         >
-          <div className="px-3 py-2 border-b border-border/10 bg-muted/50 text-[10px] uppercase tracking-widest text-muted-foreground font-bold flex items-center justify-between">
+          <div className="flex items-center justify-between border-b border-border/10 bg-transparent px-3 py-2 text-[10px] font-bold uppercase tracking-widest text-muted-foreground">
             <span>Environment Variables</span>
             <span className="opacity-50 font-normal">↑↓ to navigate</span>
           </div>
@@ -249,8 +249,8 @@ export function EnvHighlightInput({
               className={cn(
                 "flex w-full items-center gap-3 px-3 py-2.5 text-left text-[12px] font-mono transition-colors border-b border-border/5 last:border-0",
                 idx === selectedIdx
-                  ? "bg-primary/20 text-foreground ring-1 ring-inset ring-primary/30"
-                  : "text-muted-foreground hover:bg-accent/40 hover:text-foreground"
+                  ? "text-foreground ring-1 ring-inset ring-primary/30"
+                  : "text-muted-foreground hover:text-foreground"
               )}
             >
               <div className={cn(

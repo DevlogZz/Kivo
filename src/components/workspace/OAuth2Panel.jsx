@@ -85,18 +85,18 @@ function CompactSelect({ value, onChange, options, className }) {
   }, []);
 
   return (
-    <div ref={rootRef} className={cn("relative", className)}>
+    <div ref={rootRef} className={cn("relative", open && "z-[320]", className)}>
       <button
         type="button"
         onClick={() => setOpen((current) => !current)}
-        className="flex h-8 w-full items-center justify-between border border-border/35 bg-background/30 px-3 text-left text-[12px] text-foreground outline-none transition-colors hover:bg-background/45 focus-visible:ring-1 focus-visible:ring-ring"
+        className="flex h-8 w-full items-center justify-between border border-border/35 bg-transparent px-3 text-left text-[12px] text-foreground outline-none transition-colors focus-visible:ring-1 focus-visible:ring-ring"
       >
         <span className="truncate">{selected?.label ?? ""}</span>
         <ChevronDown className={cn("h-3.5 w-3.5 text-muted-foreground transition-transform", open && "rotate-180")} />
       </button>
 
       {open ? (
-        <div className="absolute left-0 top-[calc(100%+4px)] z-30 min-w-full overflow-hidden border border-border/45 bg-popover">
+        <div className="absolute left-0 top-[calc(100%+4px)] z-[330] min-w-full overflow-hidden border border-border/45 bg-background shadow-xl">
           {options.map((option) => {
             const active = option.value === value;
 
@@ -110,7 +110,7 @@ function CompactSelect({ value, onChange, options, className }) {
                 }}
                 className={cn(
                   "flex w-full items-center justify-between px-3 py-2 text-left text-[12px] transition-colors",
-                  active ? "bg-secondary/55 text-foreground" : "text-muted-foreground hover:bg-secondary/30 hover:text-foreground"
+                  active ? "text-foreground" : "text-muted-foreground hover:text-foreground"
                 )}
               >
                 <span>{option.label}</span>
@@ -157,7 +157,7 @@ function Field({
                 <button
                   type="button"
                   onClick={() => setShowSecret((current) => !current)}
-                  className="flex h-6 w-6 items-center justify-center rounded text-muted-foreground transition-colors hover:bg-accent/50 hover:text-foreground"
+                  className="flex h-6 w-6 items-center justify-center rounded text-muted-foreground transition-colors hover:text-foreground"
                 >
                   {showSecret ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
                 </button>
@@ -298,7 +298,7 @@ function CodeExchangeModal({ open, oauth, envVars, onClose, onApplyCode }) {
 
   return (
     <div className="absolute inset-0 z-40 flex items-center justify-center bg-background/70 p-5 backdrop-blur-sm">
-      <div className="panel-surface w-full max-w-2xl bg-card/96">
+      <div className="panel-surface w-full max-w-2xl bg-background/20">
         <div className="flex items-center justify-between border-b border-border/18 px-4 py-3">
           <div>
             <div className="text-[10px] uppercase tracking-[0.16em] text-muted-foreground">OAuth helper</div>
@@ -311,7 +311,7 @@ function CodeExchangeModal({ open, oauth, envVars, onClose, onApplyCode }) {
         <div className="grid gap-4 px-4 py-4">
           <div className="grid gap-1">
             <div className="text-[10px] uppercase tracking-[0.16em] text-muted-foreground">Expected redirect URL</div>
-            <div className="border border-border/18 bg-background/20 px-3 py-2 font-mono text-[12px] text-foreground">
+            <div className="border border-border/18 bg-transparent px-3 py-2 font-mono text-[12px] text-foreground">
               {resolveEnvValue(oauth.callbackUrl, envVars) || "Set a callback URL first"}
             </div>
           </div>
@@ -319,7 +319,7 @@ function CodeExchangeModal({ open, oauth, envVars, onClose, onApplyCode }) {
             value={value}
             onChange={(event) => setValue(event.target.value)}
             placeholder="Paste the full redirected URL or only the authorization code"
-            className="thin-scrollbar min-h-[140px] resize-none border border-border/25 bg-background/20 p-3 text-[12px] text-foreground outline-none focus:ring-1 focus:ring-ring"
+            className="thin-scrollbar min-h-[140px] resize-none border border-border/25 bg-transparent p-3 text-[12px] text-foreground outline-none focus:ring-1 focus:ring-ring"
           />
           <div className="flex justify-end gap-2">
             <Button variant="ghost" type="button" onClick={onClose}>Cancel</Button>
