@@ -10,6 +10,7 @@ import {
   createDefaultStore,
   createEmptyResponse,
   createRequest,
+  REQUEST_MODES,
   createWorkspace,
   formatSavedAt,
   getActiveCollection,
@@ -84,6 +85,47 @@ function getFolderLabel(path) {
   const normalized = normalizeFolderPath(path);
   const parts = normalized.split("/").filter(Boolean);
   return parts.at(-1) || normalized;
+}
+
+function getRequestBaseNameByMode(mode) {
+  switch (mode) {
+    case REQUEST_MODES.SSE:
+      return "SSE Request";
+    case REQUEST_MODES.GRAPHQL:
+      return "GraphQL Request";
+    case REQUEST_MODES.GRPC:
+      return "gRPC Request";
+    case REQUEST_MODES.WEBSOCKET:
+      return "WebSocket Request";
+    case REQUEST_MODES.SOCKET_IO:
+      return "Socket.IO Request";
+    case REQUEST_MODES.HTTP:
+    default:
+      return "HTTP Request";
+  }
+}
+
+function updateRequestWithLocalResponse(current, requestName, savedResponse, responseBodyView = "Raw") {
+  return {
+    ...current,
+    workspaces: current.workspaces.map((workspace) => {
+      if (workspace.name !== current.activeWorkspaceName) return workspace;
+      return {
+        ...workspace,
+        collections: workspace.collections.map((collection) => {
+          if (collection.name !== current.activeCollectionName) return collection;
+          return {
+            ...collection,
+            requests: collection.requests.map((request) => (
+              request.name === requestName
+                ? { ...request, responseBodyView, lastResponse: savedResponse }
+                : request
+            ))
+          };
+        })
+      };
+    })
+  };
 }
 
 export function useWorkspaceStore() {
@@ -825,7 +867,7 @@ export function useWorkspaceStore() {
     }));
   }
 
-  function createRequestRecord(workspaceName, collectionName, name, folderPath = "") {
+  function createRequestRecord(workspaceName, collectionName, name, folderPath = "", requestMode = REQUEST_MODES.HTTP) {
     updateStore((current) => {
       const targetWorkspaceName = workspaceName || current.activeWorkspaceName;
       const workspace = current.workspaces.find(w => w.name === targetWorkspaceName);
@@ -840,7 +882,8 @@ export function useWorkspaceStore() {
 
       const collection = workspace.collections.find(c => c.name === targetCollectionName);
       const existingNames = collection?.requests.map(r => r.name) || [];
-      const uniqueName = name ? name.trim() : getUniqueName("New Request", existingNames);
+      const baseName = getRequestBaseNameByMode(requestMode);
+      const uniqueName = name ? name.trim() : getUniqueName(baseName, existingNames);
       
       if (name && existingNames.includes(uniqueName)) {
         return current;
@@ -848,7 +891,7 @@ export function useWorkspaceStore() {
       
       const nextFolderPath = normalizeFolderPath(folderPath);
       const nextRequest = {
-        ...createRequest(uniqueName),
+        ...createRequest(uniqueName, requestMode),
         folderPath: nextFolderPath
       };
 
@@ -1147,6 +1190,37 @@ export function useWorkspaceStore() {
   async function handleSend() {
     if (!activeRequest) {
       console.warn("No active request to send");
+      return;
+    }
+
+    if (
+      activeRequest.requestMode === REQUEST_MODES.WEBSOCKET
+      || activeRequest.requestMode === REQUEST_MODES.SOCKET_IO
+      || activeRequest.requestMode === REQUEST_MODES.GRPC
+    ) {
+      const label = activeRequest.requestMode === REQUEST_MODES.GRPC
+        ? "gRPC"
+        : (activeRequest.requestMode === REQUEST_MODES.WEBSOCKET ? "WebSocket" : "Socket.IO");
+      const savedAt = formatSavedAt();
+      const message = `${label} send is not available yet. You can still create and configure ${label} requests now.`;
+
+      updateStore((current) => updateRequestWithLocalResponse(current, activeRequest.name, {
+        status: 0,
+        badge: "Not supported yet",
+        statusText: "Not supported yet",
+        duration: "-",
+        size: "0 B",
+        headers: {},
+        cookies: [],
+        body: message,
+        rawBody: message,
+        isJson: false,
+        meta: {
+          url: activeRequest.url || "-",
+          method: activeRequest.method
+        },
+        savedAt
+      }));
       return;
     }
 

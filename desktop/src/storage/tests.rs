@@ -14,6 +14,7 @@ use super::{
 fn make_request(name: &str) -> RequestRecord {
     RequestRecord {
         name: name.to_string(),
+        request_mode: "http".to_string(),
         method: "GET".to_string(),
         url: "https://example.com".to_string(),
         query_params: vec![],

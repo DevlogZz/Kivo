@@ -1,5 +1,64 @@
 import { createDefaultAuthState, normalizeAuthState } from "@/lib/oauth.js";
 
+export const REQUEST_MODES = {
+  HTTP: "http",
+  SSE: "sse",
+  GRAPHQL: "graphql",
+  GRPC: "grpc",
+  WEBSOCKET: "websocket",
+  SOCKET_IO: "socketio"
+};
+
+export const REQUEST_MODE_OPTIONS = [
+  { value: REQUEST_MODES.HTTP, label: "HTTP Request" },
+  { value: REQUEST_MODES.SSE, label: "Event Stream Request (SSE)" },
+  { value: REQUEST_MODES.GRAPHQL, label: "GraphQL Request" },
+  { value: REQUEST_MODES.GRPC, label: "gRPC Request" },
+  { value: REQUEST_MODES.WEBSOCKET, label: "WebSocket Request" },
+  { value: REQUEST_MODES.SOCKET_IO, label: "Socket.IO Request" }
+];
+
+function getRequestModeTemplate(mode) {
+  switch (mode) {
+    case REQUEST_MODES.GRAPHQL:
+      return {
+        method: "POST",
+        bodyType: "graphql",
+        body: "",
+        graphqlVariables: "{\n\n}",
+        activeEditorTab: "Body"
+      };
+    case REQUEST_MODES.SSE:
+      return {
+        method: "GET",
+        bodyType: "none",
+        headers: [{ key: "Accept", value: "text/event-stream", enabled: true }]
+      };
+    case REQUEST_MODES.GRPC:
+      return {
+        method: "POST",
+        bodyType: "none",
+        headers: [{ key: "Content-Type", value: "application/grpc", enabled: true }]
+      };
+    case REQUEST_MODES.WEBSOCKET:
+      return {
+        method: "GET",
+        bodyType: "none"
+      };
+    case REQUEST_MODES.SOCKET_IO:
+      return {
+        method: "GET",
+        bodyType: "none"
+      };
+    case REQUEST_MODES.HTTP:
+    default:
+      return {
+        method: "GET",
+        bodyType: "json"
+      };
+  }
+}
+
 export function formatSavedAt() {
   return new Date().toLocaleString();
 }
@@ -40,22 +99,26 @@ export function getUniqueName(baseName, existingNames = []) {
   return `${baseName} (${counter})`;
 }
 
-export function createRequest(name = "New Request") {
+export function createRequest(name = "New Request", mode = REQUEST_MODES.HTTP) {
+  const requestMode = Object.values(REQUEST_MODES).includes(mode) ? mode : REQUEST_MODES.HTTP;
+  const template = getRequestModeTemplate(requestMode);
+
   return {
     name,
+    requestMode,
     pinned: false,
-    method: "GET",
+    method: template.method,
     url: "",
     queryParams: [],
-    headers: [],
+    headers: template.headers ?? [],
     auth: createDefaultAuthState(),
-    bodyType: "json",
-    body: "",
+    bodyType: template.bodyType,
+    body: template.body ?? "",
     bodyRows: [],
     bodyFilePath: "",
-    graphqlVariables: "{\n\n}",
+    graphqlVariables: template.graphqlVariables ?? "{\n\n}",
     docs: "",
-    activeEditorTab: "Params",
+    activeEditorTab: template.activeEditorTab ?? "Params",
     activeResponseTab: "Body",
     responseBodyView: "JSON",
     inheritHeaders: true,
@@ -157,8 +220,14 @@ export function normalizeRequestRecord(request) {
     }
   }
 
+  const allowedModes = Object.values(REQUEST_MODES);
+  const requestMode = allowedModes.includes(request?.requestMode)
+    ? request.requestMode
+    : (request?.bodyType === "graphql" ? REQUEST_MODES.GRAPHQL : REQUEST_MODES.HTTP);
+
   return {
     ...request,
+    requestMode,
     pinned: Boolean(request?.pinned),
     inheritHeaders: request?.inheritHeaders ?? true,
     queryParams: Array.isArray(request?.queryParams) ? request.queryParams : [],

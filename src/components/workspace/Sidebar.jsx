@@ -14,7 +14,7 @@ import { exportCollectionFile, exportRequestFile, getCollectionConfig, getEnvVar
 import { buildCurlCommand, codegenLanguageOptions, generateCodeSnippet, getMethodTone } from "@/lib/http-ui.js";
 import { createDefaultAuthState, normalizeAuthState } from "@/lib/oauth.js";
 import { cn } from "@/lib/utils.js";
-import { getUniqueName } from "@/lib/workspace-store.js";
+import { getUniqueName, REQUEST_MODE_OPTIONS } from "@/lib/workspace-store.js";
 import { WorkspaceModal } from "./WorkspaceModal.jsx";
 
 const AUTH_MODES = [
@@ -773,6 +773,46 @@ function CollectionContextMenu({ menu, onCreateRequest, onCreateFolder, onRename
   );
 }
 
+function RequestTypeMenu({ menu, onSelect, onClose }) {
+  useEffect(() => {
+    if (!menu) return;
+    function handlePointer() { onClose(); }
+    function handleEscape(event) { if (event.key === "Escape") onClose(); }
+    window.addEventListener("mousedown", handlePointer);
+    window.addEventListener("keydown", handleEscape);
+    return () => {
+      window.removeEventListener("mousedown", handlePointer);
+      window.removeEventListener("keydown", handleEscape);
+    };
+  }, [menu, onClose]);
+
+  if (!menu) return null;
+
+  return createPortal(
+    <div
+      className="fixed z-[215] min-w-[220px] border border-border/60 bg-popover p-1 shadow-2xl"
+      style={{ left: menu.x, top: menu.y }}
+      onMouseDown={(event) => event.stopPropagation()}
+      onContextMenu={(event) => event.preventDefault()}
+    >
+      {REQUEST_MODE_OPTIONS.map((option) => (
+        <button
+          key={option.value}
+          type="button"
+          className="flex w-full items-center gap-2 px-3 py-2 text-left text-[12px] text-foreground hover:bg-accent/45"
+          onClick={() => {
+            onSelect(option.value, menu);
+            onClose();
+          }}
+        >
+          <Plus className="h-3.5 w-3.5" /> {option.label}
+        </button>
+      ))}
+    </div>,
+    document.body
+  );
+}
+
 export function RequestsView({
   workspaces, activeWorkspaceName, activeCollectionName, activeRequestName,
   onSelectWorkspace, onSelectCollection, onSelectRequest,
@@ -825,6 +865,7 @@ export function RequestsView({
   const [folderSettingsEnv, setFolderSettingsEnv] = useState({ merged: {} });
   const [sidebarOptionsOpen, setSidebarOptionsOpen] = useState(false);
   const [importExportState, setImportExportState] = useState(null);
+  const [createRequestMenu, setCreateRequestMenu] = useState(null);
   const sidebarOptionsRef = useRef(null);
 
   const activeWorkspace = useMemo(() => workspaces.find(w => w.name === activeWorkspaceName), [workspaces, activeWorkspaceName]);
@@ -1184,6 +1225,24 @@ export function RequestsView({
     setCreatingRequestInFolder(folderKey);
   }
 
+  function openCreateRequestMenu(event, workspaceName, collectionName, folderPath = "") {
+    event.stopPropagation();
+    const rect = event.currentTarget.getBoundingClientRect();
+    setCreateRequestMenu({
+      x: rect.left,
+      y: rect.bottom + 6,
+      workspaceName,
+      collectionName,
+      folderPath: normalizeFolderPath(folderPath)
+    });
+  }
+
+  function handleCreateRequestByMode(mode, menu) {
+    if (!menu) return;
+    setExpandedCollectionNames((names) => Array.from(new Set([...names, menu.collectionName])));
+    onCreateRequest(menu.workspaceName, menu.collectionName, undefined, menu.folderPath, mode);
+  }
+
   function openFolderContextMenu(event, workspaceName, collectionName, folderPath) {
     event.preventDefault();
     setFolderContextMenu({
@@ -1468,10 +1527,13 @@ export function RequestsView({
                         {col.name}
                       </div>
                       <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100" onClick={(e) => e.stopPropagation()}>
-                        <button type="button" onClick={() => {
-                          setExpandedCollectionNames(c => Array.from(new Set([...c, col.name])));
-                          setCreatingRequestInCollection(col.name);
-                        }} className="p-1 text-muted-foreground hover:text-foreground"><Plus className="h-3.5 w-3.5" /></button>
+                        <button
+                          type="button"
+                          onClick={(event) => openCreateRequestMenu(event, effectiveWorkspaceName, col.name, "")}
+                          className="p-1 text-muted-foreground hover:text-foreground"
+                        >
+                          <Plus className="h-3.5 w-3.5" />
+                        </button>
                         <button type="button" onClick={(e) => {
                           e.stopPropagation();
                           setEditingWorkspaceName(null);
@@ -1709,10 +1771,7 @@ export function RequestsView({
                       {!col.requests.length && !searchQuery && !creatingRequestInCollection && (
                         <button
                           type="button"
-                          onClick={() => {
-                            setExpandedCollectionNames(c => Array.from(new Set([...c, col.name])));
-                            setCreatingRequestInCollection(col.name);
-                          }}
+                          onClick={(event) => openCreateRequestMenu(event, effectiveWorkspaceName, col.name, "")}
                           className="flex items-center gap-1.5 px-2 py-1 text-[11px] text-muted-foreground hover:text-foreground transition-colors"
                         >
                           <Plus className="h-3 w-3" /> New Request
@@ -1812,6 +1871,11 @@ export function RequestsView({
         }
         onClose={() => setImportExportState(null)}
         onConfirm={handleSubmitImportExport}
+      />
+      <RequestTypeMenu
+        menu={createRequestMenu}
+        onSelect={handleCreateRequestByMode}
+        onClose={() => setCreateRequestMenu(null)}
       />
       {duplicationTarget && (
         <WorkspaceModal

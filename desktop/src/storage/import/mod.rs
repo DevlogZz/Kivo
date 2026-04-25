@@ -8,6 +8,7 @@ use std::collections::BTreeSet;
 fn empty_request(name: String, method: String, url: String) -> RequestRecord {
     RequestRecord {
         name,
+        request_mode: "http".to_string(),
         method,
         url,
         query_params: vec![],

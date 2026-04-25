@@ -159,6 +159,8 @@ impl Default for RequestTextOrJson {
 #[serde(rename_all = "camelCase")]
 pub struct RequestRecord {
     pub name: String,
+    #[serde(default = "default_request_mode")]
+    pub request_mode: String,
     #[serde(default)]
     pub method: String,
     #[serde(default)]
@@ -405,6 +407,10 @@ pub fn default_true() -> bool {
 }
 pub fn default_max_redirects() -> u32 {
     5
+}
+
+pub fn default_request_mode() -> String {
+    "http".to_string()
 }
 
 pub fn default_auth_record() -> AuthRecord {
