@@ -43,7 +43,7 @@ export function normalizeStore(store) {
               .filter((setting) => Boolean(setting.path))
             : [],
           requests: orderRequests((collection.requests ?? []).map((request) => normalizeRequestRecord(request))),
-          openRequestNames: Array.isArray(collection.openRequestNames) ? collection.openRequestNames : (collection.requests ?? []).map((request) => request.name)
+          openRequestNames: Array.isArray(collection.openRequestNames) ? collection.openRequestNames : []
         }))
         : []
     }))

@@ -318,13 +318,15 @@ export function useWorkspaceStore() {
         }
       }
 
+      const orderedRequests = orderRequests(normalizedRequests);
       const nextCollection = {
         ...createCollection(nextName),
         ...importedCollection,
         name: nextName,
-        requests: orderRequests(normalizedRequests),
+        requests: orderedRequests,
         folders: Array.from(folderSet),
         folderSettings: Array.isArray(importedCollection.folderSettings) ? importedCollection.folderSettings : [],
+        openRequestNames: orderedRequests[0] ? [orderedRequests[0].name] : [],
       };
 
       return {
@@ -388,7 +390,9 @@ export function useWorkspaceStore() {
                 ...col,
                 requests: orderRequests([...(col.requests || []), ...requestsToInsert]),
                 folders: Array.from(folderSet),
-                openRequestNames: [...(col.openRequestNames || []), ...requestsToInsert.map((r) => r.name)]
+                openRequestNames: requestsToInsert[0]
+                  ? [...(col.openRequestNames || []), requestsToInsert[0].name]
+                  : (col.openRequestNames || [])
               };
             })
           };
