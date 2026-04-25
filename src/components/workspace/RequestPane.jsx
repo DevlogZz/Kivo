@@ -9,6 +9,7 @@ import { Input } from "@/components/ui/input.jsx";
 import { OAuth2Panel } from "@/components/workspace/OAuth2Panel.jsx";
 import { formatGraphqlText, formatJsonText } from "@/lib/formatters.js";
 import { getMethodTone, requestBodyModes } from "@/lib/http-ui.js";
+import { parseGrpcProtoFile } from "@/lib/http-client.js";
 import { REQUEST_MODES } from "@/lib/workspace-store.js";
 import { cn } from "@/lib/utils.js";
 import { EnvHighlightInput } from "@/components/ui/EnvHighlightInput.jsx";
@@ -24,12 +25,6 @@ const grpcStreamingModes = [
   { value: "server_stream", label: "Server Streaming" },
   { value: "client_stream", label: "Client Streaming" },
   { value: "bidi", label: "Bi-directional Streaming" }
-];
-const grpcDefaultMethodOptions = [
-  { value: "/BookService/GetBook", label: "U /BookService/GetBook" },
-  { value: "/BookService/GetBooksViaAuthor", label: "SS /BookService/GetBooksViaAuthor" },
-  { value: "/BookService/GetGreatestBook", label: "CS /BookService/GetGreatestBook" },
-  { value: "/BookService/GetBooks", label: "BD /BookService/GetBooks" }
 ];
 const authModes = [
   { value: "none", label: "No Auth" },
@@ -163,16 +158,6 @@ function GrpcHeadersPanel({ headers, onHeadersChange }) {
       </div>
     </div>
   );
-}
-
-function buildGrpcMethodOptions(currentPath) {
-  if (!currentPath || grpcDefaultMethodOptions.some((option) => option.value === currentPath)) {
-    return grpcDefaultMethodOptions;
-  }
-  return [
-    { value: currentPath, label: `U ${currentPath}` },
-    ...grpcDefaultMethodOptions
-  ];
 }
 
 function WebSocketHeadersPanel({ headers, onHeadersChange }) {
@@ -683,6 +668,10 @@ export function RequestPane({
 }) {
   const isWebSocketRequest = state.requestMode === REQUEST_MODES.WEBSOCKET;
   const isGrpcRequest = state.requestMode === REQUEST_MODES.GRPC;
+  const hasGrpcProtoSelected = Boolean(String(state.grpcProtoFilePath || "").trim());
+  const [grpcMethods, setGrpcMethods] = useState([]);
+  const [isGrpcMethodsLoading, setIsGrpcMethodsLoading] = useState(false);
+  const [grpcMethodError, setGrpcMethodError] = useState("");
   const activeWsState = wsState ?? {
     connected: false,
     connecting: false,
@@ -691,10 +680,16 @@ export function RequestPane({
     lastEventAt: "",
     error: ""
   };
+  const selectedGrpcMethod = useMemo(
+    () => grpcMethods.find((option) => option.value === state.grpcMethodPath) || null,
+    [grpcMethods, state.grpcMethodPath]
+  );
+  const hasGrpcMethodSelected = isGrpcRequest && Boolean(selectedGrpcMethod);
+
   const visibleTabs = isWebSocketRequest
     ? ["Params", "Body", "Auth", "Headers", "Docs"]
     : isGrpcRequest
-      ? ["Body", "Headers", "Docs"]
+      ? [...(hasGrpcMethodSelected ? ["Body"] : []), "Headers", "Docs"]
       : tabs;
   const activeTab = state.activeEditorTab ?? "Params";
   const bodyDisabled = !isWebSocketRequest && !isGrpcRequest && (state.method === "GET" || state.method === "DELETE" || state.bodyType === "none");
@@ -709,7 +704,10 @@ export function RequestPane({
 
   const [debouncedState, setDebouncedState] = useState(state);
   const bodyCacheRef = useRef({});
-  const grpcMethodOptions = useMemo(() => buildGrpcMethodOptions(state.grpcMethodPath), [state.grpcMethodPath]);
+  const grpcMethodOptions = useMemo(
+    () => grpcMethods.map((method) => ({ value: method.value, label: method.label })),
+    [grpcMethods]
+  );
 
   useEffect(() => {
     const timer = setTimeout(() => setDebouncedState(state), 500);
@@ -729,15 +727,54 @@ export function RequestPane({
   useEffect(() => {
     if (!isGrpcRequest) return;
     if (!visibleTabs.includes(activeTab)) {
-      onTabChange("Body");
+      onTabChange("Headers");
     }
     if (state.bodyType !== "json") {
       onChange("bodyType", "json");
     }
-    if (!state.grpcMethodPath) {
-      onChange("grpcMethodPath", grpcDefaultMethodOptions[0].value);
+  }, [activeTab, isGrpcRequest, onChange, onTabChange, state.bodyType, visibleTabs]);
+
+  useEffect(() => {
+    if (!isGrpcRequest || !hasGrpcProtoSelected) {
+      setGrpcMethods([]);
+      setGrpcMethodError("");
+      setIsGrpcMethodsLoading(false);
+      return;
     }
-  }, [activeTab, isGrpcRequest, onChange, onTabChange, state.bodyType, state.grpcMethodPath, visibleTabs]);
+
+    let cancelled = false;
+    setIsGrpcMethodsLoading(true);
+    setGrpcMethodError("");
+
+    parseGrpcProtoFile(state.grpcProtoFilePath)
+      .then((parsed) => {
+        if (cancelled) return;
+        const methods = Array.isArray(parsed) ? parsed : [];
+        setGrpcMethods(methods);
+      })
+      .catch((error) => {
+        if (cancelled) return;
+        setGrpcMethods([]);
+        setGrpcMethodError(String(error || "Failed to parse proto file."));
+      })
+      .finally(() => {
+        if (!cancelled) {
+          setIsGrpcMethodsLoading(false);
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [hasGrpcProtoSelected, isGrpcRequest, state.grpcProtoFilePath]);
+
+  useEffect(() => {
+    if (!isGrpcRequest) return;
+    if (!selectedGrpcMethod) return;
+    if (selectedGrpcMethod.streamingMode && state.grpcStreamingMode !== selectedGrpcMethod.streamingMode) {
+      onChange("grpcStreamingMode", selectedGrpcMethod.streamingMode);
+    }
+  }, [isGrpcRequest, onChange, selectedGrpcMethod, state.grpcStreamingMode]);
 
   const missingVars = useMemo(() => {
     if (!envVars) return [];
@@ -827,6 +864,7 @@ export function RequestPane({
       });
       if (typeof selected === "string") {
         onChange("grpcProtoFilePath", selected);
+        onChange("grpcMethodPath", "");
       }
     } catch {
     }
@@ -861,12 +899,18 @@ export function RequestPane({
         />
 
         {isGrpcRequest ? (
-          <SelectMenu
-            value={state.grpcMethodPath || grpcMethodOptions[0]?.value || ""}
-            options={grpcMethodOptions}
-            onChange={(methodPath) => onChange("grpcMethodPath", methodPath)}
-            buttonClassName="h-8 rounded-none border-0 bg-input/60 text-[12px] lg:h-10 lg:text-[13px]"
-          />
+          hasGrpcProtoSelected ? (
+            <SelectMenu
+              value={state.grpcMethodPath || ""}
+              options={grpcMethodOptions.length > 0 ? grpcMethodOptions : [{ value: "", label: isGrpcMethodsLoading ? "Loading methods..." : "No methods found" }]}
+              onChange={(methodPath) => onChange("grpcMethodPath", methodPath)}
+              buttonClassName="h-8 rounded-none border-0 bg-input/60 text-[12px] lg:h-10 lg:text-[13px]"
+            />
+          ) : (
+            <div className="flex h-8 items-center border-0 bg-input/60 px-3 text-[12px] text-muted-foreground lg:h-10 lg:text-[13px]">
+              Select method
+            </div>
+          )
         ) : null}
 
         <Button
@@ -886,6 +930,12 @@ export function RequestPane({
           <Button type="button" variant="outline" size="sm" className="h-7 gap-1.5 px-2.5 text-[11px]" onClick={handleGrpcProtoBrowse}>
             <FileCode2 className="h-3.5 w-3.5" /> Proto
           </Button>
+        </div>
+      ) : null}
+
+      {isGrpcRequest && grpcMethodError ? (
+        <div className="flex items-center gap-2 border-b border-amber-500/20 bg-amber-500/[0.08] px-3 py-1.5 text-[11px] text-amber-500 dark:text-amber-400">
+          <span>Failed to parse proto file.</span>
         </div>
       ) : null}
 
@@ -953,7 +1003,7 @@ export function RequestPane({
         ) : null}
 
         {activeTab === "Body" ? (
-          isGrpcRequest ? (
+          isGrpcRequest && hasGrpcMethodSelected ? (
             <div className="grid h-full min-h-0 grid-rows-[auto_minmax(0,1fr)] bg-background/10">
               <div className="flex items-center justify-between gap-3 border-b border-border/20 px-3 py-2 text-[11px] text-muted-foreground">
                 <SelectMenu

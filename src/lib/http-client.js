@@ -9,6 +9,7 @@ function sanitizeRequestForSave(request) {
 
   const sanitized = {
     name: String(request?.name ?? ""),
+    requestMode: String(request?.requestMode ?? "http"),
     pinned: Boolean(request?.pinned),
     method: String(request?.method ?? "GET"),
     url: String(request?.url ?? ""),
@@ -16,6 +17,9 @@ function sanitizeRequestForSave(request) {
     headers: Array.isArray(request?.headers) ? request.headers : [],
     auth: sanitizeAuthForSave(request?.auth),
     bodyType,
+    grpcProtoFilePath: String(request?.grpcProtoFilePath ?? ""),
+    grpcMethodPath: String(request?.grpcMethodPath ?? ""),
+    grpcStreamingMode: String(request?.grpcStreamingMode ?? "bidi"),
     docs: String(request?.docs ?? ""),
     activeEditorTab: String(request?.activeEditorTab ?? "Params"),
     activeResponseTab: String(request?.activeResponseTab ?? "Body"),
@@ -155,6 +159,10 @@ export function getEnvVars(workspaceName, collectionName) {
     workspaceName,
     collectionName: collectionName || null,
   });
+}
+
+export function parseGrpcProtoFile(filePath) {
+  return invoke("parse_grpc_proto_file", { filePath });
 }
 
 export function saveEnvVars(workspaceName, collectionName, vars) {

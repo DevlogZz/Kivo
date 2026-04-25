@@ -1,6 +1,7 @@
 use std::fs;
 use std::path::{Component, Path, PathBuf};
 
+use serde::Serialize;
 use tauri::{AppHandle, Manager};
 
 #[cfg(test)]
@@ -36,6 +37,110 @@ pub use io::{
 
 #[cfg(test)]
 pub use io::{parse_env_file_ordered, sanitize_name, write_env_file};
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GrpcMethodOption {
+    pub value: String,
+    pub label: String,
+    pub streaming_mode: String,
+}
+
+fn parse_grpc_streaming_mode(req_ty: &str, res_ty: &str) -> (&'static str, &'static str) {
+    let req_stream = req_ty.trim_start().starts_with("stream ");
+    let res_stream = res_ty.trim_start().starts_with("stream ");
+    match (req_stream, res_stream) {
+        (false, false) => ("unary", "U"),
+        (false, true) => ("server_stream", "SS"),
+        (true, false) => ("client_stream", "CS"),
+        (true, true) => ("bidi", "BD"),
+    }
+}
+
+fn parse_rpc_line(service_name: &str, line: &str) -> Option<GrpcMethodOption> {
+    let trimmed = line.trim().trim_end_matches(';').trim();
+    if !trimmed.starts_with("rpc ") || !trimmed.contains(" returns ") {
+        return None;
+    }
+
+    let without_rpc = trimmed.strip_prefix("rpc ")?;
+    let method_name_end = without_rpc.find('(')?;
+    let method_name = without_rpc[..method_name_end].trim();
+    if method_name.is_empty() {
+        return None;
+    }
+
+    let request_open = trimmed.find('(')?;
+    let request_close = trimmed[request_open + 1..].find(')')? + request_open + 1;
+    let request_ty = trimmed[request_open + 1..request_close].trim();
+
+    let returns_idx = trimmed.find("returns")?;
+    let returns_part = trimmed[returns_idx + "returns".len()..].trim();
+    let response_open_rel = returns_part.find('(')?;
+    let response_close_rel = returns_part[response_open_rel + 1..].find(')')? + response_open_rel + 1;
+    let response_ty = returns_part[response_open_rel + 1..response_close_rel].trim();
+
+    let (streaming_mode, prefix) = parse_grpc_streaming_mode(request_ty, response_ty);
+    let path = format!("/{service_name}/{method_name}");
+    Some(GrpcMethodOption {
+        value: path.clone(),
+        label: format!("{prefix} {path}"),
+        streaming_mode: streaming_mode.to_string(),
+    })
+}
+
+fn parse_grpc_methods(content: &str) -> Vec<GrpcMethodOption> {
+    let mut methods = Vec::new();
+    let mut current_service: Option<String> = None;
+    let mut pending_service: Option<String> = None;
+
+    for raw_line in content.lines() {
+        let line = raw_line.split("//").next().unwrap_or("").trim();
+        if line.is_empty() {
+            continue;
+        }
+
+        if current_service.is_none() {
+            if let Some(pending) = pending_service.clone() {
+                if line.contains('{') {
+                    current_service = Some(pending);
+                    pending_service = None;
+                }
+                continue;
+            }
+
+            if let Some(after_service) = line.strip_prefix("service ") {
+                let name = after_service
+                    .split([' ', '{'])
+                    .next()
+                    .unwrap_or("")
+                    .trim();
+                if !name.is_empty() {
+                    if line.contains('{') {
+                        current_service = Some(name.to_string());
+                    } else {
+                        pending_service = Some(name.to_string());
+                    }
+                }
+            }
+            continue;
+        }
+
+        if line.contains('}') {
+            current_service = None;
+            pending_service = None;
+            continue;
+        }
+
+        if let Some(service) = current_service.as_deref() {
+            if let Some(method) = parse_rpc_line(service, line) {
+                methods.push(method);
+            }
+        }
+    }
+
+    methods
+}
 
 fn get_state_path(app: &AppHandle) -> Result<PathBuf, String> {
     let app_dir = app
@@ -337,6 +442,13 @@ pub fn import_request_file(file_path: String) -> Result<ImportedRequestsResult, 
         detected_format: imported.detected_format,
         requests: imported.collection.requests,
     })
+}
+
+#[tauri::command]
+pub fn parse_grpc_proto_file(file_path: String) -> Result<Vec<GrpcMethodOption>, String> {
+    let content =
+        fs::read_to_string(&file_path).map_err(|e| format!("Failed to read proto file: {e}"))?;
+    Ok(parse_grpc_methods(&content))
 }
 
 #[tauri::command]

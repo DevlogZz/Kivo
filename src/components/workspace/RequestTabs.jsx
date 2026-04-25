@@ -18,7 +18,11 @@ export function RequestTabs({
       {requestTabs.map((request) => (
         (() => {
           const isWebSocket = request.requestMode === REQUEST_MODES.WEBSOCKET;
-          const isGrpc = request.requestMode === REQUEST_MODES.GRPC;
+          const isGrpc = request.requestMode === REQUEST_MODES.GRPC
+            || Boolean(String(request.grpcMethodPath || "").trim())
+            || Boolean(String(request.grpcProtoFilePath || "").trim())
+            || (Array.isArray(request.headers) && request.headers.some((row) => String(row?.key || "").toLowerCase() === "content-type" && String(row?.value || "").toLowerCase().includes("application/grpc")));
+
           const displayMethod = isWebSocket ? "WS" : (isGrpc ? "gRPC" : request.method);
           const methodTone = isWebSocket
             ? "text-amber-300 bg-amber-500/15"
