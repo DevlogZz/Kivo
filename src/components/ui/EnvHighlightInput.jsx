@@ -195,7 +195,7 @@ export function EnvHighlightInput({
   );
 
   return (
-    <div className={cn("relative w-full group", className)}>
+    <div className={cn("relative w-full group isolate", className)}>
       <input
         {...props}
         ref={inputRef}
@@ -231,10 +231,10 @@ export function EnvHighlightInput({
       {showSuggestions && filteredKeys.length > 0 && (
         <div
           ref={dropdownRef}
-          className="absolute left-0 top-[calc(100%+2px)] z-[360] min-w-[240px] max-w-full overflow-hidden rounded-md border border-border/40 bg-background/20 shadow-2xl animate-in fade-in zoom-in-95 duration-100"
+          className="absolute left-0 top-[calc(100%+4px)] z-[500] min-w-[260px] max-w-full overflow-hidden rounded-md border border-border/40 bg-background shadow-2xl"
           style={{ maxHeight: 220, overflowY: "auto" }}
         >
-          <div className="flex items-center justify-between border-b border-border/10 bg-transparent px-3 py-2 text-[10px] font-bold uppercase tracking-widest text-muted-foreground">
+          <div className="flex items-center justify-between border-b border-border/20 bg-background px-3 py-2 text-[10px] font-bold uppercase tracking-widest text-muted-foreground">
             <span>Environment Variables</span>
             <span className="opacity-50 font-normal">↑↓ to navigate</span>
           </div>
@@ -247,18 +247,18 @@ export function EnvHighlightInput({
                 insertSuggestion(key);
               }}
               className={cn(
-                "flex w-full items-center gap-3 px-3 py-2.5 text-left text-[12px] font-mono transition-colors border-b border-border/5 last:border-0",
+                "grid w-full grid-cols-[10px_minmax(0,1fr)_minmax(0,140px)] items-center gap-3 border-b border-border/10 px-3 py-2.5 text-left font-mono text-[12px] transition-colors last:border-0",
                 idx === selectedIdx
-                  ? "text-foreground ring-1 ring-inset ring-primary/30"
-                  : "text-muted-foreground hover:text-foreground"
+                  ? "bg-secondary/30 text-foreground"
+                  : "text-muted-foreground hover:bg-secondary/20 hover:text-foreground"
               )}
             >
               <div className={cn(
-                "w-2 h-2 rounded-full shrink-0 shadow-sm",
+                "h-2 w-2 rounded-full shrink-0 shadow-sm",
                 (envVars?.merged && key in envVars.merged) ? "bg-emerald-500 shadow-emerald-500/20" : "bg-amber-500 shadow-amber-500/20"
               )} />
-              <span className="font-bold flex-1 truncate">{key}</span>
-              <span className="text-[10px] text-muted-foreground/40 truncate max-w-[100px] italic">
+              <span className="truncate font-bold">{key}</span>
+              <span className="truncate text-right text-[10px] italic text-muted-foreground/55">
                 {envVars?.merged?.[key] ?? "undefined"}
               </span>
             </button>
