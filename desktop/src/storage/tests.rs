@@ -5,9 +5,9 @@ use tempfile::TempDir;
 
 use super::{
     fs_get_env_vars, fs_load_workspaces, fs_save_collection_config, fs_save_env_vars,
-    fs_save_workspaces, load_collection_config_from_path, parse_env_file_ordered,
-    sanitize_name, write_env_file, AuthRecord, CollectionConfig, CollectionRecord,
-    CollectionScripts, EnvVar, KeyValueRow, OAuthConfig, RequestRecord, RequestTextOrJson, ResponseMeta, SavedResponse,
+    fs_save_workspaces, load_collection_config_from_path, parse_env_file_ordered, sanitize_name,
+    write_env_file, AuthRecord, CollectionConfig, CollectionRecord, CollectionScripts, EnvVar,
+    KeyValueRow, OAuthConfig, RequestRecord, RequestTextOrJson, ResponseMeta, SavedResponse,
     WorkspaceRecord,
 };
 
@@ -18,7 +18,16 @@ fn make_request(name: &str) -> RequestRecord {
         url: "https://example.com".to_string(),
         query_params: vec![],
         headers: vec![],
-        auth: AuthRecord { auth_type: "none".to_string(), token: String::new(), username: String::new(), password: String::new(), api_key_name: String::new(), api_key_value: String::new(), api_key_in: "header".to_string(), oauth2: OAuthConfig::default() },
+        auth: AuthRecord {
+            auth_type: "none".to_string(),
+            token: String::new(),
+            username: String::new(),
+            password: String::new(),
+            api_key_name: String::new(),
+            api_key_value: String::new(),
+            api_key_in: "header".to_string(),
+            oauth2: OAuthConfig::default(),
+        },
         body_type: "json".to_string(),
         body: RequestTextOrJson::Text(String::new()),
         body_rows: vec![],
@@ -51,14 +60,21 @@ fn make_request_with_response(name: &str) -> RequestRecord {
         body: r#"{"ok":true}"#.to_string(),
         raw_body: r#"{"ok":true}"#.to_string(),
         is_json: true,
-        meta: ResponseMeta { url: "https://example.com".to_string(), method: "GET".to_string() },
+        meta: ResponseMeta {
+            url: "https://example.com".to_string(),
+            method: "GET".to_string(),
+        },
         saved_at: "2026-04-06".to_string(),
     });
     r
 }
 
 fn ws(name: &str, collections: Vec<CollectionRecord>) -> WorkspaceRecord {
-    WorkspaceRecord { name: name.to_string(), description: None, collections }
+    WorkspaceRecord {
+        name: name.to_string(),
+        description: None,
+        collections,
+    }
 }
 
 fn col(name: &str, requests: Vec<RequestRecord>) -> CollectionRecord {
@@ -75,37 +91,59 @@ mod sanitize_tests {
     use super::*;
 
     #[test]
-    fn plain_name_unchanged() { assert_eq!(sanitize_name("auth"), "auth"); }
+    fn plain_name_unchanged() {
+        assert_eq!(sanitize_name("auth"), "auth");
+    }
 
     #[test]
-    fn forward_slash_replaced() { assert_eq!(sanitize_name("auth/user"), "auth_user"); }
+    fn forward_slash_replaced() {
+        assert_eq!(sanitize_name("auth/user"), "auth_user");
+    }
 
     #[test]
-    fn backslash_replaced() { assert_eq!(sanitize_name("auth\\user"), "auth_user"); }
+    fn backslash_replaced() {
+        assert_eq!(sanitize_name("auth\\user"), "auth_user");
+    }
 
     #[test]
-    fn colon_replaced() { assert_eq!(sanitize_name("C:drive"), "C_drive"); }
+    fn colon_replaced() {
+        assert_eq!(sanitize_name("C:drive"), "C_drive");
+    }
 
     #[test]
-    fn all_special_chars_replaced() { assert_eq!(sanitize_name("/\\:*?\"<>|"), "_________"); }
+    fn all_special_chars_replaced() {
+        assert_eq!(sanitize_name("/\\:*?\"<>|"), "_________");
+    }
 
     #[test]
-    fn multiple_slashes() { assert_eq!(sanitize_name("/api/v1/users"), "_api_v1_users"); }
+    fn multiple_slashes() {
+        assert_eq!(sanitize_name("/api/v1/users"), "_api_v1_users");
+    }
 
     #[test]
-    fn leading_trailing_spaces_trimmed() { assert_eq!(sanitize_name("  auth  "), "auth"); }
+    fn leading_trailing_spaces_trimmed() {
+        assert_eq!(sanitize_name("  auth  "), "auth");
+    }
 
     #[test]
-    fn empty_string() { assert_eq!(sanitize_name(""), ""); }
+    fn empty_string() {
+        assert_eq!(sanitize_name(""), "");
+    }
 
     #[test]
-    fn unicode_preserved() { assert_eq!(sanitize_name("café"), "café"); }
+    fn unicode_preserved() {
+        assert_eq!(sanitize_name("café"), "café");
+    }
 
     #[test]
-    fn numbers_and_dashes_preserved() { assert_eq!(sanitize_name("api-v2-users"), "api-v2-users"); }
+    fn numbers_and_dashes_preserved() {
+        assert_eq!(sanitize_name("api-v2-users"), "api-v2-users");
+    }
 
     #[test]
-    fn deeply_nested_path() { assert_eq!(sanitize_name("a/b/c/d/e"), "a_b_c_d_e"); }
+    fn deeply_nested_path() {
+        assert_eq!(sanitize_name("a/b/c/d/e"), "a_b_c_d_e");
+    }
 }
 
 #[cfg(test)]
@@ -188,8 +226,14 @@ mod env_file_tests {
         let dir = TempDir::new().unwrap();
         let path = dir.path().join(".env");
         let vars = vec![
-            EnvVar { key: "HOST".to_string(), value: "localhost".to_string() },
-            EnvVar { key: "PORT".to_string(), value: "8080".to_string() },
+            EnvVar {
+                key: "HOST".to_string(),
+                value: "localhost".to_string(),
+            },
+            EnvVar {
+                key: "PORT".to_string(),
+                value: "8080".to_string(),
+            },
         ];
         write_env_file(&path, &vars).unwrap();
         let loaded = parse_env_file_ordered(&path);
@@ -211,8 +255,14 @@ mod env_file_tests {
         let dir = TempDir::new().unwrap();
         let path = dir.path().join(".env");
         let vars = vec![
-            EnvVar { key: "  ".to_string(), value: "ignored".to_string() },
-            EnvVar { key: "REAL".to_string(), value: "kept".to_string() },
+            EnvVar {
+                key: "  ".to_string(),
+                value: "ignored".to_string(),
+            },
+            EnvVar {
+                key: "REAL".to_string(),
+                value: "kept".to_string(),
+            },
         ];
         write_env_file(&path, &vars).unwrap();
         let loaded = parse_env_file_ordered(&path);
@@ -225,7 +275,10 @@ mod env_file_tests {
         let dir = TempDir::new().unwrap();
         let path = dir.path().join(".env");
         let vars: Vec<EnvVar> = (0..100)
-            .map(|i| EnvVar { key: format!("KEY_{}", i), value: format!("val_{}", i) })
+            .map(|i| EnvVar {
+                key: format!("KEY_{}", i),
+                value: format!("val_{}", i),
+            })
             .collect();
         write_env_file(&path, &vars).unwrap();
         let loaded = parse_env_file_ordered(&path);
@@ -246,8 +299,14 @@ mod fs_env_vars_tests {
         let ws_path = dir.path().join("ws");
         fs::create_dir_all(&ws_path).unwrap();
         let vars = vec![
-            EnvVar { key: "BASE_URL".to_string(), value: "https://api.example.com".to_string() },
-            EnvVar { key: "TOKEN".to_string(), value: "secret".to_string() },
+            EnvVar {
+                key: "BASE_URL".to_string(),
+                value: "https://api.example.com".to_string(),
+            },
+            EnvVar {
+                key: "TOKEN".to_string(),
+                value: "secret".to_string(),
+            },
         ];
         fs_save_env_vars(dir.path(), "ws", None, &vars).unwrap();
         let result = fs_get_env_vars(dir.path(), "ws", None);
@@ -261,7 +320,10 @@ mod fs_env_vars_tests {
     fn save_and_get_collection_env_vars() {
         let dir = TempDir::new().unwrap();
         fs_save_workspaces(dir.path(), &[ws("ws", vec![col("api", vec![])])]).unwrap();
-        let vars = vec![EnvVar { key: "API_KEY".to_string(), value: "xyz".to_string() }];
+        let vars = vec![EnvVar {
+            key: "API_KEY".to_string(),
+            value: "xyz".to_string(),
+        }];
         fs_save_env_vars(dir.path(), "ws", Some("api"), &vars).unwrap();
         let result = fs_get_env_vars(dir.path(), "ws", Some("api"));
         assert_eq!(result.collection.len(), 1);
@@ -273,13 +335,27 @@ mod fs_env_vars_tests {
         let dir = TempDir::new().unwrap();
         let ws_path = dir.path().join("ws");
         fs::create_dir_all(&ws_path).unwrap();
-        fs_save_env_vars(dir.path(), "ws", None, &[
-            EnvVar { key: "HOST".to_string(), value: "global.example.com".to_string() },
-        ]).unwrap();
+        fs_save_env_vars(
+            dir.path(),
+            "ws",
+            None,
+            &[EnvVar {
+                key: "HOST".to_string(),
+                value: "global.example.com".to_string(),
+            }],
+        )
+        .unwrap();
         fs_save_workspaces(dir.path(), &[ws("ws", vec![col("api", vec![])])]).unwrap();
-        fs_save_env_vars(dir.path(), "ws", Some("api"), &[
-            EnvVar { key: "HOST".to_string(), value: "collection.example.com".to_string() },
-        ]).unwrap();
+        fs_save_env_vars(
+            dir.path(),
+            "ws",
+            Some("api"),
+            &[EnvVar {
+                key: "HOST".to_string(),
+                value: "collection.example.com".to_string(),
+            }],
+        )
+        .unwrap();
         let result = fs_get_env_vars(dir.path(), "ws", Some("api"));
         assert_eq!(result.merged["HOST"], "collection.example.com");
     }
@@ -296,7 +372,12 @@ mod fs_env_vars_tests {
         let dir = TempDir::new().unwrap();
         let workspaces = vec![ws("ws", vec![col("api", vec![make_request("r")])])];
         fs_save_workspaces(dir.path(), &workspaces).unwrap();
-        let col_env = dir.path().join("ws").join("collections").join("api").join(".env");
+        let col_env = dir
+            .path()
+            .join("ws")
+            .join("collections")
+            .join("api")
+            .join(".env");
         fs::write(&col_env, "SECRET=abc\n").unwrap();
         fs_save_workspaces(dir.path(), &workspaces).unwrap();
         assert_eq!(fs::read_to_string(&col_env).unwrap(), "SECRET=abc\n");
@@ -320,10 +401,21 @@ mod collection_config_tests {
         let dir = TempDir::new().unwrap();
         fs_save_workspaces(dir.path(), &[ws("ws", vec![col("api", vec![])])]).unwrap();
         let config = CollectionConfig {
-            default_auth: AuthRecord { auth_type: "bearer".to_string(), token: "tok123".to_string(), username: String::new(), password: String::new(), api_key_name: String::new(), api_key_value: String::new(), api_key_in: "header".to_string(), oauth2: OAuthConfig::default() },
-            default_headers: vec![
-                KeyValueRow { key: "X-Api-Key".to_string(), value: "secret".to_string(), enabled: true },
-            ],
+            default_auth: AuthRecord {
+                auth_type: "bearer".to_string(),
+                token: "tok123".to_string(),
+                username: String::new(),
+                password: String::new(),
+                api_key_name: String::new(),
+                api_key_value: String::new(),
+                api_key_in: "header".to_string(),
+                oauth2: OAuthConfig::default(),
+            },
+            default_headers: vec![KeyValueRow {
+                key: "X-Api-Key".to_string(),
+                value: "secret".to_string(),
+                enabled: true,
+            }],
             scripts: CollectionScripts {
                 pre_request: "console.log('pre')".to_string(),
                 post_response: "console.log('post')".to_string(),
@@ -352,7 +444,16 @@ mod collection_config_tests {
         let workspaces = vec![ws("ws", vec![col("api", vec![make_request("r")])])];
         fs_save_workspaces(dir.path(), &workspaces).unwrap();
         let config = CollectionConfig {
-            default_auth: AuthRecord { auth_type: "bearer".to_string(), token: "preserved".to_string(), username: String::new(), password: String::new(), api_key_name: String::new(), api_key_value: String::new(), api_key_in: "header".to_string(), oauth2: OAuthConfig::default() },
+            default_auth: AuthRecord {
+                auth_type: "bearer".to_string(),
+                token: "preserved".to_string(),
+                username: String::new(),
+                password: String::new(),
+                api_key_name: String::new(),
+                api_key_value: String::new(),
+                api_key_in: "header".to_string(),
+                oauth2: OAuthConfig::default(),
+            },
             default_headers: vec![],
             scripts: CollectionScripts::default(),
         };
@@ -368,7 +469,16 @@ mod collection_config_tests {
         let dir = TempDir::new().unwrap();
         fs_save_workspaces(dir.path(), &[ws("ws", vec![col("auth/user", vec![])])]).unwrap();
         let config = CollectionConfig {
-            default_auth: AuthRecord { auth_type: "bearer".to_string(), token: "tok".to_string(), username: String::new(), password: String::new(), api_key_name: String::new(), api_key_value: String::new(), api_key_in: "header".to_string(), oauth2: OAuthConfig::default() },
+            default_auth: AuthRecord {
+                auth_type: "bearer".to_string(),
+                token: "tok".to_string(),
+                username: String::new(),
+                password: String::new(),
+                api_key_name: String::new(),
+                api_key_value: String::new(),
+                api_key_in: "header".to_string(),
+                oauth2: OAuthConfig::default(),
+            },
             default_headers: vec![],
             scripts: CollectionScripts::default(),
         };
@@ -402,10 +512,13 @@ mod save_load_tests {
     #[test]
     fn save_and_load_requests() {
         let dir = TempDir::new().unwrap();
-        let workspaces = vec![ws("ws", vec![col("auth", vec![
-            make_request("GET /login"),
-            make_request("POST /logout"),
-        ])])];
+        let workspaces = vec![ws(
+            "ws",
+            vec![col(
+                "auth",
+                vec![make_request("GET /login"), make_request("POST /logout")],
+            )],
+        )];
         fs_save_workspaces(dir.path(), &workspaces).unwrap();
         let loaded = fs_load_workspaces(dir.path()).unwrap();
         assert_eq!(loaded[0].collections[0].requests.len(), 2);
@@ -414,18 +527,28 @@ mod save_load_tests {
     #[test]
     fn request_files_created_on_disk() {
         let dir = TempDir::new().unwrap();
-        fs_save_workspaces(dir.path(), &[ws("ws", vec![col("users", vec![
-            make_request("GET /users"),
-            make_request("DELETE /users/1"),
-        ])])]).unwrap();
+        fs_save_workspaces(
+            dir.path(),
+            &[ws(
+                "ws",
+                vec![col(
+                    "users",
+                    vec![make_request("GET /users"), make_request("DELETE /users/1")],
+                )],
+            )],
+        )
+        .unwrap();
         let col_path = dir.path().join("ws").join("collections").join("users");
-        let json_files: Vec<_> = fs::read_dir(&col_path).unwrap()
+        let json_files: Vec<_> = fs::read_dir(&col_path)
+            .unwrap()
             .flatten()
             .filter(|e| {
                 let path = e.path();
                 let is_json = path.extension().map_or(false, |x| x == "json");
                 let file_name = path.file_name().and_then(|n| n.to_str()).unwrap_or("");
-                is_json && file_name != "collection.json" && file_name != ".kivo-collection-state.json"
+                is_json
+                    && file_name != "collection.json"
+                    && file_name != ".kivo-collection-state.json"
             })
             .collect();
         assert_eq!(json_files.len(), 2);
@@ -461,15 +584,36 @@ mod save_load_tests {
     #[test]
     fn collection_name_with_slash_sanitized_on_disk() {
         let dir = TempDir::new().unwrap();
-        fs_save_workspaces(dir.path(), &[ws("ws", vec![col("auth/user", vec![make_request("r")])])]).unwrap();
-        assert!(dir.path().join("ws").join("collections").join("auth_user").is_dir());
-        assert!(!dir.path().join("ws").join("collections").join("auth").exists());
+        fs_save_workspaces(
+            dir.path(),
+            &[ws("ws", vec![col("auth/user", vec![make_request("r")])])],
+        )
+        .unwrap();
+        assert!(dir
+            .path()
+            .join("ws")
+            .join("collections")
+            .join("auth_user")
+            .is_dir());
+        assert!(!dir
+            .path()
+            .join("ws")
+            .join("collections")
+            .join("auth")
+            .exists());
     }
 
     #[test]
     fn request_name_with_slash_sanitized_on_disk() {
         let dir = TempDir::new().unwrap();
-        fs_save_workspaces(dir.path(), &[ws("ws", vec![col("api", vec![make_request("/auth/login")])])]).unwrap();
+        fs_save_workspaces(
+            dir.path(),
+            &[ws(
+                "ws",
+                vec![col("api", vec![make_request("/auth/login")])],
+            )],
+        )
+        .unwrap();
         let col_path = dir.path().join("ws").join("collections").join("api");
         assert!(col_path.join("_auth_login.json").exists());
     }
@@ -477,7 +621,14 @@ mod save_load_tests {
     #[test]
     fn request_display_name_preserved_inside_json() {
         let dir = TempDir::new().unwrap();
-        fs_save_workspaces(dir.path(), &[ws("ws", vec![col("api", vec![make_request("/auth/login")])])]).unwrap();
+        fs_save_workspaces(
+            dir.path(),
+            &[ws(
+                "ws",
+                vec![col("api", vec![make_request("/auth/login")])],
+            )],
+        )
+        .unwrap();
         let loaded = fs_load_workspaces(dir.path()).unwrap();
         assert_eq!(loaded[0].collections[0].requests[0].name, "/auth/login");
     }
@@ -485,12 +636,32 @@ mod save_load_tests {
     #[test]
     fn delete_request_removes_file_from_disk() {
         let dir = TempDir::new().unwrap();
-        fs_save_workspaces(dir.path(), &[ws("ws", vec![col("api", vec![
-            make_request("req-a"), make_request("req-b"), make_request("req-c"),
-        ])])]).unwrap();
-        fs_save_workspaces(dir.path(), &[ws("ws", vec![col("api", vec![
-            make_request("req-a"), make_request("req-c"),
-        ])])]).unwrap();
+        fs_save_workspaces(
+            dir.path(),
+            &[ws(
+                "ws",
+                vec![col(
+                    "api",
+                    vec![
+                        make_request("req-a"),
+                        make_request("req-b"),
+                        make_request("req-c"),
+                    ],
+                )],
+            )],
+        )
+        .unwrap();
+        fs_save_workspaces(
+            dir.path(),
+            &[ws(
+                "ws",
+                vec![col(
+                    "api",
+                    vec![make_request("req-a"), make_request("req-c")],
+                )],
+            )],
+        )
+        .unwrap();
         let col_path = dir.path().join("ws").join("collections").join("api");
         assert!(!col_path.join("req-b.json").exists());
         assert!(col_path.join("req-a.json").exists());
@@ -500,16 +671,26 @@ mod save_load_tests {
     #[test]
     fn delete_all_requests_leaves_empty_collection_dir() {
         let dir = TempDir::new().unwrap();
-        fs_save_workspaces(dir.path(), &[ws("ws", vec![col("api", vec![make_request("r1"), make_request("r2")])])]).unwrap();
+        fs_save_workspaces(
+            dir.path(),
+            &[ws(
+                "ws",
+                vec![col("api", vec![make_request("r1"), make_request("r2")])],
+            )],
+        )
+        .unwrap();
         fs_save_workspaces(dir.path(), &[ws("ws", vec![col("api", vec![])])]).unwrap();
         let col_path = dir.path().join("ws").join("collections").join("api");
-        let json_files: Vec<_> = fs::read_dir(&col_path).unwrap()
+        let json_files: Vec<_> = fs::read_dir(&col_path)
+            .unwrap()
             .flatten()
             .filter(|e| {
                 let path = e.path();
                 let is_json = path.extension().map_or(false, |x| x == "json");
                 let file_name = path.file_name().and_then(|n| n.to_str()).unwrap_or("");
-                is_json && file_name != "collection.json" && file_name != ".kivo-collection-state.json"
+                is_json
+                    && file_name != "collection.json"
+                    && file_name != ".kivo-collection-state.json"
             })
             .collect();
         assert!(json_files.is_empty());
@@ -518,13 +699,34 @@ mod save_load_tests {
     #[test]
     fn delete_collection_removes_dir_from_disk() {
         let dir = TempDir::new().unwrap();
-        fs_save_workspaces(dir.path(), &[ws("ws", vec![
-            col("keep", vec![make_request("r")]),
-            col("remove", vec![make_request("r")]),
-        ])]).unwrap();
-        fs_save_workspaces(dir.path(), &[ws("ws", vec![col("keep", vec![make_request("r")])])]).unwrap();
-        assert!(!dir.path().join("ws").join("collections").join("remove").exists());
-        assert!(dir.path().join("ws").join("collections").join("keep").exists());
+        fs_save_workspaces(
+            dir.path(),
+            &[ws(
+                "ws",
+                vec![
+                    col("keep", vec![make_request("r")]),
+                    col("remove", vec![make_request("r")]),
+                ],
+            )],
+        )
+        .unwrap();
+        fs_save_workspaces(
+            dir.path(),
+            &[ws("ws", vec![col("keep", vec![make_request("r")])])],
+        )
+        .unwrap();
+        assert!(!dir
+            .path()
+            .join("ws")
+            .join("collections")
+            .join("remove")
+            .exists());
+        assert!(dir
+            .path()
+            .join("ws")
+            .join("collections")
+            .join("keep")
+            .exists());
     }
 
     #[test]
@@ -556,7 +758,10 @@ mod save_load_tests {
         req2.url = "https://new.example.com".to_string();
         fs_save_workspaces(dir.path(), &[ws("ws", vec![col("api", vec![req2])])]).unwrap();
         let loaded = fs_load_workspaces(dir.path()).unwrap();
-        assert_eq!(loaded[0].collections[0].requests[0].url, "https://new.example.com");
+        assert_eq!(
+            loaded[0].collections[0].requests[0].url,
+            "https://new.example.com"
+        );
     }
 }
 
@@ -570,11 +775,29 @@ mod complex_scenario_tests {
         let mut req = make_request_with_response("POST /auth/token");
         req.method = "POST".to_string();
         req.url = "https://api.example.com/auth/token".to_string();
-        req.body = RequestTextOrJson::Text(r#"{"username":"admin","password":"secret"}"#.to_string());
+        req.body =
+            RequestTextOrJson::Text(r#"{"username":"admin","password":"secret"}"#.to_string());
         req.body_type = "json".to_string();
-        req.query_params = vec![KeyValueRow { key: "v".to_string(), value: "2".to_string(), enabled: true }];
-        req.headers = vec![KeyValueRow { key: "Content-Type".to_string(), value: "application/json".to_string(), enabled: true }];
-        req.auth = AuthRecord { auth_type: "bearer".to_string(), token: "tok".to_string(), username: String::new(), password: String::new(), api_key_name: String::new(), api_key_value: String::new(), api_key_in: "header".to_string(), oauth2: OAuthConfig::default() };
+        req.query_params = vec![KeyValueRow {
+            key: "v".to_string(),
+            value: "2".to_string(),
+            enabled: true,
+        }];
+        req.headers = vec![KeyValueRow {
+            key: "Content-Type".to_string(),
+            value: "application/json".to_string(),
+            enabled: true,
+        }];
+        req.auth = AuthRecord {
+            auth_type: "bearer".to_string(),
+            token: "tok".to_string(),
+            username: String::new(),
+            password: String::new(),
+            api_key_name: String::new(),
+            api_key_value: String::new(),
+            api_key_in: "header".to_string(),
+            oauth2: OAuthConfig::default(),
+        };
         fs_save_workspaces(dir.path(), &[ws("ws", vec![col("auth", vec![req])])]).unwrap();
         let loaded = fs_load_workspaces(dir.path()).unwrap();
         let r = &loaded[0].collections[0].requests[0];
@@ -590,8 +813,16 @@ mod complex_scenario_tests {
     #[test]
     fn rename_request_old_file_gone_new_file_present() {
         let dir = TempDir::new().unwrap();
-        fs_save_workspaces(dir.path(), &[ws("ws", vec![col("api", vec![make_request("old-name")])])]).unwrap();
-        fs_save_workspaces(dir.path(), &[ws("ws", vec![col("api", vec![make_request("new-name")])])]).unwrap();
+        fs_save_workspaces(
+            dir.path(),
+            &[ws("ws", vec![col("api", vec![make_request("old-name")])])],
+        )
+        .unwrap();
+        fs_save_workspaces(
+            dir.path(),
+            &[ws("ws", vec![col("api", vec![make_request("new-name")])])],
+        )
+        .unwrap();
         let col_path = dir.path().join("ws").join("collections").join("api");
         assert!(!col_path.join("old-name.json").exists());
         assert!(col_path.join("new-name.json").exists());
@@ -600,9 +831,17 @@ mod complex_scenario_tests {
     #[test]
     fn collection_with_slash_name_loads_correctly() {
         let dir = TempDir::new().unwrap();
-        fs_save_workspaces(dir.path(), &[ws("ws", vec![col("auth/user", vec![
-            make_request("GET /me"), make_request("PUT /me"),
-        ])])]).unwrap();
+        fs_save_workspaces(
+            dir.path(),
+            &[ws(
+                "ws",
+                vec![col(
+                    "auth/user",
+                    vec![make_request("GET /me"), make_request("PUT /me")],
+                )],
+            )],
+        )
+        .unwrap();
         let loaded = fs_load_workspaces(dir.path()).unwrap();
         assert_eq!(loaded[0].collections[0].name, "auth/user");
         assert_eq!(loaded[0].collections[0].requests.len(), 2);
@@ -611,12 +850,32 @@ mod complex_scenario_tests {
     #[test]
     fn deeply_nested_request_names_with_slashes() {
         let dir = TempDir::new().unwrap();
-        let names = vec!["/api/v2/admin/users", "/api/v2/admin/roles", "/api/v2/admin/permissions"];
-        fs_save_workspaces(dir.path(), &[ws("ws", vec![col("api/v2/admin", vec![
-            make_request(names[0]), make_request(names[1]), make_request(names[2]),
-        ])])]).unwrap();
+        let names = vec![
+            "/api/v2/admin/users",
+            "/api/v2/admin/roles",
+            "/api/v2/admin/permissions",
+        ];
+        fs_save_workspaces(
+            dir.path(),
+            &[ws(
+                "ws",
+                vec![col(
+                    "api/v2/admin",
+                    vec![
+                        make_request(names[0]),
+                        make_request(names[1]),
+                        make_request(names[2]),
+                    ],
+                )],
+            )],
+        )
+        .unwrap();
         let loaded = fs_load_workspaces(dir.path()).unwrap();
-        let loaded_names: Vec<&str> = loaded[0].collections[0].requests.iter().map(|r| r.name.as_str()).collect();
+        let loaded_names: Vec<&str> = loaded[0].collections[0]
+            .requests
+            .iter()
+            .map(|r| r.name.as_str())
+            .collect();
         for name in &names {
             assert!(loaded_names.contains(name), "missing: {}", name);
         }
@@ -627,10 +886,13 @@ mod complex_scenario_tests {
         let dir = TempDir::new().unwrap();
         let workspaces = vec![
             ws("ws-one", vec![col("col-a", vec![make_request("r1")])]),
-            ws("ws-two", vec![
-                col("col-b", vec![make_request("r2"), make_request("r3")]),
-                col("col-c", vec![make_request("r4")]),
-            ]),
+            ws(
+                "ws-two",
+                vec![
+                    col("col-b", vec![make_request("r2"), make_request("r3")]),
+                    col("col-c", vec![make_request("r4")]),
+                ],
+            ),
         ];
         fs_save_workspaces(dir.path(), &workspaces).unwrap();
         let loaded = fs_load_workspaces(dir.path()).unwrap();
@@ -644,11 +906,18 @@ mod complex_scenario_tests {
     #[test]
     fn malformed_request_file_skipped_others_loaded() {
         let dir = TempDir::new().unwrap();
-        fs_save_workspaces(dir.path(), &[ws("ws", vec![col("api", vec![make_request("good")])])]).unwrap();
+        fs_save_workspaces(
+            dir.path(),
+            &[ws("ws", vec![col("api", vec![make_request("good")])])],
+        )
+        .unwrap();
         let col_path = dir.path().join("ws").join("collections").join("api");
         fs::write(col_path.join("broken.json"), "{ not valid json !!!").unwrap();
         let loaded = fs_load_workspaces(dir.path()).unwrap();
-        assert!(loaded[0].collections[0].requests.iter().any(|r| r.name == "good"));
+        assert!(loaded[0].collections[0]
+            .requests
+            .iter()
+            .any(|r| r.name == "good"));
     }
 }
 
@@ -659,13 +928,25 @@ mod stress_tests {
     #[test]
     fn fifty_workspaces_ten_collections_twenty_requests() {
         let dir = TempDir::new().unwrap();
-        let workspaces: Vec<WorkspaceRecord> = (0..50).map(|wi| ws(
-            &format!("workspace-{}", wi),
-            (0..10).map(|ci| col(
-                &format!("collection-{}-{}", wi, ci),
-                (0..20).map(|ri| make_request(&format!("request-{}-{}-{}", wi, ci, ri))).collect(),
-            )).collect(),
-        )).collect();
+        let workspaces: Vec<WorkspaceRecord> = (0..50)
+            .map(|wi| {
+                ws(
+                    &format!("workspace-{}", wi),
+                    (0..10)
+                        .map(|ci| {
+                            col(
+                                &format!("collection-{}-{}", wi, ci),
+                                (0..20)
+                                    .map(|ri| {
+                                        make_request(&format!("request-{}-{}-{}", wi, ci, ri))
+                                    })
+                                    .collect(),
+                            )
+                        })
+                        .collect(),
+                )
+            })
+            .collect();
         fs_save_workspaces(dir.path(), &workspaces).unwrap();
         let loaded = fs_load_workspaces(dir.path()).unwrap();
         assert_eq!(loaded.len(), 50);
@@ -680,7 +961,15 @@ mod stress_tests {
     #[test]
     fn repeated_save_load_cycles_stay_consistent() {
         let dir = TempDir::new().unwrap();
-        let workspaces = vec![ws("ws", vec![col("api", (0..10).map(|i| make_request(&format!("req-{}", i))).collect())])];
+        let workspaces = vec![ws(
+            "ws",
+            vec![col(
+                "api",
+                (0..10)
+                    .map(|i| make_request(&format!("req-{}", i)))
+                    .collect(),
+            )],
+        )];
         for _ in 0..20 {
             fs_save_workspaces(dir.path(), &workspaces).unwrap();
             let loaded = fs_load_workspaces(dir.path()).unwrap();
@@ -691,24 +980,55 @@ mod stress_tests {
     #[test]
     fn all_special_char_collection_names() {
         let dir = TempDir::new().unwrap();
-        let names = vec!["auth/user", "api\\v2", "col:name", "col*wild", "col?query", "col\"q\"", "col<x>", "col|pipe"];
-        let workspaces = vec![ws("ws", names.iter().map(|n| col(n, vec![make_request("r")])).collect())];
+        let names = vec![
+            "auth/user",
+            "api\\v2",
+            "col:name",
+            "col*wild",
+            "col?query",
+            "col\"q\"",
+            "col<x>",
+            "col|pipe",
+        ];
+        let workspaces = vec![ws(
+            "ws",
+            names
+                .iter()
+                .map(|n| col(n, vec![make_request("r")]))
+                .collect(),
+        )];
         fs_save_workspaces(dir.path(), &workspaces).unwrap();
         let loaded = fs_load_workspaces(dir.path()).unwrap();
         assert_eq!(loaded[0].collections.len(), names.len());
         for name in &names {
-            assert!(loaded[0].collections.iter().any(|c| c.name == *name), "missing: {}", name);
+            assert!(
+                loaded[0].collections.iter().any(|c| c.name == *name),
+                "missing: {}",
+                name
+            );
         }
     }
 
     #[test]
     fn all_special_char_request_names() {
         let dir = TempDir::new().unwrap();
-        let names = vec!["/api/v1/users", "GET /auth/login", "POST /api/v2/token", "DELETE /users/1/roles/2"];
-        let workspaces = vec![ws("ws", vec![col("api", names.iter().map(|n| make_request(n)).collect())])];
+        let names = vec![
+            "/api/v1/users",
+            "GET /auth/login",
+            "POST /api/v2/token",
+            "DELETE /users/1/roles/2",
+        ];
+        let workspaces = vec![ws(
+            "ws",
+            vec![col("api", names.iter().map(|n| make_request(n)).collect())],
+        )];
         fs_save_workspaces(dir.path(), &workspaces).unwrap();
         let loaded = fs_load_workspaces(dir.path()).unwrap();
-        let loaded_names: Vec<&str> = loaded[0].collections[0].requests.iter().map(|r| r.name.as_str()).collect();
+        let loaded_names: Vec<&str> = loaded[0].collections[0]
+            .requests
+            .iter()
+            .map(|r| r.name.as_str())
+            .collect();
         for name in &names {
             assert!(loaded_names.contains(name), "missing: {}", name);
         }
@@ -717,11 +1037,14 @@ mod stress_tests {
     #[test]
     fn incremental_delete_requests_one_by_one() {
         let dir = TempDir::new().unwrap();
-        let mut requests: Vec<RequestRecord> = (0..10).map(|i| make_request(&format!("req-{}", i))).collect();
+        let mut requests: Vec<RequestRecord> = (0..10)
+            .map(|i| make_request(&format!("req-{}", i)))
+            .collect();
         fs_save_workspaces(dir.path(), &[ws("ws", vec![col("api", requests.clone())])]).unwrap();
         for expected in (0..10).rev() {
             requests.pop();
-            fs_save_workspaces(dir.path(), &[ws("ws", vec![col("api", requests.clone())])]).unwrap();
+            fs_save_workspaces(dir.path(), &[ws("ws", vec![col("api", requests.clone())])])
+                .unwrap();
             let loaded = fs_load_workspaces(dir.path()).unwrap();
             assert_eq!(loaded[0].collections[0].requests.len(), expected);
         }
@@ -730,9 +1053,14 @@ mod stress_tests {
     #[test]
     fn delete_half_of_twenty_collections() {
         let dir = TempDir::new().unwrap();
-        let all: Vec<CollectionRecord> = (0..20).map(|i| col(&format!("col-{}", i), vec![make_request("r")])).collect();
+        let all: Vec<CollectionRecord> = (0..20)
+            .map(|i| col(&format!("col-{}", i), vec![make_request("r")]))
+            .collect();
         fs_save_workspaces(dir.path(), &[ws("ws", all)]).unwrap();
-        let kept: Vec<CollectionRecord> = (0..20).filter(|i| i % 2 == 0).map(|i| col(&format!("col-{}", i), vec![make_request("r")])).collect();
+        let kept: Vec<CollectionRecord> = (0..20)
+            .filter(|i| i % 2 == 0)
+            .map(|i| col(&format!("col-{}", i), vec![make_request("r")]))
+            .collect();
         fs_save_workspaces(dir.path(), &[ws("ws", kept)]).unwrap();
         let loaded = fs_load_workspaces(dir.path()).unwrap();
         assert_eq!(loaded[0].collections.len(), 10);
@@ -760,11 +1088,26 @@ mod stress_tests {
         let dir = TempDir::new().unwrap();
         let workspaces = vec![ws("ws", vec![col("api", vec![make_request("r")])])];
         fs_save_workspaces(dir.path(), &workspaces).unwrap();
-        let col_env = dir.path().join("ws").join("collections").join("api").join(".env");
-        write_env_file(&col_env, &[
-            EnvVar { key: "BASE_URL".to_string(), value: "https://api.example.com".to_string() },
-            EnvVar { key: "API_KEY".to_string(), value: "supersecret".to_string() },
-        ]).unwrap();
+        let col_env = dir
+            .path()
+            .join("ws")
+            .join("collections")
+            .join("api")
+            .join(".env");
+        write_env_file(
+            &col_env,
+            &[
+                EnvVar {
+                    key: "BASE_URL".to_string(),
+                    value: "https://api.example.com".to_string(),
+                },
+                EnvVar {
+                    key: "API_KEY".to_string(),
+                    value: "supersecret".to_string(),
+                },
+            ],
+        )
+        .unwrap();
         for _ in 0..15 {
             fs_save_workspaces(dir.path(), &workspaces).unwrap();
         }
