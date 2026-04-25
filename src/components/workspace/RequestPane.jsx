@@ -1010,7 +1010,13 @@ export function RequestPane({
     const status = Number(response?.status || 0);
     const savedAt = String(response?.savedAt || "");
     const bodyText = String(response?.rawBody || response?.body || "").trim();
-    const isError = status >= 400;
+    const badgeText = String(response?.badge || "").toLowerCase();
+    const statusLabel = String(response?.statusText || "").toLowerCase();
+    const looksLikeError = badgeText.includes("error")
+      || badgeText.includes("failed")
+      || statusLabel.includes("error")
+      || statusLabel.includes("failed");
+    const isError = status >= 400 || (status === 0 && looksLikeError);
     if (!isError || !savedAt) return;
     const key = `${savedAt}-${status}-${bodyText.slice(0, 80)}`;
     if (seenErrorKeyRef.current === key) return;

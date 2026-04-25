@@ -168,6 +168,24 @@ function toWebSocketUrl(url) {
   return `wss://${trimmed}`;
 }
 
+function buildWebSocketUrl(rawUrl, queryParams = []) {
+  const trimmed = String(rawUrl ?? "").trim();
+  if (!trimmed) return "";
+
+  const baseUrl = toWebSocketUrl(trimmed);
+  try {
+    const parsed = new URL(baseUrl);
+    queryParams.forEach((row) => {
+      if (row?.enabled && String(row.key || "").trim()) {
+        parsed.searchParams.append(String(row.key).trim(), String(row.value || ""));
+      }
+    });
+    return parsed.toString();
+  } catch {
+    return baseUrl;
+  }
+}
+
 export function useWorkspaceStore() {
   const [store, setStore] = useState(createDefaultStore());
   const [isSending, setIsSending] = useState(false);
@@ -431,8 +449,7 @@ export function useWorkspaceStore() {
 
     let finalUrl = "";
     try {
-      const prepared = buildUrlWithParams(activeRequest.url, activeRequest.queryParams);
-      finalUrl = toWebSocketUrl(prepared);
+      finalUrl = buildWebSocketUrl(activeRequest.url, activeRequest.queryParams);
     } catch {
       finalUrl = toWebSocketUrl(activeRequest.url);
     }
@@ -476,21 +493,50 @@ export function useWorkspaceStore() {
       };
 
       socket.onerror = () => {
+        const detail = `Failed to connect to ${finalUrl}. Verify the URL is reachable and the server is running.`;
         updateWsState(requestKey, {
           connecting: false,
           connected: false,
-          error: "WebSocket connection error",
+          error: detail,
           lastEventAt: formatSavedAt()
         });
+        setRequestLocalMessage(
+          workspaceName,
+          collectionName,
+          requestName,
+          requestMethod,
+          finalUrl,
+          detail,
+          "Connection error"
+        );
       };
 
-      socket.onclose = () => {
+      socket.onclose = (event) => {
+        const wasTracked = wsConnectionsRef.current.has(requestKey);
         wsConnectionsRef.current.delete(requestKey);
         updateWsState(requestKey, {
           connecting: false,
           connected: false,
           lastEventAt: formatSavedAt()
         });
+
+        const code = Number(event?.code || 0);
+        const reason = String(event?.reason || "").trim();
+        const abnormal = code !== 0 && code !== 1000 && code !== 1001;
+        if (wasTracked && abnormal) {
+          const detail = reason
+            ? `WebSocket closed (${code}): ${reason}`
+            : `WebSocket closed (${code}). Verify the server at ${finalUrl} is running.`;
+          setRequestLocalMessage(
+            workspaceName,
+            collectionName,
+            requestName,
+            requestMethod,
+            finalUrl,
+            detail,
+            "Connection error"
+          );
+        }
       };
     } catch {
       updateWsState(requestKey, {
