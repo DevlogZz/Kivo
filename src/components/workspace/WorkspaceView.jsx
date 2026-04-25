@@ -6,6 +6,10 @@ export function WorkspaceView({
   isSending,
   sendStartedAt,
   onSend,
+  wsState,
+  onWebSocketConnect,
+  onWebSocketDisconnect,
+  onWebSocketSend,
   onCancelSend,
   onFieldChange,
   onUpdateActiveRequest,
@@ -22,6 +26,10 @@ export function WorkspaceView({
         state={request}
         isSending={isSending}
         onSend={onSend}
+        wsState={wsState}
+        onWebSocketConnect={onWebSocketConnect}
+        onWebSocketDisconnect={onWebSocketDisconnect}
+        onWebSocketSend={onWebSocketSend}
         onChange={onFieldChange}
         onTabChange={(tab) => onUpdateActiveRequest((r) => ({ ...r, activeEditorTab: tab }))}
         onParamsChange={(queryParams) => onUpdateActiveRequest((r) => ({ ...r, queryParams }))}

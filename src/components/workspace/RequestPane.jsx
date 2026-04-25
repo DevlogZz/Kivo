@@ -9,11 +9,16 @@ import { Input } from "@/components/ui/input.jsx";
 import { OAuth2Panel } from "@/components/workspace/OAuth2Panel.jsx";
 import { formatGraphqlText, formatJsonText } from "@/lib/formatters.js";
 import { getMethodTone, requestBodyModes } from "@/lib/http-ui.js";
+import { REQUEST_MODES } from "@/lib/workspace-store.js";
 import { cn } from "@/lib/utils.js";
 import { EnvHighlightInput } from "@/components/ui/EnvHighlightInput.jsx";
 
 const tabs = ["Params", "Body", "Auth", "Headers", "Docs", "Settings"];
 const requestMethods = ["GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS"];
+const webSocketBodyModes = [
+  { value: "json", label: "JSON" },
+  { value: "text", label: "Raw" }
+];
 const authModes = [
   { value: "none", label: "No Auth" },
   { value: "basic", label: "Basic Auth" },
@@ -109,6 +114,42 @@ function RequestSettingsPanel({ state, onChange }) {
               />
             </div>
           </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function WebSocketHeadersPanel({ headers, onHeadersChange }) {
+  const systemHeaders = [
+    { key: "Connection", value: "Upgrade" },
+    { key: "Upgrade", value: "websocket" },
+    { key: "Sec-WebSocket-Key", value: "<calculated at runtime>" },
+    { key: "Sec-WebSocket-Version", value: "13" },
+    { key: "Sec-WebSocket-Extensions", value: "permessage-deflate; client_max_window_bits" }
+  ];
+
+  return (
+    <div className="grid h-full min-h-0 grid-rows-[auto_minmax(0,1fr)]">
+      <div className="border-b border-border/20 px-3 py-2 text-[10px] uppercase tracking-[0.16em] text-muted-foreground">
+        Handshake Headers
+      </div>
+      <div className="thin-scrollbar min-h-0 overflow-auto bg-background/10">
+        {systemHeaders.map((row) => (
+          <div key={row.key} className="grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)] border-b border-border/10 px-3 py-2 text-[12px]">
+            <div className="text-foreground">{row.key}</div>
+            <div className="text-muted-foreground">{row.value}</div>
+          </div>
+        ))}
+        <div className="border-t border-border/20">
+          <TableEditor
+            rows={headers}
+            onChange={onHeadersChange}
+            keyLabel="header"
+            valueLabel="value"
+            title="Custom Headers"
+            addLabel="Add"
+          />
         </div>
       </div>
     </div>
@@ -571,6 +612,10 @@ export function RequestPane({
   state,
   isSending,
   onSend,
+  wsState,
+  onWebSocketConnect,
+  onWebSocketDisconnect,
+  onWebSocketSend,
   onChange,
   onTabChange,
   onParamsChange,
@@ -581,8 +626,18 @@ export function RequestPane({
   workspaceName,
   collectionName,
 }) {
+  const isWebSocketRequest = state.requestMode === REQUEST_MODES.WEBSOCKET;
+  const activeWsState = wsState ?? {
+    connected: false,
+    connecting: false,
+    messageCount: 0,
+    lastMessage: "",
+    lastEventAt: "",
+    error: ""
+  };
+  const visibleTabs = isWebSocketRequest ? ["Params", "Body", "Auth", "Headers", "Docs"] : tabs;
   const activeTab = state.activeEditorTab ?? "Params";
-  const bodyDisabled = state.method === "GET" || state.method === "DELETE" || state.bodyType === "none";
+  const bodyDisabled = !isWebSocketRequest && (state.method === "GET" || state.method === "DELETE" || state.bodyType === "none");
   const isJsonBody = state.bodyType === "json";
   const isGraphqlBody = state.bodyType === "graphql";
   const isTableBody = state.bodyType === "form-data" || state.bodyType === "form-urlencoded";
@@ -599,6 +654,16 @@ export function RequestPane({
     const timer = setTimeout(() => setDebouncedState(state), 500);
     return () => clearTimeout(timer);
   }, [state.url, state.body, state.auth, state.headers]);
+
+  useEffect(() => {
+    if (!isWebSocketRequest) return;
+    if (!visibleTabs.includes(activeTab)) {
+      onTabChange("Params");
+    }
+    if (state.bodyType !== "json" && state.bodyType !== "text") {
+      onChange("bodyType", "json");
+    }
+  }, [activeTab, isWebSocketRequest, onChange, onTabChange, state.bodyType, visibleTabs]);
 
   const missingVars = useMemo(() => {
     if (!envVars) return [];
@@ -682,21 +747,38 @@ export function RequestPane({
   return (
     <Card className="flex h-full min-h-0 flex-col gap-0 overflow-hidden border-0 border-r border-border/30 bg-card/84 p-0 shadow-none">
       <div className="grid grid-cols-[108px_minmax(0,1fr)_92px] gap-px border-b border-border/25 bg-border/20 lg:grid-cols-[124px_minmax(0,1fr)_108px]">
-        <MethodPicker value={state.method} onChange={(method) => onChange("method", method)} />
+        {isWebSocketRequest ? (
+          <div className="flex h-8 items-center px-3 lg:h-10">
+            <span className="font-semibold uppercase tracking-[0.14em] text-amber-300">WS</span>
+          </div>
+        ) : (
+          <MethodPicker value={state.method} onChange={(method) => onChange("method", method)} />
+        )}
 
         <EnvHighlightInput
           inputClassName="h-8 rounded-none border-0 bg-input/60 text-[12.5px] lg:h-10 lg:text-[14px]"
           value={state.url}
           onValueChange={(val) => onChange("url", val)}
-          placeholder="https://api.example.com/v1/users"
+          placeholder={isWebSocketRequest ? "wss://example.com/chat" : "https://api.example.com/v1/users"}
           envVars={envVars}
         />
 
-        <Button className="h-8 gap-1.5 rounded-none px-2.5 text-[12px] lg:h-10 lg:text-[14px]" onClick={onSend} type="button" disabled={isSending}>
-          <SendHorizontal className="h-3 w-3 lg:h-4 lg:w-4" />
-          {isSending ? "Sending" : "Send"}
+        <Button
+          className="h-8 gap-1.5 rounded-none px-2.5 text-[12px] lg:h-10 lg:text-[14px]"
+          onClick={isWebSocketRequest ? (activeWsState.connected || activeWsState.connecting ? onWebSocketDisconnect : onWebSocketConnect) : onSend}
+          type="button"
+          disabled={isWebSocketRequest ? false : isSending}
+        >
+          {isWebSocketRequest ? (activeWsState.connecting ? "Connecting..." : (activeWsState.connected ? "Disconnect" : "Connect")) : <SendHorizontal className="h-3 w-3 lg:h-4 lg:w-4" />}
+          {isWebSocketRequest ? null : (isSending ? "Sending" : "Send")}
         </Button>
       </div>
+
+      {isWebSocketRequest && activeWsState.error ? (
+        <div className="flex items-center gap-2 border-b border-amber-500/20 bg-amber-500/[0.08] px-3 py-1.5 text-[11px] text-amber-500 dark:text-amber-400">
+          <span>{activeWsState.error}</span>
+        </div>
+      ) : null}
 
       {missingVars.length > 0 && (
         <div className="flex items-center gap-2 border-b border-amber-500/20 bg-amber-500/[0.08] px-3 py-1.5 text-[11px] text-amber-500 dark:text-amber-400">
@@ -710,7 +792,7 @@ export function RequestPane({
 
       <div className="border-b border-border/25 px-2 py-2 text-[11px] text-muted-foreground lg:text-[12px]">
         <div className="flex items-center gap-1">
-          {tabs.map((tab) => (
+          {visibleTabs.map((tab) => (
             <button
               key={tab}
               type="button"
@@ -735,18 +817,22 @@ export function RequestPane({
         ) : null}
 
         {activeTab === "Headers" ? (
-          <div className="grid h-full min-h-0 grid-rows-[auto_minmax(0,1fr)]">
-            <label className="flex items-center gap-2 border-b border-border/20 px-4 py-2.5 text-[11px] text-muted-foreground lg:text-[12px] bg-background/10 cursor-pointer hover:bg-background/20 transition-colors">
-              <input
-                type="checkbox"
-                className="accent-primary w-3 h-3.5 outline-none"
-                checked={state.inheritHeaders ?? true}
-                onChange={(e) => onChange("inheritHeaders", e.target.checked)}
-              />
-              Inherit default headers from parent collection
-            </label>
-            <TableEditor rows={state.headers} onChange={onHeadersChange} keyLabel="header" valueLabel="value" title="Headers" addLabel="Add" />
-          </div>
+          isWebSocketRequest ? (
+            <WebSocketHeadersPanel headers={state.headers} onHeadersChange={onHeadersChange} />
+          ) : (
+            <div className="grid h-full min-h-0 grid-rows-[auto_minmax(0,1fr)]">
+              <label className="flex items-center gap-2 border-b border-border/20 px-4 py-2.5 text-[11px] text-muted-foreground lg:text-[12px] bg-background/10 cursor-pointer hover:bg-background/20 transition-colors">
+                <input
+                  type="checkbox"
+                  className="accent-primary w-3 h-3.5 outline-none"
+                  checked={state.inheritHeaders ?? true}
+                  onChange={(e) => onChange("inheritHeaders", e.target.checked)}
+                />
+                Inherit default headers from parent collection
+              </label>
+              <TableEditor rows={state.headers} onChange={onHeadersChange} keyLabel="header" valueLabel="value" title="Headers" addLabel="Add" />
+            </div>
+          )
         ) : null}
 
         {activeTab === "Body" ? (
@@ -755,16 +841,20 @@ export function RequestPane({
               <div className="flex items-center gap-2">
                 <SelectMenu
                   value={state.bodyType}
-                  options={requestBodyModes}
+                  options={isWebSocketRequest ? webSocketBodyModes : requestBodyModes}
                   onChange={handleBodyTypeChange}
                   className="min-w-[180px]"
                 />
                 <div className="flex items-center gap-1 border border-border/25 bg-background/20 px-2.5 py-1.5 uppercase tracking-[0.14em]">
                   <Braces className="h-3 w-3" />
-                  <span>{isGraphqlBody ? "GraphQL Request" : isTableBody ? "Form Request" : isFileBody ? "Binary/File Upload" : isJsonBody ? "JSON Highlight" : "Plain Editor"}</span>
+                  <span>{isWebSocketRequest ? "WebSocket Message" : (isGraphqlBody ? "GraphQL Request" : isTableBody ? "Form Request" : isFileBody ? "Binary/File Upload" : isJsonBody ? "JSON Highlight" : "Plain Editor")}</span>
                 </div>
               </div>
-              {isJsonBody ? (
+              {isWebSocketRequest ? (
+                <Button variant="outline" size="sm" className="h-8 px-2.5 text-[11px]" type="button" onClick={onWebSocketSend} disabled={!activeWsState.connected}>
+                  Send
+                </Button>
+              ) : isJsonBody ? (
                 <Button variant="outline" size="sm" className="h-8 px-2.5 text-[11px]" type="button" onClick={handleFormatBody} disabled={bodyDisabled}>
                   <Wand2 className="h-3 w-3" />
                   Format JSON

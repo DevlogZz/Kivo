@@ -128,6 +128,46 @@ function updateRequestWithLocalResponse(current, requestName, savedResponse, res
   };
 }
 
+function updateRequestWithLocalResponseByIdentity(current, workspaceName, collectionName, requestName, savedResponse, responseBodyView = "Raw") {
+  return {
+    ...current,
+    workspaces: current.workspaces.map((workspace) => {
+      if (workspace.name !== workspaceName) return workspace;
+      return {
+        ...workspace,
+        collections: workspace.collections.map((collection) => {
+          if (collection.name !== collectionName) return collection;
+          return {
+            ...collection,
+            requests: collection.requests.map((request) => (
+              request.name === requestName
+                ? { ...request, responseBodyView, lastResponse: savedResponse }
+                : request
+            ))
+          };
+        })
+      };
+    })
+  };
+}
+
+function buildRequestKey(workspaceName, collectionName, requestName) {
+  return `${workspaceName}::${collectionName}::${requestName}`;
+}
+
+function toWebSocketUrl(url) {
+  const trimmed = String(url ?? "").trim();
+  if (!trimmed) return "";
+
+  if (/^wss?:\/\//i.test(trimmed)) {
+    return trimmed;
+  }
+  if (/^https?:\/\//i.test(trimmed)) {
+    return trimmed.replace(/^http/i, "ws");
+  }
+  return `wss://${trimmed}`;
+}
+
 export function useWorkspaceStore() {
   const [store, setStore] = useState(createDefaultStore());
   const [isSending, setIsSending] = useState(false);
@@ -138,6 +178,8 @@ export function useWorkspaceStore() {
   const saveTimerRef = useRef(null);
   const resizeRef = useRef({ active: false, startX: 0, startWidth: 304 });
   const activeHttpRequestIdRef = useRef("");
+  const wsConnectionsRef = useRef(new Map());
+  const [wsStates, setWsStates] = useState({});
 
   useEffect(() => {
     async function checkSetup() {
@@ -266,6 +308,16 @@ export function useWorkspaceStore() {
     };
   }, [isHydrated, store]);
 
+  useEffect(() => () => {
+    wsConnectionsRef.current.forEach((socket) => {
+      try {
+        socket.close();
+      } catch {
+      }
+    });
+    wsConnectionsRef.current.clear();
+  }, []);
+
   function updateStore(updater) {
     setStore((current) => normalizeStore(typeof updater === "function" ? updater(current) : updater));
   }
@@ -312,6 +364,212 @@ export function useWorkspaceStore() {
 
   function handleRequestFieldChange(field, value) {
     updateActiveRequest((request) => ({ ...request, [field]: value }));
+  }
+
+  function updateWsState(requestKey, patch) {
+    setWsStates((current) => ({
+      ...current,
+      [requestKey]: {
+        connected: false,
+        connecting: false,
+        messageCount: 0,
+        lastMessage: "",
+        lastEventAt: "",
+        error: "",
+        ...(current[requestKey] || {}),
+        ...patch
+      }
+    }));
+  }
+
+  function setRequestLocalMessage(workspaceName, collectionName, requestName, method, url, text, statusText = "WebSocket") {
+    const savedAt = formatSavedAt();
+    updateStore((current) => updateRequestWithLocalResponseByIdentity(current, workspaceName, collectionName, requestName, {
+      status: 0,
+      badge: statusText,
+      statusText,
+      duration: "-",
+      size: `${new TextEncoder().encode(String(text || "")).length} B`,
+      headers: {},
+      cookies: [],
+      body: String(text || ""),
+      rawBody: String(text || ""),
+      isJson: isJsonText(String(text || "")),
+      meta: {
+        url: url || "-",
+        method
+      },
+      savedAt
+    }));
+  }
+
+  function connectActiveWebSocket() {
+    if (!activeRequest || activeRequest.requestMode !== REQUEST_MODES.WEBSOCKET) return;
+
+    const workspaceName = activeWorkspace?.name ?? "";
+    const collectionName = activeCollection?.name ?? "";
+    const requestName = activeRequest.name;
+    const requestMethod = activeRequest.method;
+
+    const requestKey = buildRequestKey(
+      workspaceName,
+      collectionName,
+      requestName
+    );
+
+    const existing = wsConnectionsRef.current.get(requestKey);
+    if (existing && existing.readyState === WebSocket.OPEN) {
+      return;
+    }
+    if (existing) {
+      try {
+        existing.close();
+      } catch {
+      }
+      wsConnectionsRef.current.delete(requestKey);
+    }
+
+    let finalUrl = "";
+    try {
+      const prepared = buildUrlWithParams(activeRequest.url, activeRequest.queryParams);
+      finalUrl = toWebSocketUrl(prepared);
+    } catch {
+      finalUrl = toWebSocketUrl(activeRequest.url);
+    }
+
+    if (!finalUrl) {
+      updateWsState(requestKey, { connected: false, connecting: false, error: "Enter a valid WebSocket URL." });
+      setRequestLocalMessage(workspaceName, collectionName, requestName, requestMethod, activeRequest.url, "Enter a valid WebSocket URL before connecting.", "Connection error");
+      return;
+    }
+
+    updateWsState(requestKey, { connecting: true, connected: false, error: "" });
+
+    try {
+      const socket = new WebSocket(finalUrl);
+      wsConnectionsRef.current.set(requestKey, socket);
+
+      socket.onopen = () => {
+        updateWsState(requestKey, {
+          connecting: false,
+          connected: true,
+          error: "",
+          lastEventAt: formatSavedAt()
+        });
+        setRequestLocalMessage(workspaceName, collectionName, requestName, requestMethod, finalUrl, `Connected to ${finalUrl}`, "Connected");
+      };
+
+      socket.onmessage = (event) => {
+        const message = String(event?.data ?? "");
+        setWsStates((current) => ({
+          ...current,
+          [requestKey]: {
+            connected: true,
+            connecting: false,
+            messageCount: (current[requestKey]?.messageCount ?? 0) + 1,
+            lastMessage: message,
+            lastEventAt: formatSavedAt(),
+            error: ""
+          }
+        }));
+        setRequestLocalMessage(workspaceName, collectionName, requestName, requestMethod, finalUrl, message, "Message received");
+      };
+
+      socket.onerror = () => {
+        updateWsState(requestKey, {
+          connecting: false,
+          connected: false,
+          error: "WebSocket connection error",
+          lastEventAt: formatSavedAt()
+        });
+      };
+
+      socket.onclose = () => {
+        wsConnectionsRef.current.delete(requestKey);
+        updateWsState(requestKey, {
+          connecting: false,
+          connected: false,
+          lastEventAt: formatSavedAt()
+        });
+      };
+    } catch {
+      updateWsState(requestKey, {
+        connecting: false,
+        connected: false,
+        error: "Failed to create WebSocket connection"
+      });
+      setRequestLocalMessage(workspaceName, collectionName, requestName, requestMethod, activeRequest.url, "Failed to create WebSocket connection.", "Connection error");
+    }
+  }
+
+  function disconnectActiveWebSocket() {
+    if (!activeRequest || activeRequest.requestMode !== REQUEST_MODES.WEBSOCKET) return;
+    const workspaceName = activeWorkspace?.name ?? "";
+    const collectionName = activeCollection?.name ?? "";
+    const requestName = activeRequest.name;
+    const requestMethod = activeRequest.method;
+    const requestKey = buildRequestKey(
+      workspaceName,
+      collectionName,
+      requestName
+    );
+    const socket = wsConnectionsRef.current.get(requestKey);
+    if (socket) {
+      try {
+        socket.close();
+      } catch {
+      }
+      wsConnectionsRef.current.delete(requestKey);
+    }
+    updateWsState(requestKey, {
+      connected: false,
+      connecting: false,
+      lastEventAt: formatSavedAt()
+    });
+    setRequestLocalMessage(workspaceName, collectionName, requestName, requestMethod, activeRequest.url, "Disconnected from WebSocket.", "Disconnected");
+  }
+
+  function sendActiveWebSocketMessage() {
+    if (!activeRequest || activeRequest.requestMode !== REQUEST_MODES.WEBSOCKET) return;
+    const workspaceName = activeWorkspace?.name ?? "";
+    const collectionName = activeCollection?.name ?? "";
+    const requestName = activeRequest.name;
+    const requestMethod = activeRequest.method;
+    const requestKey = buildRequestKey(
+      workspaceName,
+      collectionName,
+      requestName
+    );
+    const socket = wsConnectionsRef.current.get(requestKey);
+
+    if (!socket || socket.readyState !== WebSocket.OPEN) {
+      updateWsState(requestKey, { error: "Connect first before sending a message." });
+      setRequestLocalMessage(workspaceName, collectionName, requestName, requestMethod, activeRequest.url, "Connect first before sending a message.", "Send blocked");
+      return;
+    }
+
+    let payload = String(activeRequest.body ?? "");
+    if (activeRequest.bodyType === "json") {
+      try {
+        payload = JSON.stringify(JSON.parse(payload), null, 2);
+      } catch {
+        updateWsState(requestKey, { error: "Invalid JSON payload" });
+        setRequestLocalMessage(workspaceName, collectionName, requestName, requestMethod, activeRequest.url, "Invalid JSON payload.", "Send blocked");
+        return;
+      }
+    }
+
+    try {
+      socket.send(payload);
+      updateWsState(requestKey, {
+        error: "",
+        lastEventAt: formatSavedAt()
+      });
+      setRequestLocalMessage(workspaceName, collectionName, requestName, requestMethod, activeRequest.url, payload, "Message sent");
+    } catch {
+      updateWsState(requestKey, { error: "Failed to send WebSocket message" });
+      setRequestLocalMessage(workspaceName, collectionName, requestName, requestMethod, activeRequest.url, "Failed to send WebSocket message.", "Send failed");
+    }
   }
 
   function createWorkspaceRecord(values) {
@@ -1193,14 +1451,28 @@ export function useWorkspaceStore() {
       return;
     }
 
+    if (activeRequest.requestMode === REQUEST_MODES.WEBSOCKET) {
+      const requestKey = buildRequestKey(
+        activeWorkspace?.name ?? "",
+        activeCollection?.name ?? "",
+        activeRequest.name
+      );
+      const wsState = wsStates[requestKey] ?? { connected: false, connecting: false };
+      if (wsState.connected || wsState.connecting) {
+        disconnectActiveWebSocket();
+      } else {
+        connectActiveWebSocket();
+      }
+      return;
+    }
+
     if (
-      activeRequest.requestMode === REQUEST_MODES.WEBSOCKET
-      || activeRequest.requestMode === REQUEST_MODES.SOCKET_IO
+      activeRequest.requestMode === REQUEST_MODES.SOCKET_IO
       || activeRequest.requestMode === REQUEST_MODES.GRPC
     ) {
       const label = activeRequest.requestMode === REQUEST_MODES.GRPC
         ? "gRPC"
-        : (activeRequest.requestMode === REQUEST_MODES.WEBSOCKET ? "WebSocket" : "Socket.IO");
+        : "Socket.IO";
       const savedAt = formatSavedAt();
       const message = `${label} send is not available yet. You can still create and configure ${label} requests now.`;
 
@@ -1432,6 +1704,23 @@ export function useWorkspaceStore() {
     activeRequest,
     requestTabs,
     response,
+    activeWebSocketState: activeRequest
+      ? (wsStates[buildRequestKey(activeWorkspace?.name ?? "", activeCollection?.name ?? "", activeRequest.name)] || {
+        connected: false,
+        connecting: false,
+        messageCount: 0,
+        lastMessage: "",
+        lastEventAt: "",
+        error: ""
+      })
+      : {
+        connected: false,
+        connecting: false,
+        messageCount: 0,
+        lastMessage: "",
+        lastEventAt: "",
+        error: ""
+      },
     SIDEBAR_COLLAPSED_WIDTH,
     SIDEBAR_MIN_WIDTH,
     SIDEBAR_REOPEN_WIDTH,
@@ -1464,6 +1753,9 @@ export function useWorkspaceStore() {
     togglePinRequestRecord,
     closeRequestTab,
     handleSend,
+    connectActiveWebSocket,
+    disconnectActiveWebSocket,
+    sendActiveWebSocketMessage,
     cancelSend,
     checkSetup: async () => {
       try {

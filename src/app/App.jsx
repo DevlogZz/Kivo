@@ -64,6 +64,7 @@ export default function App() {
     activeRequest,
     requestTabs,
     response,
+    activeWebSocketState,
     SIDEBAR_MIN_WIDTH,
     SIDEBAR_REOPEN_WIDTH,
     handleSidebarTabChange,
@@ -90,6 +91,9 @@ export default function App() {
     togglePinRequestRecord,
     closeRequestTab,
     handleSend,
+    connectActiveWebSocket,
+    disconnectActiveWebSocket,
+    sendActiveWebSocketMessage,
     cancelSend,
     updateActiveRequest,
     checkSetup,
@@ -405,6 +409,10 @@ export default function App() {
                   isSending={isSending}
                   sendStartedAt={sendStartedAt}
                   onSend={handleSend}
+                  wsState={activeWebSocketState}
+                  onWebSocketConnect={connectActiveWebSocket}
+                  onWebSocketDisconnect={disconnectActiveWebSocket}
+                  onWebSocketSend={sendActiveWebSocketMessage}
                   onCancelSend={cancelSend}
                   onFieldChange={handleRequestFieldChange}
                   onUpdateActiveRequest={updateActiveRequest}

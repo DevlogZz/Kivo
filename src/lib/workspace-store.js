@@ -43,7 +43,8 @@ function getRequestModeTemplate(mode) {
     case REQUEST_MODES.WEBSOCKET:
       return {
         method: "GET",
-        bodyType: "none"
+        bodyType: "json",
+        activeEditorTab: "Body"
       };
     case REQUEST_MODES.SOCKET_IO:
       return {
