@@ -338,7 +338,7 @@ function SocketIoEventsPanel({
           </div>
 
           <div className="grid min-h-0 grid-rows-[auto_minmax(0,1fr)] border border-border/30 bg-transparent">
-            <div className="grid grid-cols-[minmax(0,1.2fr)_132px_90px_88px_minmax(0,1fr)_44px] items-center gap-2 border-b border-border/20 px-3 py-2 text-[10px] uppercase tracking-[0.16em] text-muted-foreground">
+            <div className="grid min-w-[440px] grid-cols-[minmax(96px,1fr)_96px_64px_64px_30px] items-center gap-2 border-b border-border/20 px-3 py-2 text-[10px] uppercase tracking-[0.16em] text-muted-foreground xl:min-w-0 xl:grid-cols-[minmax(0,1.2fr)_132px_90px_88px_minmax(0,1fr)_44px]">
               <div className="flex items-center gap-2">
                 <span>Events</span>
                 <button
@@ -353,7 +353,7 @@ function SocketIoEventsPanel({
               <span>Mode</span>
               <span>Enabled</span>
               <span>Payload</span>
-              <span>Description</span>
+              <span className="hidden xl:block">Description</span>
               <span />
             </div>
 
@@ -365,7 +365,7 @@ function SocketIoEventsPanel({
                     key={eventRow.id}
                     onClick={() => onSelectEvent(eventRow.id)}
                     className={cn(
-                      "grid cursor-pointer grid-cols-[minmax(0,1.2fr)_132px_90px_88px_minmax(0,1fr)_44px] items-center gap-2 border-b border-border/15 bg-transparent px-3 py-2 transition-colors",
+                      "grid min-w-[440px] cursor-pointer grid-cols-[minmax(96px,1fr)_96px_64px_64px_30px] items-center gap-2 border-b border-border/15 bg-transparent px-3 py-2 transition-colors xl:min-w-0 xl:grid-cols-[minmax(0,1.2fr)_132px_90px_88px_minmax(0,1fr)_44px]",
                       "hover:bg-transparent"
                     )}
                   >
@@ -387,7 +387,7 @@ function SocketIoEventsPanel({
                         applyMode(eventRow.id, value);
                       }}
                       className="w-full"
-                      buttonClassName="h-8 px-2 text-[11px]"
+                      buttonClassName="h-8 px-1 text-[10px] xl:px-2 xl:text-[11px]"
                     />
                     </div>
 
@@ -425,7 +425,7 @@ function SocketIoEventsPanel({
                       onFocus={() => onSelectEvent(eventRow.id)}
                       onChange={(event) => onUpdateEvent(eventRow.id, { description: event.target.value })}
                       placeholder="Description"
-                      className="h-8 border-border/30 bg-transparent"
+                      className="hidden h-8 border-border/30 bg-transparent xl:block"
                     />
 
                     <button
