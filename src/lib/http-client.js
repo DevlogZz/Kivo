@@ -10,10 +10,11 @@ export function sendGrpcRequest(payload) {
 
 function sanitizeRequestForSave(request) {
   const bodyType = String(request?.bodyType ?? "json");
+  const requestMode = String(request?.requestMode ?? "http");
 
   const sanitized = {
     name: String(request?.name ?? ""),
-    requestMode: String(request?.requestMode ?? "http"),
+    requestMode,
     pinned: Boolean(request?.pinned),
     method: String(request?.method ?? "GET"),
     url: String(request?.url ?? ""),
@@ -21,22 +22,6 @@ function sanitizeRequestForSave(request) {
     headers: Array.isArray(request?.headers) ? request.headers : [],
     auth: sanitizeAuthForSave(request?.auth),
     bodyType,
-    grpcProtoFilePath: String(request?.grpcProtoFilePath ?? ""),
-    grpcMethodPath: String(request?.grpcMethodPath ?? ""),
-    grpcStreamingMode: String(request?.grpcStreamingMode ?? "bidi"),
-    grpcDirectProtoFiles: Array.isArray(request?.grpcDirectProtoFiles)
-      ? request.grpcDirectProtoFiles.map((path) => String(path || "").trim()).filter(Boolean)
-      : [],
-    grpcProtoDirectories: Array.isArray(request?.grpcProtoDirectories)
-      ? request.grpcProtoDirectories
-        .map((group) => ({
-          path: String(group?.path || "").trim(),
-          files: Array.isArray(group?.files)
-            ? group.files.map((path) => String(path || "").trim()).filter(Boolean)
-            : []
-        }))
-        .filter((group) => group.path)
-      : [],
     docs: String(request?.docs ?? ""),
     activeEditorTab: String(request?.activeEditorTab ?? "Params"),
     activeResponseTab: String(request?.activeResponseTab ?? "Body"),
@@ -50,6 +35,25 @@ function sanitizeRequestForSave(request) {
     folderPath: String(request?.folderPath ?? ""),
     lastResponse: null
   };
+
+  if (requestMode === "grpc") {
+    sanitized.grpcProtoFilePath = String(request?.grpcProtoFilePath ?? "");
+    sanitized.grpcMethodPath = String(request?.grpcMethodPath ?? "");
+    sanitized.grpcStreamingMode = String(request?.grpcStreamingMode ?? "bidi");
+    sanitized.grpcDirectProtoFiles = Array.isArray(request?.grpcDirectProtoFiles)
+      ? request.grpcDirectProtoFiles.map((path) => String(path || "").trim()).filter(Boolean)
+      : [];
+    sanitized.grpcProtoDirectories = Array.isArray(request?.grpcProtoDirectories)
+      ? request.grpcProtoDirectories
+        .map((group) => ({
+          path: String(group?.path || "").trim(),
+          files: Array.isArray(group?.files)
+            ? group.files.map((path) => String(path || "").trim()).filter(Boolean)
+            : []
+        }))
+        .filter((group) => group.path)
+      : [];
+  }
 
   if (bodyType === "form-data" || bodyType === "form-urlencoded") {
     sanitized.bodyRows = Array.isArray(request?.bodyRows) ? request.bodyRows : [];

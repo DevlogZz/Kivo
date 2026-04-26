@@ -256,7 +256,7 @@ function SocketIoEventsPanel({
                     onClick={() => onSelectEvent(eventRow.id)}
                     className={cn(
                       "grid cursor-pointer grid-cols-[minmax(0,1.2fr)_132px_90px_88px_minmax(0,1fr)_44px] items-center gap-2 border-b border-border/15 bg-transparent px-3 py-2 transition-colors",
-                      isSelected ? "border-primary/45" : "hover:bg-transparent"
+                      isSelected ? "bg-white/[0.03]" : "hover:bg-transparent"
                     )}
                   >
                     <Input
