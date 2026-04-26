@@ -162,6 +162,13 @@ function SocketIoEventsPanel({
   onRemoveEvent,
   onUpdateEvent
 }) {
+  const modeOptions = [
+    { value: "both", label: "Emit + Listen" },
+    { value: "emit", label: "Emit only" },
+    { value: "listen", label: "Listen only" },
+    { value: "none", label: "Disabled mode" }
+  ];
+
   function getModeValue(event) {
     if (event.emit && event.listen) return "both";
     if (event.emit) return "emit";
@@ -207,20 +214,21 @@ function SocketIoEventsPanel({
             <div className="grid gap-2">
               <label className="text-[10px] uppercase tracking-[0.18em]">Ack Timeout (ms)</label>
               <Input
-                type="number"
-                min={0}
-                value={Number.isFinite(state.socketIoAckTimeoutMs) ? state.socketIoAckTimeoutMs : 0}
+                type="text"
+                inputMode="numeric"
+                value={Number.isFinite(state.socketIoAckTimeoutMs) ? String(state.socketIoAckTimeoutMs) : "0"}
                 onChange={(event) => {
-                  const value = Number.parseInt(event.target.value, 10);
+                  const digitsOnly = event.target.value.replace(/[^0-9]/g, "");
+                  const value = Number.parseInt(digitsOnly, 10);
                   onChange("socketIoAckTimeoutMs", Number.isFinite(value) && value >= 0 ? value : 0);
                 }}
-                className="h-10 max-w-[220px] border-border/40 bg-transparent"
+                className="h-10 max-w-[220px] border-border/40 bg-transparent [appearance:textfield]"
               />
             </div>
           </div>
 
           <div className="grid min-h-0 grid-rows-[auto_minmax(0,1fr)] border border-border/30 bg-transparent">
-            <div className="grid grid-cols-[minmax(0,1.2fr)_120px_90px_minmax(0,1fr)_44px] items-center gap-2 border-b border-border/20 px-3 py-2 text-[10px] uppercase tracking-[0.16em] text-muted-foreground">
+            <div className="grid grid-cols-[minmax(0,1.2fr)_132px_90px_88px_minmax(0,1fr)_44px] items-center gap-2 border-b border-border/20 px-3 py-2 text-[10px] uppercase tracking-[0.16em] text-muted-foreground">
               <div className="flex items-center gap-2">
                 <span>Events</span>
                 <button
@@ -234,6 +242,7 @@ function SocketIoEventsPanel({
               </div>
               <span>Mode</span>
               <span>Enabled</span>
+              <span>Payload</span>
               <span>Description</span>
               <span />
             </div>
@@ -244,42 +253,65 @@ function SocketIoEventsPanel({
                 return (
                   <div
                     key={eventRow.id}
+                    onClick={() => onSelectEvent(eventRow.id)}
                     className={cn(
-                      "grid grid-cols-[minmax(0,1.2fr)_120px_90px_minmax(0,1fr)_44px] items-center gap-2 border-b border-border/15 px-3 py-2",
-                      isSelected && "bg-card/50"
+                      "grid cursor-pointer grid-cols-[minmax(0,1.2fr)_132px_90px_88px_minmax(0,1fr)_44px] items-center gap-2 border-b border-border/15 bg-transparent px-3 py-2 transition-colors",
+                      isSelected ? "border-primary/45" : "hover:bg-transparent"
                     )}
                   >
                     <Input
                       value={eventRow.name || ""}
+                      onClick={(event) => event.stopPropagation()}
                       onFocus={() => onSelectEvent(eventRow.id)}
                       onChange={(event) => onUpdateEvent(eventRow.id, { name: event.target.value })}
                       placeholder="event_name"
                       className="h-8 border-border/30 bg-transparent"
                     />
 
-                    <select
+                    <div onClick={(event) => event.stopPropagation()}>
+                      <SelectMenu
                       value={getModeValue(eventRow)}
-                      onFocus={() => onSelectEvent(eventRow.id)}
-                      onChange={(event) => applyMode(eventRow.id, event.target.value)}
-                      className="h-8 border border-border/30 bg-transparent px-2 text-[11px] text-foreground outline-none"
-                    >
-                      <option value="both">Emit + Listen</option>
-                      <option value="emit">Emit only</option>
-                      <option value="listen">Listen only</option>
-                      <option value="none">Disabled mode</option>
-                    </select>
+                      options={modeOptions}
+                      onChange={(value) => {
+                        onSelectEvent(eventRow.id);
+                        applyMode(eventRow.id, value);
+                      }}
+                      className="w-full"
+                      buttonClassName="h-8 px-2 text-[11px]"
+                    />
+                    </div>
 
-                    <label className="flex items-center justify-center gap-2 text-[11px] text-foreground">
+                    <label className="flex items-center justify-center gap-2 text-[11px] text-foreground" onClick={(event) => event.stopPropagation()}>
                       <input
                         type="checkbox"
                         className="h-4 w-4 accent-primary"
                         checked={eventRow.enabled ?? true}
-                        onChange={(event) => onUpdateEvent(eventRow.id, { enabled: event.target.checked })}
+                        onChange={(event) => {
+                          onSelectEvent(eventRow.id);
+                          onUpdateEvent(eventRow.id, { enabled: event.target.checked });
+                        }}
                       />
                     </label>
 
+                    <button
+                      type="button"
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        onSelectEvent(eventRow.id);
+                      }}
+                      className={cn(
+                        "h-8 border px-2 text-[11px] uppercase tracking-[0.12em]",
+                        isSelected
+                          ? "border-primary/60 bg-primary/20 text-primary"
+                          : "border-border/30 bg-transparent text-muted-foreground hover:text-foreground"
+                      )}
+                    >
+                      Use
+                    </button>
+
                     <Input
                       value={eventRow.description || ""}
+                      onClick={(event) => event.stopPropagation()}
                       onFocus={() => onSelectEvent(eventRow.id)}
                       onChange={(event) => onUpdateEvent(eventRow.id, { description: event.target.value })}
                       placeholder="Description"
@@ -289,7 +321,10 @@ function SocketIoEventsPanel({
                     <button
                       type="button"
                       className="inline-flex h-8 w-8 items-center justify-center text-muted-foreground hover:text-red-300"
-                      onClick={() => onRemoveEvent(eventRow.id)}
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        onRemoveEvent(eventRow.id);
+                      }}
                       title="Remove event"
                     >
                       <Trash2 className="h-4 w-4" />
@@ -1552,7 +1587,10 @@ export function RequestPane({
     const eventRow = createSocketIoEventRow(`event_${socketIoEvents.length + 1}`);
     const nextEvents = [...socketIoEvents, eventRow];
     onChange("socketIoEvents", nextEvents);
-    handleSocketIoSelectEvent(eventRow.id);
+    onChange("socketIoSelectedEventId", eventRow.id);
+    onChange("socketIoEventName", String(eventRow.name || "message"));
+    onChange("bodyType", eventRow.payloadType === "text" ? "text" : "json");
+    onChange("body", String(eventRow.payload ?? ""));
   }
 
   function handleSocketIoRemoveEvent(eventId) {
@@ -1562,12 +1600,19 @@ export function RequestPane({
     if (nextEvents.length === 0) {
       const defaultEvent = createSocketIoEventRow("message");
       onChange("socketIoEvents", [defaultEvent]);
-      handleSocketIoSelectEvent(defaultEvent.id);
+      onChange("socketIoSelectedEventId", defaultEvent.id);
+      onChange("socketIoEventName", String(defaultEvent.name || "message"));
+      onChange("bodyType", defaultEvent.payloadType === "text" ? "text" : "json");
+      onChange("body", String(defaultEvent.payload ?? ""));
       return;
     }
 
     if (String(state.socketIoSelectedEventId || "") === eventId) {
-      handleSocketIoSelectEvent(nextEvents[0].id);
+      const nextSelected = nextEvents[0];
+      onChange("socketIoSelectedEventId", nextSelected.id);
+      onChange("socketIoEventName", String(nextSelected.name || "message"));
+      onChange("bodyType", nextSelected.payloadType === "text" ? "text" : "json");
+      onChange("body", String(nextSelected.payload ?? ""));
     }
   }
 
