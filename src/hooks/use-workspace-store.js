@@ -746,18 +746,25 @@ export function useWorkspaceStore() {
       });
       sseConnectionsRef.current.set(requestKey, source);
 
-      source.onopen = () => {
-        updateWsState(requestKey, {
-          connecting: false,
-          connected: true,
-          error: "",
-          lastEventAt: formatSavedAt()
-        });
-        setRequestLocalMessage(workspaceName, collectionName, requestName, requestMethod, finalUrl, `Connected to SSE stream at ${finalUrl}`, "Connected");
-      };
+      const urlEventNames = (() => {
+        try {
+          const parsed = new URL(finalUrl);
+          const values = parsed.searchParams.getAll("event")
+            .map((value) => String(value || "").trim())
+            .filter(Boolean);
+          return Array.from(new Set(values));
+        } catch {
+          return [];
+        }
+      })();
 
-      source.onmessage = (event) => {
-        const message = String(event?.data ?? "");
+      const handleSseData = (event, fallbackType = "message") => {
+        const eventType = String(event?.type || fallbackType || "message");
+        const rawMessage = String(event?.data ?? "");
+        const message = eventType === "message"
+          ? rawMessage
+          : JSON.stringify({ event: eventType, data: rawMessage }, null, 2);
+
         setWsStates((current) => ({
           ...current,
           [requestKey]: {
@@ -772,7 +779,62 @@ export function useWorkspaceStore() {
         setRequestLocalMessage(workspaceName, collectionName, requestName, requestMethod, finalUrl, message, "Event received");
       };
 
+      let sseStreamCompleted = false;
+
+      source.onopen = () => {
+        updateWsState(requestKey, {
+          connecting: false,
+          connected: true,
+          error: "",
+          lastEventAt: formatSavedAt()
+        });
+        setRequestLocalMessage(workspaceName, collectionName, requestName, requestMethod, finalUrl, `Connected to SSE stream at ${finalUrl}`, "Connected");
+      };
+
+      source.onmessage = (event) => {
+        handleSseData(event, "message");
+      };
+
+      urlEventNames.forEach((eventName) => {
+        source.addEventListener(eventName, (event) => {
+          handleSseData(event, eventName);
+        });
+      });
+
+      source.addEventListener("complete", (event) => {
+        handleSseData(event, "complete");
+        sseStreamCompleted = true;
+        try {
+          source.close();
+        } catch {
+        }
+        sseConnectionsRef.current.delete(requestKey);
+        updateWsState(requestKey, {
+          connecting: false,
+          connected: false,
+          error: "",
+          lastEventAt: formatSavedAt()
+        });
+        setRequestLocalMessage(workspaceName, collectionName, requestName, requestMethod, finalUrl, "SSE stream completed.", "Completed");
+      });
+
       source.onerror = () => {
+        if (sseStreamCompleted) {
+          return;
+        }
+
+        if (source.readyState === EventSource.CLOSED) {
+          sseConnectionsRef.current.delete(requestKey);
+          updateWsState(requestKey, {
+            connecting: false,
+            connected: false,
+            error: "",
+            lastEventAt: formatSavedAt()
+          });
+          setRequestLocalMessage(workspaceName, collectionName, requestName, requestMethod, finalUrl, "SSE stream completed.", "Completed");
+          return;
+        }
+
         updateWsState(requestKey, {
           connecting: false,
           connected: false,
