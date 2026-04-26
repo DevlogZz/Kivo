@@ -193,7 +193,10 @@ pub struct RequestRecord {
     pub grpc_proto_file_path: String,
     #[serde(default, skip_serializing_if = "String::is_empty")]
     pub grpc_method_path: String,
-    #[serde(default = "default_grpc_streaming_mode")]
+    #[serde(
+        default = "default_grpc_streaming_mode",
+        skip_serializing_if = "is_default_grpc_streaming_mode"
+    )]
     pub grpc_streaming_mode: String,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub grpc_direct_proto_files: Vec<String>,
@@ -433,6 +436,10 @@ pub fn default_request_mode() -> String {
 
 pub fn default_grpc_streaming_mode() -> String {
     "bidi".to_string()
+}
+
+pub fn is_default_grpc_streaming_mode(value: &String) -> bool {
+    value == "bidi"
 }
 
 pub fn default_auth_record() -> AuthRecord {
