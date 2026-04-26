@@ -146,6 +146,31 @@ function RequestSettingsPanel({ state, onChange }) {
   );
 }
 
+function buildResponseErrorTrace(response, fallbackTitle = "Request failed") {
+  const status = Number(response?.status || 0);
+  const badge = String(response?.badge || response?.statusText || "").trim();
+  const savedAt = String(response?.savedAt || "").trim();
+  const method = String(response?.meta?.method || "").trim();
+  const url = String(response?.meta?.url || "").trim();
+  const headers = response?.headers && typeof response.headers === "object" ? response.headers : {};
+  const body = String(response?.rawBody || response?.body || "").trim();
+
+  const lines = [
+    `Error: ${fallbackTitle || "Request failed"}`,
+    status ? `Status: ${status}${badge ? ` (${badge})` : ""}` : (badge ? `Status: ${badge}` : "Status: Unknown"),
+    method || url ? `Request: ${[method || "?", url || "-"].join(" ")}` : "Request: -",
+    savedAt ? `Time: ${savedAt}` : "Time: -",
+    "",
+    "Headers:",
+    Object.keys(headers).length ? JSON.stringify(headers, null, 2) : "(none)",
+    "",
+    "Body:",
+    body || "(empty)"
+  ];
+
+  return lines.join("\n");
+}
+
 function GrpcHeadersPanel({ headers, onHeadersChange }) {
   const systemHeaders = [
     { key: "content-type", value: "application/grpc" },
@@ -1023,9 +1048,9 @@ export function RequestPane({
     seenErrorKeyRef.current = key;
     const firstLine = bodyText.split(/\r?\n/)[0] || response?.statusText || "Request failed";
     setSendErrorTitle(firstLine);
-    setSendErrorTrace(bodyText || firstLine);
+    setSendErrorTrace(buildResponseErrorTrace(response, firstLine));
     setShowSendErrorModal(true);
-  }, [response?.status, response?.savedAt, response?.rawBody, response?.body, response?.statusText]);
+  }, [response?.status, response?.savedAt, response?.rawBody, response?.body, response?.statusText, response?.badge, response?.headers, response?.meta]);
 
   useEffect(() => {
     if (!isGrpcRequest) return;

@@ -239,6 +239,28 @@ function getRequestBaseNameByMode(mode) {
   }
 }
 
+function getRequestBadgeMeta(request) {
+  const mode = request?.requestMode ?? REQUEST_MODES.HTTP;
+  switch (mode) {
+    case REQUEST_MODES.GRAPHQL:
+      return { label: "GQL", tone: "text-fuchsia-300" };
+    case REQUEST_MODES.GRPC:
+      return { label: "gRPC", tone: "text-cyan-300" };
+    case REQUEST_MODES.WEBSOCKET:
+      return { label: "WS", tone: "text-amber-300" };
+    case REQUEST_MODES.SOCKET_IO:
+      return { label: "SIO", tone: "text-orange-300" };
+    case REQUEST_MODES.SSE:
+      return { label: "SSE", tone: "text-emerald-300" };
+    case REQUEST_MODES.HTTP:
+    default:
+      return {
+        label: String(request?.method || "GET").toUpperCase(),
+        tone: getMethodTone(request?.method || "GET").split(" ")[0]
+      };
+  }
+}
+
 function FolderContextMenu({ menu, onCreateRequest, onCreateFolder, onOpenSettings, onCopyFolder, onPasteIntoFolder, onRevealFolder, onRename, onDelete, onClose, canPaste }) {
   useEffect(() => {
     if (!menu) return;
@@ -1613,6 +1635,7 @@ export function RequestsView({
                         function renderRequestRow(req, reqIdx) {
                           const isReqEditing = editingItemId === `req:${col.name}:${req.name}`;
                           const isReqActive = req.name === activeRequestName && col.name === activeCollectionName;
+                          const badge = getRequestBadgeMeta(req);
                           return (
                             <div key={`req-${col.name}-${req.name}-${reqIdx}`}>
                               {isReqEditing ? (
@@ -1638,7 +1661,7 @@ export function RequestsView({
                                   onContextMenu={(e) => openRequestContextMenu(e, effectiveWorkspaceName, col.name, req)}
                                 >
                                   <div className="flex min-w-0 flex-1 items-center gap-2 text-left">
-                                    <span className={cn("text-[10px] font-bold uppercase w-8 shrink-0", getMethodTone(req.method).split(" ")[0])}>{req.method}</span>
+                                    <span className={cn("text-[10px] font-bold uppercase w-8 shrink-0", badge.tone)}>{badge.label}</span>
                                     {req.pinned && <Pin className="h-3 w-3 text-primary shrink-0" />}
                                     <span className="truncate">{req.name}</span>
                                   </div>
