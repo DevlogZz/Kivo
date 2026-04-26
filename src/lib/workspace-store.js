@@ -18,6 +18,17 @@ export const REQUEST_MODE_OPTIONS = [
   { value: REQUEST_MODES.SOCKET_IO, label: "Socket.IO Request" }
 ];
 
+export const DEFAULT_USER_AGENT_VALUE = "kivo/0.4.1";
+
+function withDefaultUserAgent(headers = []) {
+  const normalized = Array.isArray(headers) ? headers.map((row) => ({ ...row })) : [];
+  const hasUserAgent = normalized.some((row) => String(row?.key || "").trim().toLowerCase() === "user-agent");
+  if (hasUserAgent) {
+    return normalized;
+  }
+  return [...normalized, { key: "User-Agent", value: DEFAULT_USER_AGENT_VALUE, enabled: true }];
+}
+
 function createSocketIoEvent(name = "message") {
   return {
     id: `sio-${Math.random().toString(36).slice(2, 10)}`,
@@ -40,7 +51,8 @@ function getRequestModeTemplate(mode) {
         bodyType: "graphql",
         body: "",
         graphqlVariables: "{\n\n}",
-        activeEditorTab: "Body"
+        activeEditorTab: "Body",
+        headers: withDefaultUserAgent([])
       };
     case REQUEST_MODES.SSE:
       return {
@@ -50,20 +62,21 @@ function getRequestModeTemplate(mode) {
         sseWithCredentials: false,
         sseLastEventId: "",
         sseRetryMs: 3000,
-        headers: [{ key: "Accept", value: "text/event-stream", enabled: true }]
+        headers: withDefaultUserAgent([{ key: "Accept", value: "text/event-stream", enabled: true }])
       };
     case REQUEST_MODES.GRPC:
       return {
         method: "POST",
         bodyType: "json",
         activeEditorTab: "Body",
-        headers: [{ key: "Content-Type", value: "application/grpc", enabled: true }]
+        headers: withDefaultUserAgent([{ key: "Content-Type", value: "application/grpc", enabled: true }])
       };
     case REQUEST_MODES.WEBSOCKET:
       return {
         method: "GET",
         bodyType: "json",
-        activeEditorTab: "Body"
+        activeEditorTab: "Body",
+        headers: withDefaultUserAgent([])
       };
     case REQUEST_MODES.SOCKET_IO:
       {
@@ -77,14 +90,16 @@ function getRequestModeTemplate(mode) {
         socketIoNamespace: "/",
         socketIoAckTimeoutMs: 0,
         socketIoEvents: [defaultEvent],
-        socketIoSelectedEventId: defaultEvent.id
+        socketIoSelectedEventId: defaultEvent.id,
+        headers: withDefaultUserAgent([])
       };
       }
     case REQUEST_MODES.HTTP:
     default:
       return {
         method: "GET",
-        bodyType: "json"
+        bodyType: "json",
+        headers: withDefaultUserAgent([])
       };
   }
 }
@@ -310,7 +325,7 @@ export function normalizeRequestRecord(request) {
     pinned: Boolean(request?.pinned),
     inheritHeaders: request?.inheritHeaders ?? true,
     queryParams: Array.isArray(request?.queryParams) ? request.queryParams : [],
-    headers: Array.isArray(request?.headers) ? request.headers : [],
+    headers: withDefaultUserAgent(Array.isArray(request?.headers) ? request.headers : []),
     body: normalizedBody,
     bodyRows: Array.isArray(request?.bodyRows) ? request.bodyRows : [],
     bodyFilePath: typeof request?.bodyFilePath === "string" ? request.bodyFilePath : "",

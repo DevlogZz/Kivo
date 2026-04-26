@@ -25,6 +25,8 @@ use super::models::{
 };
 use crate::storage::{get_collection_dir, get_storage_root, load_collection_config_from_path, load_env_vars};
 
+const DEFAULT_USER_AGENT: &str = concat!("kivo/", env!("CARGO_PKG_VERSION"));
+
 #[derive(Clone)]
 struct DynamicCodec {
     input: prost_reflect::MessageDescriptor,
@@ -319,7 +321,7 @@ fn build_headers(headers: &HashMap<String, String>) -> Result<HeaderMap, String>
     }
 
     if !header_map.contains_key(USER_AGENT) {
-        header_map.insert(USER_AGENT, HeaderValue::from_static("kivo/0.3"));
+        header_map.insert(USER_AGENT, HeaderValue::from_static(DEFAULT_USER_AGENT));
     }
 
     Ok(header_map)
@@ -502,6 +504,9 @@ pub async fn send_grpc_request(
 
     let mut endpoint = Endpoint::from_shared(target.clone())
         .map_err(|err| format!("Invalid gRPC endpoint: {err}"))?;
+    endpoint = endpoint
+        .user_agent(DEFAULT_USER_AGENT)
+        .map_err(|err| format!("Failed to set gRPC user-agent: {err}"))?;
     endpoint = endpoint.connect_timeout(Duration::from_secs(10));
     endpoint = endpoint.timeout(Duration::from_secs(45));
 
@@ -742,7 +747,7 @@ pub async fn oauth_exchange_token(
     let mut request = client
         .post(&token_url)
         .header(ACCEPT, "application/json")
-        .header(USER_AGENT, "kivo/0.3")
+        .header(USER_AGENT, DEFAULT_USER_AGENT)
         .header(CONTENT_TYPE, "application/x-www-form-urlencoded");
 
     if use_basic_auth {
@@ -788,7 +793,7 @@ pub async fn oauth_exchange_token(
         let mut retry_request = client
             .post(&token_url)
             .header(ACCEPT, "application/json")
-            .header(USER_AGENT, "kivo/0.3")
+            .header(USER_AGENT, DEFAULT_USER_AGENT)
             .header(CONTENT_TYPE, "application/x-www-form-urlencoded");
 
         if use_basic_auth {

@@ -17,6 +17,7 @@ import { EnvHighlightInput } from "@/components/ui/EnvHighlightInput.jsx";
 
 const tabs = ["Params", "Body", "Auth", "Headers", "Docs", "Settings"];
 const requestMethods = ["GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS"];
+const DEFAULT_USER_AGENT_VALUE = "kivo/0.4.1";
 const webSocketBodyModes = [
   { value: "json", label: "JSON" },
   { value: "text", label: "Raw" }
@@ -88,7 +89,8 @@ function buildSocketIoPreviewUrl(rawUrl, queryParams = []) {
 function SseHeadersPanel({ headers, onHeadersChange }) {
   const systemHeaders = [
     { key: "Accept", value: "text/event-stream" },
-    { key: "Cache-Control", value: "no-cache" }
+    { key: "Cache-Control", value: "no-cache" },
+    { key: "User-Agent", value: `${DEFAULT_USER_AGENT_VALUE} (runtime)` }
   ];
 
   return (
@@ -122,7 +124,8 @@ function SocketIoHeadersPanel({ headers, onHeadersChange }) {
   const systemHeaders = [
     { key: "Connection", value: "Upgrade" },
     { key: "Upgrade", value: "websocket" },
-    { key: "Sec-WebSocket-Version", value: "13" }
+    { key: "Sec-WebSocket-Version", value: "13" },
+    { key: "User-Agent", value: `${DEFAULT_USER_AGENT_VALUE} (runtime)` }
   ];
 
   return (
@@ -562,7 +565,8 @@ function buildResponseErrorTrace(response, fallbackTitle = "Request failed") {
 function GrpcHeadersPanel({ headers, onHeadersChange }) {
   const systemHeaders = [
     { key: "content-type", value: "application/grpc" },
-    { key: "te", value: "trailers" }
+    { key: "te", value: "trailers" },
+    { key: "user-agent", value: `${DEFAULT_USER_AGENT_VALUE} (runtime)` }
   ];
 
   return (
@@ -760,7 +764,8 @@ function WebSocketHeadersPanel({ headers, onHeadersChange }) {
     { key: "Upgrade", value: "websocket" },
     { key: "Sec-WebSocket-Key", value: "<calculated at runtime>" },
     { key: "Sec-WebSocket-Version", value: "13" },
-    { key: "Sec-WebSocket-Extensions", value: "permessage-deflate; client_max_window_bits" }
+    { key: "Sec-WebSocket-Extensions", value: "permessage-deflate; client_max_window_bits" },
+    { key: "User-Agent", value: `${DEFAULT_USER_AGENT_VALUE} (runtime)` }
   ];
 
   return (
