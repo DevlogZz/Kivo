@@ -138,48 +138,172 @@ function SseOptionsPanel({ state, onChange }) {
   );
 }
 
-function SocketIoEventsPanel({ state, onChange }) {
+function createSocketIoEventRow(name = "message") {
+  return {
+    id: `sio-${Math.random().toString(36).slice(2, 10)}`,
+    name,
+    enabled: true,
+    listen: true,
+    emit: true,
+    description: "",
+    payloadType: "json",
+    payload: "{\n\n}",
+    ackTimeoutMs: null
+  };
+}
+
+function SocketIoEventsPanel({
+  state,
+  events,
+  selectedEventId,
+  onChange,
+  onSelectEvent,
+  onAddEvent,
+  onRemoveEvent,
+  onUpdateEvent
+}) {
+  function getModeValue(event) {
+    if (event.emit && event.listen) return "both";
+    if (event.emit) return "emit";
+    if (event.listen) return "listen";
+    return "none";
+  }
+
+  function applyMode(eventId, value) {
+    if (value === "both") {
+      onUpdateEvent(eventId, { emit: true, listen: true });
+      return;
+    }
+    if (value === "emit") {
+      onUpdateEvent(eventId, { emit: true, listen: false });
+      return;
+    }
+    if (value === "listen") {
+      onUpdateEvent(eventId, { emit: false, listen: true });
+      return;
+    }
+    onUpdateEvent(eventId, { emit: false, listen: false });
+  }
+
   return (
     <div className="h-full min-h-0 overflow-hidden text-[12px] text-muted-foreground">
       <div className="h-full thin-scrollbar overflow-auto px-3 py-3">
-        <div className="grid max-w-[640px] gap-4">
+        <div className="grid gap-4">
           <div className="grid gap-2 border border-border/30 bg-transparent p-3">
-            <div className="text-[12px] font-medium text-foreground">Socket.IO Event Settings</div>
-            <p className="text-[11px] text-muted-foreground">Configure event name and namespace used for outgoing packets.</p>
+            <div className="text-[12px] font-medium text-foreground">Socket.IO Defaults</div>
+            <p className="text-[11px] text-muted-foreground">These defaults are used for all events unless overridden in a row.</p>
           </div>
 
-          <div className="grid gap-2">
-            <label className="text-[10px] uppercase tracking-[0.18em]">Event Name</label>
-            <Input
-              value={state.socketIoEventName ?? "message"}
-              onChange={(event) => onChange("socketIoEventName", event.target.value)}
-              placeholder="message"
-              className="h-10 max-w-[320px] border-border/40 bg-transparent"
-            />
+          <div className="grid gap-3 lg:grid-cols-2">
+            <div className="grid gap-2">
+              <label className="text-[10px] uppercase tracking-[0.18em]">Namespace</label>
+              <Input
+                value={state.socketIoNamespace ?? "/"}
+                onChange={(event) => onChange("socketIoNamespace", event.target.value)}
+                placeholder="/"
+                className="h-10 max-w-[320px] border-border/40 bg-transparent"
+              />
+            </div>
+            <div className="grid gap-2">
+              <label className="text-[10px] uppercase tracking-[0.18em]">Ack Timeout (ms)</label>
+              <Input
+                type="number"
+                min={0}
+                value={Number.isFinite(state.socketIoAckTimeoutMs) ? state.socketIoAckTimeoutMs : 0}
+                onChange={(event) => {
+                  const value = Number.parseInt(event.target.value, 10);
+                  onChange("socketIoAckTimeoutMs", Number.isFinite(value) && value >= 0 ? value : 0);
+                }}
+                className="h-10 max-w-[220px] border-border/40 bg-transparent"
+              />
+            </div>
           </div>
 
-          <div className="grid gap-2">
-            <label className="text-[10px] uppercase tracking-[0.18em]">Namespace</label>
-            <Input
-              value={state.socketIoNamespace ?? "/"}
-              onChange={(event) => onChange("socketIoNamespace", event.target.value)}
-              placeholder="/"
-              className="h-10 max-w-[320px] border-border/40 bg-transparent"
-            />
-          </div>
+          <div className="grid min-h-0 grid-rows-[auto_minmax(0,1fr)] border border-border/30 bg-transparent">
+            <div className="grid grid-cols-[minmax(0,1.2fr)_120px_90px_minmax(0,1fr)_44px] items-center gap-2 border-b border-border/20 px-3 py-2 text-[10px] uppercase tracking-[0.16em] text-muted-foreground">
+              <div className="flex items-center gap-2">
+                <span>Events</span>
+                <button
+                  type="button"
+                  className="inline-flex h-5 w-5 items-center justify-center border border-border/40 text-foreground hover:bg-card/50"
+                  onClick={onAddEvent}
+                  title="Add event row"
+                >
+                  <Plus className="h-3 w-3" />
+                </button>
+              </div>
+              <span>Mode</span>
+              <span>Enabled</span>
+              <span>Description</span>
+              <span />
+            </div>
 
-          <div className="grid gap-2">
-            <label className="text-[10px] uppercase tracking-[0.18em]">Ack Timeout (ms)</label>
-            <Input
-              type="number"
-              min={0}
-              value={Number.isFinite(state.socketIoAckTimeoutMs) ? state.socketIoAckTimeoutMs : 0}
-              onChange={(event) => {
-                const value = Number.parseInt(event.target.value, 10);
-                onChange("socketIoAckTimeoutMs", Number.isFinite(value) && value >= 0 ? value : 0);
-              }}
-              className="h-10 max-w-[220px] border-border/40 bg-transparent"
-            />
+            <div className="thin-scrollbar min-h-[180px] overflow-auto">
+              {events.map((eventRow) => {
+                const isSelected = eventRow.id === selectedEventId;
+                return (
+                  <div
+                    key={eventRow.id}
+                    className={cn(
+                      "grid grid-cols-[minmax(0,1.2fr)_120px_90px_minmax(0,1fr)_44px] items-center gap-2 border-b border-border/15 px-3 py-2",
+                      isSelected && "bg-card/50"
+                    )}
+                  >
+                    <Input
+                      value={eventRow.name || ""}
+                      onFocus={() => onSelectEvent(eventRow.id)}
+                      onChange={(event) => onUpdateEvent(eventRow.id, { name: event.target.value })}
+                      placeholder="event_name"
+                      className="h-8 border-border/30 bg-transparent"
+                    />
+
+                    <select
+                      value={getModeValue(eventRow)}
+                      onFocus={() => onSelectEvent(eventRow.id)}
+                      onChange={(event) => applyMode(eventRow.id, event.target.value)}
+                      className="h-8 border border-border/30 bg-transparent px-2 text-[11px] text-foreground outline-none"
+                    >
+                      <option value="both">Emit + Listen</option>
+                      <option value="emit">Emit only</option>
+                      <option value="listen">Listen only</option>
+                      <option value="none">Disabled mode</option>
+                    </select>
+
+                    <label className="flex items-center justify-center gap-2 text-[11px] text-foreground">
+                      <input
+                        type="checkbox"
+                        className="h-4 w-4 accent-primary"
+                        checked={eventRow.enabled ?? true}
+                        onChange={(event) => onUpdateEvent(eventRow.id, { enabled: event.target.checked })}
+                      />
+                    </label>
+
+                    <Input
+                      value={eventRow.description || ""}
+                      onFocus={() => onSelectEvent(eventRow.id)}
+                      onChange={(event) => onUpdateEvent(eventRow.id, { description: event.target.value })}
+                      placeholder="Description"
+                      className="h-8 border-border/30 bg-transparent"
+                    />
+
+                    <button
+                      type="button"
+                      className="inline-flex h-8 w-8 items-center justify-center text-muted-foreground hover:text-red-300"
+                      onClick={() => onRemoveEvent(eventRow.id)}
+                      title="Remove event"
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </button>
+                  </div>
+                );
+              })}
+
+              {events.length === 0 ? (
+                <div className="px-3 py-3 text-[12px] text-muted-foreground">
+                  No events configured. Add one to emit/listen.
+                </div>
+              ) : null}
+            </div>
           </div>
         </div>
       </div>
@@ -1115,6 +1239,15 @@ export function RequestPane({
     return Array.from(new Set([...grpcDirectProtoFiles, ...fromDirectories]));
   }, [grpcDirectProtoFiles, grpcProtoDirectories]);
   const grpcSelectedProtoFileName = getPathFileName(state.grpcProtoFilePath);
+  const socketIoEvents = useMemo(
+    () => (Array.isArray(state.socketIoEvents) ? state.socketIoEvents : []),
+    [state.socketIoEvents]
+  );
+  const selectedSocketIoEvent = useMemo(() => {
+    if (!isSocketIoRequest) return null;
+    const selectedId = String(state.socketIoSelectedEventId || "");
+    return socketIoEvents.find((event) => event.id === selectedId) || socketIoEvents[0] || null;
+  }, [isSocketIoRequest, socketIoEvents, state.socketIoSelectedEventId]);
 
   useEffect(() => {
     const requestKey = `${workspaceName || ""}::${collectionName || ""}::${state.name || ""}`;
@@ -1152,6 +1285,45 @@ export function RequestPane({
       onChange("bodyType", "json");
     }
   }, [activeTab, isSocketIoRequest, onChange, onTabChange, state.bodyType, visibleTabs]);
+
+  useEffect(() => {
+    if (!isSocketIoRequest) return;
+    if (socketIoEvents.length === 0) {
+      const defaultEvent = createSocketIoEventRow(String(state.socketIoEventName || "message").trim() || "message");
+      onChange("socketIoEvents", [defaultEvent]);
+      onChange("socketIoSelectedEventId", defaultEvent.id);
+      onChange("socketIoEventName", defaultEvent.name);
+      onChange("bodyType", defaultEvent.payloadType);
+      onChange("body", defaultEvent.payload);
+      return;
+    }
+
+    if (!selectedSocketIoEvent) return;
+
+    if (String(state.socketIoSelectedEventId || "") !== selectedSocketIoEvent.id) {
+      onChange("socketIoSelectedEventId", selectedSocketIoEvent.id);
+    }
+    if (String(state.socketIoEventName || "") !== String(selectedSocketIoEvent.name || "")) {
+      onChange("socketIoEventName", String(selectedSocketIoEvent.name || "message"));
+    }
+
+    const selectedPayloadType = selectedSocketIoEvent.payloadType === "text" ? "text" : "json";
+    if (state.bodyType !== selectedPayloadType) {
+      onChange("bodyType", selectedPayloadType);
+    }
+    if (String(state.body ?? "") !== String(selectedSocketIoEvent.payload ?? "")) {
+      onChange("body", String(selectedSocketIoEvent.payload ?? ""));
+    }
+  }, [
+    isSocketIoRequest,
+    onChange,
+    selectedSocketIoEvent,
+    socketIoEvents,
+    state.body,
+    state.bodyType,
+    state.socketIoEventName,
+    state.socketIoSelectedEventId
+  ]);
 
   useEffect(() => {
     if (!isSseRequest) return;
@@ -1326,6 +1498,17 @@ export function RequestPane({
     if (textBodyTypes.includes(bodyType)) {
       const nextBody = typeof bodyCacheRef.current[bodyType] === "string" ? bodyCacheRef.current[bodyType] : "";
       onChange("body", nextBody);
+
+      if (isSocketIoRequest && selectedSocketIoEvent) {
+        handleSocketIoUpdateEvent(selectedSocketIoEvent.id, {
+          payloadType: bodyType === "text" ? "text" : "json",
+          payload: nextBody
+        });
+      }
+    } else if (isSocketIoRequest && selectedSocketIoEvent) {
+      handleSocketIoUpdateEvent(selectedSocketIoEvent.id, {
+        payloadType: bodyType === "text" ? "text" : "json"
+      });
     }
 
     if (bodyType !== "graphql") {
@@ -1334,6 +1517,64 @@ export function RequestPane({
     if (bodyType !== "file") {
       onChange("bodyFilePath", "");
     }
+  }
+
+  function handleSocketIoSelectEvent(eventId) {
+    if (!isSocketIoRequest) return;
+    const selected = socketIoEvents.find((event) => event.id === eventId);
+    if (!selected) return;
+    onChange("socketIoSelectedEventId", eventId);
+    onChange("socketIoEventName", String(selected.name || "message"));
+    onChange("bodyType", selected.payloadType === "text" ? "text" : "json");
+    onChange("body", String(selected.payload ?? ""));
+  }
+
+  function handleSocketIoUpdateEvent(eventId, patch) {
+    const nextEvents = socketIoEvents.map((eventRow) => {
+      if (eventRow.id !== eventId) return eventRow;
+      const next = { ...eventRow, ...patch };
+      const normalizedName = String(next.name || "").trim() || "message";
+      return { ...next, name: normalizedName };
+    });
+
+    onChange("socketIoEvents", nextEvents);
+
+    const selectedId = String(state.socketIoSelectedEventId || "");
+    if (selectedId !== eventId) return;
+    const selected = nextEvents.find((eventRow) => eventRow.id === eventId);
+    if (!selected) return;
+    onChange("socketIoEventName", selected.name);
+    onChange("bodyType", selected.payloadType === "text" ? "text" : "json");
+    onChange("body", String(selected.payload ?? ""));
+  }
+
+  function handleSocketIoAddEvent() {
+    const eventRow = createSocketIoEventRow(`event_${socketIoEvents.length + 1}`);
+    const nextEvents = [...socketIoEvents, eventRow];
+    onChange("socketIoEvents", nextEvents);
+    handleSocketIoSelectEvent(eventRow.id);
+  }
+
+  function handleSocketIoRemoveEvent(eventId) {
+    const nextEvents = socketIoEvents.filter((eventRow) => eventRow.id !== eventId);
+    onChange("socketIoEvents", nextEvents);
+
+    if (nextEvents.length === 0) {
+      const defaultEvent = createSocketIoEventRow("message");
+      onChange("socketIoEvents", [defaultEvent]);
+      handleSocketIoSelectEvent(defaultEvent.id);
+      return;
+    }
+
+    if (String(state.socketIoSelectedEventId || "") === eventId) {
+      handleSocketIoSelectEvent(nextEvents[0].id);
+    }
+  }
+
+  function handleSocketIoBodyChange(value) {
+    onChange("body", value);
+    if (!selectedSocketIoEvent) return;
+    handleSocketIoUpdateEvent(selectedSocketIoEvent.id, { payload: value });
   }
 
   async function handleBodyFileBrowse() {
@@ -1715,7 +1956,7 @@ export function RequestPane({
                 />
                 <div className="flex items-center gap-1 border border-border/25 bg-transparent px-2.5 py-1.5 uppercase tracking-[0.14em]">
                   <Braces className="h-3 w-3" />
-                  <span>{isWebSocketRequest ? "WebSocket Message" : isSocketIoRequest ? "Socket.IO Payload" : (isGraphqlBody ? "GraphQL Request" : isTableBody ? "Form Request" : isFileBody ? "Binary/File Upload" : isJsonBody ? "JSON Highlight" : "Plain Editor")}</span>
+                  <span>{isWebSocketRequest ? "WebSocket Message" : isSocketIoRequest ? `Socket.IO Payload${selectedSocketIoEvent ? ` · ${selectedSocketIoEvent.name}` : ""}` : (isGraphqlBody ? "GraphQL Request" : isTableBody ? "Form Request" : isFileBody ? "Binary/File Upload" : isJsonBody ? "JSON Highlight" : "Plain Editor")}</span>
                 </div>
               </div>
               {isWebSocketRequest || isSocketIoRequest ? (
@@ -1778,7 +2019,7 @@ export function RequestPane({
             {!isTableBody && !isGraphqlBody && !isFileBody ? (
               <CodeEditor
                 value={state.body}
-                onChange={(value) => onChange("body", value)}
+                onChange={(value) => (isSocketIoRequest ? handleSocketIoBodyChange(value) : onChange("body", value))}
                 placeholder={isJsonBody ? '{\n  "name": "Kivo"\n}' : "Enter request body..."}
                 language={isJsonBody ? "json" : "text"}
                 disabled={bodyDisabled}
@@ -1789,7 +2030,16 @@ export function RequestPane({
         ) : null}
 
         {activeTab === "Events" && isSocketIoRequest ? (
-          <SocketIoEventsPanel state={state} onChange={onChange} />
+          <SocketIoEventsPanel
+            state={state}
+            events={socketIoEvents}
+            selectedEventId={selectedSocketIoEvent?.id || ""}
+            onChange={onChange}
+            onSelectEvent={handleSocketIoSelectEvent}
+            onAddEvent={handleSocketIoAddEvent}
+            onRemoveEvent={handleSocketIoRemoveEvent}
+            onUpdateEvent={handleSocketIoUpdateEvent}
+          />
         ) : null}
 
         {activeTab === "Auth" ? (

@@ -36,6 +36,35 @@ function normalizeFolderPath(path) {
     .join("/");
 }
 
+function parseSocketIoEventPacket(rawMessage) {
+  const message = String(rawMessage ?? "");
+  if (!message.startsWith("42")) return null;
+
+  let payloadText = message.slice(2);
+  let namespace = "/";
+
+  if (payloadText.startsWith("/")) {
+    const commaIndex = payloadText.indexOf(",");
+    if (commaIndex <= 0) return null;
+    namespace = payloadText.slice(0, commaIndex) || "/";
+    payloadText = payloadText.slice(commaIndex + 1);
+  }
+
+  try {
+    const payload = JSON.parse(payloadText);
+    if (!Array.isArray(payload) || payload.length === 0) return null;
+    const eventName = String(payload[0] || "message").trim() || "message";
+    return {
+      namespace,
+      eventName,
+      payload,
+      pretty: JSON.stringify(payload, null, 2)
+    };
+  } catch {
+    return null;
+  }
+}
+
 function buildSseUrl(rawUrl, queryParams = []) {
   const trimmed = String(rawUrl ?? "").trim();
   if (!trimmed) return "";
@@ -848,13 +877,17 @@ export function useWorkspaceStore() {
         }
 
         let display = message;
-        if (message.startsWith("42")) {
-          const payload = message.slice(2);
-          try {
-            const parsed = JSON.parse(payload);
-            display = JSON.stringify(parsed, null, 2);
-          } catch {
+        const parsedEvent = parseSocketIoEventPacket(message);
+        if (parsedEvent) {
+          const configuredEvents = Array.isArray(activeRequest.socketIoEvents)
+            ? activeRequest.socketIoEvents
+            : [];
+          const matchingConfigured = configuredEvents.find((row) => String(row?.name || "").trim() === parsedEvent.eventName);
+          const shouldListen = !matchingConfigured || (matchingConfigured.enabled !== false && matchingConfigured.listen !== false);
+          if (!shouldListen) {
+            return;
           }
+          display = parsedEvent.pretty;
         }
 
         setWsStates((current) => ({
@@ -950,12 +983,26 @@ export function useWorkspaceStore() {
       return;
     }
 
-    const eventName = String(activeRequest.socketIoEventName || "message").trim() || "message";
     const namespace = String(activeRequest.socketIoNamespace || "/").trim() || "/";
     const normalizedNamespace = namespace.startsWith("/") ? namespace : `/${namespace}`;
-    let payload = String(activeRequest.body ?? "");
+    const configuredEvents = Array.isArray(activeRequest.socketIoEvents)
+      ? activeRequest.socketIoEvents
+      : [];
+    const selectedEvent = configuredEvents.find((row) => row?.id === activeRequest.socketIoSelectedEventId)
+      || configuredEvents[0]
+      || null;
 
-    if (activeRequest.bodyType === "json") {
+    const eventName = String(selectedEvent?.name || activeRequest.socketIoEventName || "message").trim() || "message";
+    if (selectedEvent && (selectedEvent.enabled === false || selectedEvent.emit === false)) {
+      updateWsState(requestKey, { error: `Event \"${eventName}\" is disabled for emit.` });
+      setRequestLocalMessage(workspaceName, collectionName, requestName, requestMethod, activeRequest.url, `Event \"${eventName}\" is disabled for emit.`, "Send blocked");
+      return;
+    }
+
+    const selectedPayloadType = selectedEvent?.payloadType === "text" ? "text" : (activeRequest.bodyType || "json");
+    let payload = String(selectedEvent?.payload ?? activeRequest.body ?? "");
+
+    if (selectedPayloadType === "json") {
       try {
         payload = JSON.stringify(JSON.parse(payload));
       } catch {
@@ -965,7 +1012,7 @@ export function useWorkspaceStore() {
       }
     }
 
-    const normalizedPayload = activeRequest.bodyType === "json"
+    const normalizedPayload = selectedPayloadType === "json"
       ? JSON.parse(payload)
       : payload;
     const packetPrefix = normalizedNamespace === "/" ? "42" : `42${normalizedNamespace},`;

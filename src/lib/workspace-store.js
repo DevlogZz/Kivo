@@ -18,6 +18,20 @@ export const REQUEST_MODE_OPTIONS = [
   { value: REQUEST_MODES.SOCKET_IO, label: "Socket.IO Request" }
 ];
 
+function createSocketIoEvent(name = "message") {
+  return {
+    id: `sio-${Math.random().toString(36).slice(2, 10)}`,
+    name,
+    enabled: true,
+    listen: true,
+    emit: true,
+    description: "",
+    payloadType: "json",
+    payload: "{\n\n}",
+    ackTimeoutMs: null
+  };
+}
+
 function getRequestModeTemplate(mode) {
   switch (mode) {
     case REQUEST_MODES.GRAPHQL:
@@ -52,15 +66,20 @@ function getRequestModeTemplate(mode) {
         activeEditorTab: "Body"
       };
     case REQUEST_MODES.SOCKET_IO:
+      {
+        const defaultEvent = createSocketIoEvent("message");
       return {
         method: "GET",
         bodyType: "json",
-        body: "{\n\n}",
+        body: defaultEvent.payload,
         activeEditorTab: "Body",
-        socketIoEventName: "message",
+        socketIoEventName: defaultEvent.name,
         socketIoNamespace: "/",
-        socketIoAckTimeoutMs: 0
+        socketIoAckTimeoutMs: 0,
+        socketIoEvents: [defaultEvent],
+        socketIoSelectedEventId: defaultEvent.id
       };
+      }
     case REQUEST_MODES.HTTP:
     default:
       return {
@@ -143,6 +162,14 @@ export function createRequest(name = "New Request", mode = REQUEST_MODES.HTTP) {
     followRedirects: true,
     maxRedirects: 5,
     timeoutMs: 0,
+    sseWithCredentials: template.sseWithCredentials ?? false,
+    sseLastEventId: template.sseLastEventId ?? "",
+    sseRetryMs: Number.isFinite(template.sseRetryMs) ? Number(template.sseRetryMs) : 3000,
+    socketIoEventName: template.socketIoEventName ?? "message",
+    socketIoNamespace: template.socketIoNamespace ?? "/",
+    socketIoAckTimeoutMs: Number.isFinite(template.socketIoAckTimeoutMs) ? Number(template.socketIoAckTimeoutMs) : 0,
+    socketIoEvents: Array.isArray(template.socketIoEvents) ? template.socketIoEvents.map((event) => ({ ...event })) : [],
+    socketIoSelectedEventId: template.socketIoSelectedEventId ?? "",
     folderPath: "",
     lastResponse: null
   };
@@ -241,6 +268,42 @@ export function normalizeRequestRecord(request) {
     ? request.requestMode
     : (request?.bodyType === "graphql" ? REQUEST_MODES.GRAPHQL : REQUEST_MODES.HTTP);
 
+  const socketIoEvents = Array.isArray(request?.socketIoEvents)
+    ? request.socketIoEvents
+      .map((event) => ({
+        id: String(event?.id || `sio-${Math.random().toString(36).slice(2, 10)}`),
+        name: String(event?.name || "message").trim() || "message",
+        enabled: event?.enabled ?? true,
+        listen: event?.listen ?? true,
+        emit: event?.emit ?? true,
+        description: String(event?.description || ""),
+        payloadType: event?.payloadType === "text" ? "text" : "json",
+        payload: typeof event?.payload === "string"
+          ? event.payload
+          : (event?.payload && typeof event.payload === "object" ? JSON.stringify(event.payload, null, 2) : "{\n\n}"),
+        ackTimeoutMs: Number.isFinite(event?.ackTimeoutMs) ? Number(event.ackTimeoutMs) : null
+      }))
+    : [];
+
+  if (requestMode === REQUEST_MODES.SOCKET_IO && socketIoEvents.length === 0) {
+    const defaultEvent = createSocketIoEvent(
+      typeof request?.socketIoEventName === "string" && request.socketIoEventName.trim()
+        ? request.socketIoEventName.trim()
+        : "message"
+    );
+    if (typeof request?.body === "string" && request.body.trim()) {
+      defaultEvent.payload = request.body;
+    }
+    if (request?.bodyType === "text" || request?.bodyType === "json") {
+      defaultEvent.payloadType = request.bodyType;
+    }
+    socketIoEvents.push(defaultEvent);
+  }
+
+  const defaultSocketIoEvent = socketIoEvents[0] || null;
+  const selectedSocketIoEventId = String(request?.socketIoSelectedEventId || "");
+  const hasSelectedSocketIoEvent = socketIoEvents.some((event) => event.id === selectedSocketIoEventId);
+
   return {
     ...request,
     requestMode,
@@ -275,6 +338,16 @@ export function normalizeRequestRecord(request) {
     followRedirects: request?.followRedirects ?? true,
     maxRedirects: Number.isFinite(request?.maxRedirects) ? Number(request.maxRedirects) : 5,
     timeoutMs: Number.isFinite(request?.timeoutMs) ? Number(request.timeoutMs) : 0,
+    sseWithCredentials: request?.sseWithCredentials ?? false,
+    sseLastEventId: typeof request?.sseLastEventId === "string" ? request.sseLastEventId : "",
+    sseRetryMs: Number.isFinite(request?.sseRetryMs) ? Number(request.sseRetryMs) : 3000,
+    socketIoEventName: typeof request?.socketIoEventName === "string"
+      ? request.socketIoEventName
+      : (defaultSocketIoEvent?.name || "message"),
+    socketIoNamespace: typeof request?.socketIoNamespace === "string" ? request.socketIoNamespace : "/",
+    socketIoAckTimeoutMs: Number.isFinite(request?.socketIoAckTimeoutMs) ? Number(request.socketIoAckTimeoutMs) : 0,
+    socketIoEvents,
+    socketIoSelectedEventId: hasSelectedSocketIoEvent ? selectedSocketIoEventId : (defaultSocketIoEvent?.id || ""),
     folderPath: typeof request?.folderPath === "string" ? request.folderPath : "",
     auth: normalizeAuthState(request?.auth)
   };
@@ -287,6 +360,7 @@ export function cloneRequest(request) {
     queryParams: (request.queryParams || []).map((row) => ({ ...row })),
     headers: (request.headers || []).map((row) => ({ ...row })),
     bodyRows: (request.bodyRows || []).map((row) => ({ ...row })),
+    socketIoEvents: (request.socketIoEvents || []).map((event) => ({ ...event })),
     grpcDirectProtoFiles: (request.grpcDirectProtoFiles || []).map((path) => String(path)),
     grpcProtoDirectories: (request.grpcProtoDirectories || []).map((group) => ({
       path: String(group?.path || ""),
