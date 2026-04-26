@@ -1,4 +1,5 @@
 import { normalizeAuthState } from "@/lib/oauth.js";
+import { REQUEST_MODES } from "@/lib/workspace-store.js";
 
 const methodTones = {
   GET: "tone-get-text tone-get-bg",
@@ -339,6 +340,257 @@ function quoteString(value) {
 
 function escapeShellString(value) {
   return `'${String(value ?? "").replace(/'/g, "''")}'`;
+}
+
+function tokenizeCurlCommand(input) {
+  const source = String(input || "")
+    .replace(/\\\r?\n/g, " ")
+    .replace(/\r?\n/g, " ")
+    .trim();
+
+  if (!source) return [];
+
+  const tokens = [];
+  let current = "";
+  let quote = null;
+
+  for (let index = 0; index < source.length; index += 1) {
+    const char = source[index];
+
+    if (quote) {
+      if (quote === '"' && char === "\\" && index + 1 < source.length) {
+        current += source[index + 1];
+        index += 1;
+        continue;
+      }
+      if (char === quote) {
+        quote = null;
+      } else {
+        current += char;
+      }
+      continue;
+    }
+
+    if (char === '"' || char === "'") {
+      quote = char;
+      continue;
+    }
+
+    if (/\s/.test(char)) {
+      if (current) {
+        tokens.push(current);
+        current = "";
+      }
+      continue;
+    }
+
+    if (char === "\\" && index + 1 < source.length) {
+      current += source[index + 1];
+      index += 1;
+      continue;
+    }
+
+    current += char;
+  }
+
+  if (current) {
+    tokens.push(current);
+  }
+
+  return tokens;
+}
+
+function getCurlOptionValue(token, tokens, index) {
+  if (!token || !token.includes("=")) {
+    return { value: tokens[index + 1] ?? "", nextIndex: index + 1 };
+  }
+  const [, raw] = token.split(/=(.*)/s);
+  return { value: raw ?? "", nextIndex: index };
+}
+
+function splitUrlAndQuery(rawUrl) {
+  const fallback = { url: String(rawUrl || "").trim(), queryParams: [] };
+  if (!fallback.url) return fallback;
+
+  try {
+    const parsed = new URL(fallback.url);
+    const queryParams = [];
+    parsed.searchParams.forEach((value, key) => {
+      queryParams.push({ key, value, enabled: true });
+    });
+    parsed.search = "";
+    return { url: parsed.toString(), queryParams };
+  } catch {
+    return fallback;
+  }
+}
+
+function parseHeaderLine(line) {
+  const normalized = String(line || "").trim();
+  if (!normalized) return null;
+  const separatorIndex = normalized.indexOf(":");
+  if (separatorIndex === -1) {
+    return { key: normalized, value: "", enabled: true };
+  }
+  return {
+    key: normalized.slice(0, separatorIndex).trim(),
+    value: normalized.slice(separatorIndex + 1).trim(),
+    enabled: true,
+  };
+}
+
+function detectBodyTypeByHeaders(headers, body) {
+  const contentType = headers
+    .find((row) => String(row?.key || "").toLowerCase() === "content-type")
+    ?.value?.toLowerCase() || "";
+
+  if (!body) return "none";
+  if (contentType.includes("application/json")) return "json";
+  if (contentType.includes("application/x-www-form-urlencoded")) return "form-urlencoded";
+  if (contentType.includes("multipart/form-data")) return "form-data";
+  if (contentType.includes("application/xml") || contentType.includes("text/xml")) return "xml";
+  if (contentType.includes("yaml") || contentType.includes("yml")) return "yaml";
+
+  const trimmed = String(body).trim();
+  if (trimmed.startsWith("{") || trimmed.startsWith("[")) {
+    try {
+      JSON.parse(trimmed);
+      return "json";
+    } catch {
+    }
+  }
+
+  return "text";
+}
+
+export function parseCurlCommand(curlCommand, targetMode = REQUEST_MODES.HTTP) {
+  const tokens = tokenizeCurlCommand(curlCommand);
+  if (!tokens.length) {
+    return null;
+  }
+
+  const normalizedTokens = tokens[0].toLowerCase() === "curl" ? tokens.slice(1) : tokens;
+  let method = "GET";
+  let url = "";
+  const headers = [];
+  const bodyChunks = [];
+
+  for (let index = 0; index < normalizedTokens.length; index += 1) {
+    const token = normalizedTokens[index];
+    const rawToken = token;
+    const lower = token.toLowerCase();
+
+    if (lower === "-x" || lower === "--request" || lower.startsWith("--request=")) {
+      const { value, nextIndex } = getCurlOptionValue(token, normalizedTokens, index);
+      method = String(value || method).toUpperCase();
+      index = nextIndex;
+      continue;
+    }
+
+    if (rawToken === "-i" || lower === "--include") {
+      continue;
+    }
+
+    if (rawToken === "-I" || lower === "--head") {
+      method = "HEAD";
+      continue;
+    }
+
+    if (lower === "-g" || lower === "--get") {
+      method = "GET";
+      continue;
+    }
+
+    if (lower === "-h" || lower === "--header" || lower.startsWith("--header=")) {
+      const { value, nextIndex } = getCurlOptionValue(token, normalizedTokens, index);
+      const parsedHeader = parseHeaderLine(value);
+      if (parsedHeader) {
+        headers.push(parsedHeader);
+      }
+      index = nextIndex;
+      continue;
+    }
+
+    if (
+      lower === "-d"
+      || lower === "--data"
+      || lower === "--data-raw"
+      || lower === "--data-binary"
+      || lower === "--data-urlencode"
+      || lower.startsWith("--data=")
+      || lower.startsWith("--data-raw=")
+      || lower.startsWith("--data-binary=")
+      || lower.startsWith("--data-urlencode=")
+    ) {
+      const { value, nextIndex } = getCurlOptionValue(token, normalizedTokens, index);
+      if (value) {
+        bodyChunks.push(String(value));
+      }
+      index = nextIndex;
+      continue;
+    }
+
+    if (lower === "--url" || lower.startsWith("--url=")) {
+      const { value, nextIndex } = getCurlOptionValue(token, normalizedTokens, index);
+      if (value) {
+        url = String(value);
+      }
+      index = nextIndex;
+      continue;
+    }
+
+    if (!token.startsWith("-") && (!url || /^https?:\/\//i.test(token))) {
+      url = token;
+      continue;
+    }
+  }
+
+  const joinedBody = bodyChunks.join("&");
+  if (joinedBody && method === "GET") {
+    method = "POST";
+  }
+
+  const { url: normalizedUrl, queryParams } = splitUrlAndQuery(url);
+  const bodyType = detectBodyTypeByHeaders(headers, joinedBody);
+
+  const request = {
+    name: "Imported cURL Request",
+    requestMode: targetMode === REQUEST_MODES.GRAPHQL ? REQUEST_MODES.GRAPHQL : REQUEST_MODES.HTTP,
+    method,
+    url: normalizedUrl,
+    queryParams,
+    headers,
+    bodyType,
+    body: joinedBody,
+    bodyRows: [],
+    bodyFilePath: "",
+    graphqlVariables: "{\n\n}",
+    activeEditorTab: "Body",
+  };
+
+  if (request.requestMode === REQUEST_MODES.GRAPHQL) {
+    request.method = "POST";
+    request.bodyType = "graphql";
+
+    const trimmed = String(joinedBody || "").trim();
+    if (trimmed) {
+      try {
+        const parsed = JSON.parse(trimmed);
+        if (parsed && typeof parsed === "object") {
+          request.body = String(parsed.query || "");
+          if (parsed.variables && typeof parsed.variables === "object") {
+            request.graphqlVariables = `${JSON.stringify(parsed.variables, null, 2)}\n`;
+          }
+        } else {
+          request.body = trimmed;
+        }
+      } catch {
+        request.body = trimmed;
+      }
+    }
+  }
+
+  return request;
 }
 
 function buildFetchSnippet(requestExport) {

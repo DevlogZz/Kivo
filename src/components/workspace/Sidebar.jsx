@@ -11,7 +11,7 @@ import { Input } from "@/components/ui/input.jsx";
 import { EnvHighlightInput } from "@/components/ui/EnvHighlightInput.jsx";
 import { OAuth2Panel } from "@/components/workspace/OAuth2Panel.jsx";
 import { exportCollectionFile, exportRequestFile, getCollectionConfig, getEnvVars, importCollectionFile, importRequestFile } from "@/lib/http-client.js";
-import { buildCurlCommand, codegenLanguageOptions, generateCodeSnippet, getMethodTone } from "@/lib/http-ui.js";
+import { buildCurlCommand, codegenLanguageOptions, generateCodeSnippet, getMethodTone, parseCurlCommand } from "@/lib/http-ui.js";
 import { createDefaultAuthState, normalizeAuthState } from "@/lib/oauth.js";
 import { cn } from "@/lib/utils.js";
 import { getUniqueName, REQUEST_MODE_OPTIONS, REQUEST_MODES } from "@/lib/workspace-store.js";
@@ -39,6 +39,11 @@ const IMPORT_EXPORT_FORMATS = [
   { value: "openapi3.0", label: "OpenAPI 3.0", extension: "json" },
   { value: "swagger2.0", label: "Swagger 2.0", extension: "json" },
   { value: "bruno", label: "Bruno (YAML)", extension: "yml" },
+];
+
+const CURL_IMPORT_TARGETS = [
+  { value: REQUEST_MODES.HTTP, label: "HTTP" },
+  { value: REQUEST_MODES.GRAPHQL, label: "GraphQL" }
 ];
 
 function ImportExportModal({ open: isOpen, mode, scope, targetName, defaultFileName, onClose, onConfirm }) {
@@ -194,6 +199,136 @@ function ImportExportModal({ open: isOpen, mode, scope, targetName, defaultFileN
           <Button variant="ghost" type="button" className="h-9" onClick={onClose}>Cancel</Button>
           <Button type="button" className="h-9" onClick={handleSubmit} disabled={isSubmitting || !filePath.trim()}>
             {isSubmitting ? "Processing..." : `${modeLabel} ${scopeLabel}`}
+          </Button>
+        </div>
+      </Card>
+    </div>,
+    document.body
+  );
+}
+
+function CurlImportModal({ open: isOpen, targetName, onClose, onConfirm }) {
+  const [curlCommand, setCurlCommand] = useState("");
+  const [targetMode, setTargetMode] = useState(REQUEST_MODES.HTTP);
+  const [error, setError] = useState("");
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isTargetMenuOpen, setIsTargetMenuOpen] = useState(false);
+  const targetMenuRef = useRef(null);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    setCurlCommand("");
+    setTargetMode(REQUEST_MODES.HTTP);
+    setError("");
+    setIsSubmitting(false);
+    setIsTargetMenuOpen(false);
+  }, [isOpen]);
+
+  useEffect(() => {
+    if (!isTargetMenuOpen) return;
+    function handlePointer(event) {
+      if (targetMenuRef.current && !targetMenuRef.current.contains(event.target)) {
+        setIsTargetMenuOpen(false);
+      }
+    }
+    function handleEscape(event) {
+      if (event.key === "Escape") {
+        setIsTargetMenuOpen(false);
+      }
+    }
+    window.addEventListener("mousedown", handlePointer);
+    window.addEventListener("keydown", handleEscape);
+    return () => {
+      window.removeEventListener("mousedown", handlePointer);
+      window.removeEventListener("keydown", handleEscape);
+    };
+  }, [isTargetMenuOpen]);
+
+  if (!isOpen) return null;
+
+  async function handleSubmit() {
+    const trimmed = curlCommand.trim();
+    if (!trimmed) {
+      setError("Paste a cURL command first.");
+      return;
+    }
+
+    setIsSubmitting(true);
+    setError("");
+    try {
+      await onConfirm({ curlCommand: trimmed, targetMode });
+      onClose();
+    } catch (submitError) {
+      setError(submitError instanceof Error ? submitError.message : "Failed to import cURL command.");
+    } finally {
+      setIsSubmitting(false);
+    }
+  }
+
+  return createPortal(
+    <div className="fixed inset-0 z-[240] flex items-center justify-center bg-background/70 p-6 backdrop-blur-sm" onMouseDown={(event) => event.target === event.currentTarget && onClose()}>
+      <Card className="w-[min(760px,94vw)] border border-border/50 bg-card/95 p-5 shadow-2xl">
+        <div className="mb-4 flex items-start justify-between gap-3">
+          <div>
+            <h3 className="text-[17px] font-semibold text-foreground">Import Request from cURL</h3>
+            <p className="text-[12px] text-muted-foreground">{targetName || "Selected collection"}</p>
+          </div>
+          <Button variant="ghost" size="icon" className="h-8 w-8" onClick={onClose}><X className="h-4 w-4" /></Button>
+        </div>
+
+        <div className="mb-3 grid gap-2">
+          <div className="flex items-center justify-between gap-2">
+            <label className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">cURL Command</label>
+            <div ref={targetMenuRef} className="relative min-w-[150px]">
+              <button
+                type="button"
+                onClick={() => setIsTargetMenuOpen((open) => !open)}
+                className="flex h-9 w-full items-center justify-between border border-border/40 bg-background/50 px-3 text-[13px] text-foreground outline-none transition-colors hover:bg-accent/35"
+              >
+                <span>{CURL_IMPORT_TARGETS.find((item) => item.value === targetMode)?.label || "HTTP"}</span>
+                <ChevronDown className={cn("h-3.5 w-3.5 text-muted-foreground transition-transform", isTargetMenuOpen && "rotate-180")} />
+              </button>
+              {isTargetMenuOpen ? (
+                <div className="absolute left-0 right-0 top-[calc(100%+6px)] z-20 border border-border/60 bg-popover p-1 shadow-2xl">
+                  {CURL_IMPORT_TARGETS.map((item) => (
+                    <button
+                      key={item.value}
+                      type="button"
+                      className={cn(
+                        "flex w-full items-center justify-between px-3 py-2 text-left text-[12px] transition-colors",
+                        item.value === targetMode ? "bg-accent/55 text-foreground" : "text-foreground hover:bg-accent/35"
+                      )}
+                      onClick={() => {
+                        setTargetMode(item.value);
+                        setIsTargetMenuOpen(false);
+                      }}
+                    >
+                      <span>{item.label}</span>
+                      {item.value === targetMode ? <Check className="h-3.5 w-3.5" /> : null}
+                    </button>
+                  ))}
+                </div>
+              ) : null}
+            </div>
+          </div>
+
+          <textarea
+            value={curlCommand}
+            onChange={(event) => {
+              setCurlCommand(event.target.value);
+              if (error) setError("");
+            }}
+            placeholder="Enter cURL request here..."
+            className="h-40 w-full resize-none border border-border/40 bg-background/40 p-3 text-[12.5px] text-foreground outline-none transition-colors focus:border-border/70"
+          />
+        </div>
+
+        {error ? <div className="mb-3 text-[12px] text-red-400">{error}</div> : null}
+
+        <div className="flex items-center justify-end gap-2">
+          <Button variant="ghost" type="button" className="h-9" onClick={onClose}>Cancel</Button>
+          <Button type="button" className="h-9" onClick={handleSubmit} disabled={isSubmitting || !curlCommand.trim()}>
+            {isSubmitting ? "Importing..." : "Import Request"}
           </Button>
         </div>
       </Card>
@@ -813,7 +948,7 @@ function CollectionContextMenu({ menu, onCreateRequest, onCreateFolder, onRename
   );
 }
 
-function RequestTypeMenu({ menu, onSelect, onClose }) {
+function RequestTypeMenu({ menu, onSelect, onImportRequest, onImportCurl, onClose }) {
   useEffect(() => {
     if (!menu) return;
     function handlePointer() { onClose(); }
@@ -848,6 +983,27 @@ function RequestTypeMenu({ menu, onSelect, onClose }) {
           <Plus className="h-3.5 w-3.5" /> {option.label}
         </button>
       ))}
+      <div className="my-1 border-t border-border/40" />
+      <button
+        type="button"
+        className="flex w-full items-center gap-2 px-3 py-2 text-left text-[12px] text-foreground hover:bg-accent/45"
+        onClick={() => {
+          onImportRequest(menu);
+          onClose();
+        }}
+      >
+        <Plus className="h-3.5 w-3.5" /> Import Request
+      </button>
+      <button
+        type="button"
+        className="flex w-full items-center gap-2 px-3 py-2 text-left text-[12px] text-foreground hover:bg-accent/45"
+        onClick={() => {
+          onImportCurl(menu);
+          onClose();
+        }}
+      >
+        <Plus className="h-3.5 w-3.5" /> From cURL
+      </button>
     </div>,
     document.body
   );
@@ -905,6 +1061,7 @@ export function RequestsView({
   const [folderSettingsEnv, setFolderSettingsEnv] = useState({ merged: {} });
   const [sidebarOptionsOpen, setSidebarOptionsOpen] = useState(false);
   const [importExportState, setImportExportState] = useState(null);
+  const [curlImportState, setCurlImportState] = useState(null);
   const [createRequestMenu, setCreateRequestMenu] = useState(null);
   const sidebarOptionsRef = useRef(null);
 
@@ -1221,6 +1378,25 @@ export function RequestsView({
     }
   }
 
+  async function handleSubmitCurlImport(payload) {
+    if (!curlImportState) return;
+
+    const parsed = parseCurlCommand(payload?.curlCommand || "", payload?.targetMode || REQUEST_MODES.HTTP);
+    if (!parsed || !String(parsed.url || "").trim()) {
+      throw new Error("Could not parse URL from the cURL command.");
+    }
+
+    onImportRequests(
+      curlImportState.workspaceName,
+      curlImportState.collectionName,
+      [parsed],
+      curlImportState.targetFolderPath
+    );
+
+    setFeedbackMessage("Imported request from cURL.");
+    setTimeout(() => setFeedbackMessage(""), 2200);
+  }
+
   async function handleReveal(workspaceName, collectionName, requestName) {
     try {
       await invoke("reveal_item", {
@@ -1280,6 +1456,20 @@ export function RequestsView({
   function handleCreateRequestByMode(mode, menu) {
     if (!menu) return;
     handleCreateRequestAndRename(menu.workspaceName, menu.collectionName, menu.folderPath, mode);
+  }
+
+  function handleCreateMenuImportRequest(menu) {
+    if (!menu) return;
+    handleImportRequest(menu.workspaceName, menu.collectionName, menu.folderPath);
+  }
+
+  function handleCreateMenuImportCurl(menu) {
+    if (!menu) return;
+    setCurlImportState({
+      workspaceName: menu.workspaceName,
+      collectionName: menu.collectionName,
+      targetFolderPath: normalizeFolderPath(menu.folderPath)
+    });
   }
 
   function handleCreateRequestAndRename(workspaceName, collectionName, folderPath = "", mode = REQUEST_MODES.HTTP) {
@@ -1930,7 +2120,15 @@ export function RequestsView({
       <RequestTypeMenu
         menu={createRequestMenu}
         onSelect={handleCreateRequestByMode}
+        onImportRequest={handleCreateMenuImportRequest}
+        onImportCurl={handleCreateMenuImportCurl}
         onClose={() => setCreateRequestMenu(null)}
+      />
+      <CurlImportModal
+        open={Boolean(curlImportState)}
+        targetName={curlImportState ? `${curlImportState.collectionName}${curlImportState.targetFolderPath ? ` / ${curlImportState.targetFolderPath}` : ""}` : ""}
+        onClose={() => setCurlImportState(null)}
+        onConfirm={handleSubmitCurlImport}
       />
       {duplicationTarget && (
         <WorkspaceModal
