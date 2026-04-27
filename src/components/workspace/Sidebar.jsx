@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { Check, ChevronDown, ChevronRight, Code2, Copy, Folder, FolderKanban, FolderPlus, Layers, MoreVertical, Pencil, Pin, Plus, Search, Settings, SquareKanban, Trash2, X } from "lucide-react";
 import { invoke } from "@tauri-apps/api/core";
@@ -32,6 +32,49 @@ function normalizeFolderPath(path) {
     .map((segment) => segment.trim())
     .filter(Boolean)
     .join("/");
+}
+
+function useFloatingMenuPosition(menu, { minWidth = 220, viewportPadding = 8 } = {}) {
+  const menuRef = useRef(null);
+  const [menuStyle, setMenuStyle] = useState({
+    left: viewportPadding,
+    top: viewportPadding,
+    maxHeight: `calc(100vh - ${viewportPadding * 2}px)`
+  });
+
+  useLayoutEffect(() => {
+    if (!menu) return;
+
+    function updatePosition() {
+      const node = menuRef.current;
+      const viewportWidth = window.innerWidth || 0;
+      const viewportHeight = window.innerHeight || 0;
+      const menuWidth = Math.max(minWidth, node?.offsetWidth || 0);
+      const menuHeight = Math.max(0, node?.offsetHeight || 0);
+
+      let left = Number(menu.x) || viewportPadding;
+      let top = Number(menu.y) || viewportPadding;
+
+      if (left + menuWidth > viewportWidth - viewportPadding) {
+        left = Math.max(viewportPadding, viewportWidth - menuWidth - viewportPadding);
+      }
+      if (top + menuHeight > viewportHeight - viewportPadding) {
+        top = Math.max(viewportPadding, viewportHeight - menuHeight - viewportPadding);
+      }
+
+      setMenuStyle({
+        left,
+        top,
+        maxHeight: `calc(100vh - ${viewportPadding * 2}px)`
+      });
+    }
+
+    updatePosition();
+    window.addEventListener("resize", updatePosition);
+    return () => window.removeEventListener("resize", updatePosition);
+  }, [menu, minWidth, viewportPadding]);
+
+  return { menuRef, menuStyle };
 }
 
 const IMPORT_EXPORT_FORMATS = [
@@ -404,6 +447,8 @@ function getRequestBadgeMeta(request) {
 }
 
 function FolderContextMenu({ menu, onCreateRequest, onCreateFolder, onOpenSettings, onCopyFolder, onPasteIntoFolder, onRevealFolder, onRename, onDelete, onClose, canPaste }) {
+  const { menuRef, menuStyle } = useFloatingMenuPosition(menu, { minWidth: 180 });
+
   useEffect(() => {
     if (!menu) return;
     function handlePointer() { onClose(); }
@@ -416,7 +461,7 @@ function FolderContextMenu({ menu, onCreateRequest, onCreateFolder, onOpenSettin
   if (!menu) return null;
 
   return createPortal(
-    <div className="fixed z-[210] min-w-[180px] border border-border/60 bg-popover p-1 shadow-2xl" style={{ left: menu.x, top: menu.y }} onMouseDown={(e) => e.stopPropagation()} onContextMenu={(e) => e.preventDefault()}>
+    <div ref={menuRef} className="thin-scrollbar fixed z-[210] min-w-[180px] max-w-[calc(100vw-16px)] overflow-y-auto border border-border/60 bg-popover p-1 shadow-2xl" style={menuStyle} onMouseDown={(e) => e.stopPropagation()} onContextMenu={(e) => e.preventDefault()}>
       <button type="button" className="flex w-full items-center gap-2 px-3 py-2 text-left text-[12px] text-foreground hover:bg-accent/45" onClick={() => { onCreateRequest(menu.workspaceName, menu.collectionName, menu.folderPath); onClose(); }}>
         <Plus className="h-3.5 w-3.5" /> New Request
       </button>
@@ -852,6 +897,8 @@ function GenerateCodeModal({ request, language, context, isLoadingContext, onLan
 }
 
 function RequestContextMenu({ menu, onGenerateCode, onCopyCurl, onRename, onDuplicate, onCopy, onPaste, onExportRequest, onReveal, onTogglePin, onDelete, onClose, canPaste }) {
+  const { menuRef, menuStyle } = useFloatingMenuPosition(menu, { minWidth: 180 });
+
   useEffect(() => {
     if (!menu) return;
     function handlePointer() { onClose(); }
@@ -864,7 +911,7 @@ function RequestContextMenu({ menu, onGenerateCode, onCopyCurl, onRename, onDupl
   if (!menu) return null;
 
   return createPortal(
-    <div className="fixed z-[210] min-w-[180px] border border-border/60 bg-popover p-1 shadow-2xl" style={{ left: menu.x, top: menu.y }} onMouseDown={(e) => e.stopPropagation()} onContextMenu={(e) => e.preventDefault()}>
+    <div ref={menuRef} className="thin-scrollbar fixed z-[210] min-w-[180px] max-w-[calc(100vw-16px)] overflow-y-auto border border-border/60 bg-popover p-1 shadow-2xl" style={menuStyle} onMouseDown={(e) => e.stopPropagation()} onContextMenu={(e) => e.preventDefault()}>
       <button type="button" className="flex w-full items-center gap-2 px-3 py-2 text-left text-[12px] text-foreground hover:bg-accent/45" onClick={() => { onGenerateCode(menu.workspaceName, menu.collectionName, menu.requestName); onClose(); }}>
         <Code2 className="h-3.5 w-3.5" /> Generate Code
       </button>
@@ -904,6 +951,8 @@ function RequestContextMenu({ menu, onGenerateCode, onCopyCurl, onRename, onDupl
 }
 
 function CollectionContextMenu({ menu, onCreateRequest, onCreateFolder, onRename, onDuplicate, onPaste, onImportRequest, onExportCollection, onReveal, onDelete, onClose, canPaste, onOpenSettings }) {
+  const { menuRef, menuStyle } = useFloatingMenuPosition(menu, { minWidth: 180 });
+
   useEffect(() => {
     if (!menu) return;
     function handlePointer() { onClose(); }
@@ -916,7 +965,7 @@ function CollectionContextMenu({ menu, onCreateRequest, onCreateFolder, onRename
   if (!menu) return null;
 
   return createPortal(
-    <div className="fixed z-[210] min-w-[180px] border border-border/60 bg-popover p-1 shadow-2xl" style={{ left: menu.x, top: menu.y }} onMouseDown={(e) => e.stopPropagation()} onContextMenu={(e) => e.preventDefault()}>
+    <div ref={menuRef} className="thin-scrollbar fixed z-[210] min-w-[180px] max-w-[calc(100vw-16px)] overflow-y-auto border border-border/60 bg-popover p-1 shadow-2xl" style={menuStyle} onMouseDown={(e) => e.stopPropagation()} onContextMenu={(e) => e.preventDefault()}>
       <button type="button" className="flex w-full items-center gap-2 px-3 py-2 text-left text-[12px] text-foreground hover:bg-accent/45" onClick={() => { onCreateRequest(menu.workspaceName, menu.collectionName); onClose(); }}>
         <Plus className="h-3.5 w-3.5" /> New Request
       </button>
@@ -956,6 +1005,8 @@ function CollectionContextMenu({ menu, onCreateRequest, onCreateFolder, onRename
 }
 
 function RequestTypeMenu({ menu, onSelect, onImportRequest, onImportCurl, onClose }) {
+  const { menuRef, menuStyle } = useFloatingMenuPosition(menu, { minWidth: 220 });
+
   useEffect(() => {
     if (!menu) return;
     function handlePointer() { onClose(); }
@@ -972,8 +1023,9 @@ function RequestTypeMenu({ menu, onSelect, onImportRequest, onImportCurl, onClos
 
   return createPortal(
     <div
-      className="fixed z-[215] min-w-[220px] border border-border/60 bg-popover p-1 shadow-2xl"
-      style={{ left: menu.x, top: menu.y }}
+      ref={menuRef}
+      className="thin-scrollbar fixed z-[215] min-w-[220px] max-w-[calc(100vw-16px)] overflow-y-auto border border-border/60 bg-popover p-1 shadow-2xl"
+      style={menuStyle}
       onMouseDown={(event) => event.stopPropagation()}
       onContextMenu={(event) => event.preventDefault()}
     >

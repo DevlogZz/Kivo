@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { Pin, Plus, X } from "lucide-react";
 
@@ -18,6 +18,11 @@ export function RequestTabs({
   createRequestRecord,
 }) {
   const [createRequestMenu, setCreateRequestMenu] = useState(null);
+  const [createRequestMenuStyle, setCreateRequestMenuStyle] = useState({
+    left: 8,
+    top: 8,
+    maxHeight: "calc(100vh - 16px)"
+  });
   const [pendingRenameTarget, setPendingRenameTarget] = useState(null);
   const createMenuRef = useRef(null);
 
@@ -42,6 +47,39 @@ export function RequestTabs({
       window.removeEventListener("mousedown", handlePointer);
       window.removeEventListener("keydown", handleEscape);
     };
+  }, [createRequestMenu]);
+
+  useLayoutEffect(() => {
+    if (!createRequestMenu) return;
+
+    function updateMenuPosition() {
+      const node = createMenuRef.current;
+      const viewportPadding = 8;
+      const viewportWidth = window.innerWidth || 0;
+      const viewportHeight = window.innerHeight || 0;
+      const menuWidth = Math.max(220, node?.offsetWidth || 0);
+      const menuHeight = Math.max(0, node?.offsetHeight || 0);
+
+      let left = Number(createRequestMenu.x) || viewportPadding;
+      let top = Number(createRequestMenu.y) || viewportPadding;
+
+      if (left + menuWidth > viewportWidth - viewportPadding) {
+        left = Math.max(viewportPadding, viewportWidth - menuWidth - viewportPadding);
+      }
+      if (top + menuHeight > viewportHeight - viewportPadding) {
+        top = Math.max(viewportPadding, viewportHeight - menuHeight - viewportPadding);
+      }
+
+      setCreateRequestMenuStyle({
+        left,
+        top,
+        maxHeight: "calc(100vh - 16px)"
+      });
+    }
+
+    updateMenuPosition();
+    window.addEventListener("resize", updateMenuPosition);
+    return () => window.removeEventListener("resize", updateMenuPosition);
   }, [createRequestMenu]);
 
   useEffect(() => {
@@ -149,8 +187,8 @@ export function RequestTabs({
       {createRequestMenu ? createPortal(
         <div
           ref={createMenuRef}
-          className="fixed z-[220] min-w-[220px] border border-border/60 bg-popover p-1 shadow-2xl"
-          style={{ left: createRequestMenu.x, top: createRequestMenu.y }}
+          className="thin-scrollbar fixed z-[220] min-w-[220px] max-w-[calc(100vw-16px)] overflow-y-auto border border-border/60 bg-popover p-1 shadow-2xl"
+          style={createRequestMenuStyle}
           onMouseDown={(event) => event.stopPropagation()}
         >
           {REQUEST_MODE_OPTIONS.map((option) => (
