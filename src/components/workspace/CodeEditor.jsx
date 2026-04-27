@@ -37,16 +37,33 @@ const javascriptKeywords = new Set([
   "while",
   "await",
   "async",
+  "switch",
+  "case",
+  "default",
+  "break",
+  "continue",
   "try",
   "catch",
+  "finally",
   "throw",
   "new",
+  "class",
+  "extends",
+  "import",
+  "export",
+  "from",
+  "in",
+  "of",
+  "typeof",
+  "instanceof",
+  "void",
+  "delete",
   "true",
   "false",
   "null",
   "undefined"
 ]);
-const javascriptTokenPattern = /\/\/[^\n]*|"(?:\\.|[^"])*"|'(?:\\.|[^'])*'|`(?:\\.|[^`])*`|\b\d+(?:\.\d+)?\b|\b[A-Za-z_$][A-Za-z0-9_$]*\b|[{}()[\].,;:+\-*/%!=<>|&?]/g;
+const javascriptTokenPattern = /\/\*[\s\S]*?\*\/|\/\/[^\n]*|"(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'|`(?:\\.|[^`\\])*`|\/(?:\\.|[^\/\n])+\/[dgimsuvy]*|\b(?:0x[\da-fA-F]+|\d+(?:\.\d+)?(?:[eE][+\-]?\d+)?)\b|=>|===|!==|==|!=|<=|>=|\+\+|--|\|\||&&|\?\?|\b[A-Za-z_$][A-Za-z0-9_$]*\b|[{}()[\].,;:+\-*/%!=<>|&?~^]/g;
 
 function tokenClassName(token) {
   if (/^".*":$/.test(token)) {
@@ -102,8 +119,12 @@ function renderHighlightedJson(text) {
 }
 
 function javascriptTokenClassName(token) {
-  if (token.startsWith("//")) {
+  if (token.startsWith("//") || token.startsWith("/*")) {
     return "script-comment";
+  }
+
+  if (/^\/(?:\\.|[^\/\n])+\/[dgimsuvy]*$/.test(token)) {
+    return "script-regex";
   }
 
   if (/^"|^'|^`/.test(token)) {
@@ -123,6 +144,10 @@ function javascriptTokenClassName(token) {
   }
 
   if (/^[{}()[\].,;:+\-*/%!=<>|&?]$/.test(token)) {
+    return "script-punctuation";
+  }
+
+  if (/^(=>|===|!==|==|!=|<=|>=|\+\+|--|\|\||&&|\?\?)$/.test(token)) {
     return "script-punctuation";
   }
 

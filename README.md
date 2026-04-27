@@ -35,6 +35,7 @@ Kivo is a lightweight cross-platform HTTP client designed for developers who val
 - **JSON Response Query Engine**: Filter and search JSON response bodies using text search, conditional expressions (`userid > 3`), compound queries (`age > 20 && status == active`), and logical operators. See the [engine documentation](docs/json-query-engine.md) for details.
 - **Expanded Auth Support**: Comprehensive support for Basic Auth, API Key (Header/Query), and environment-aware token management with inheritance.
 - **Environment Autocomplete**: Real-time `{{variable}}` suggestions with arrow-key navigation for a faster workflow.
+- **Request Scripts Panel**: Pre-request and after-response JavaScript editors with line numbers, syntax highlighting, snippet insertion, and last-run diagnostics (status, tests, logs, and script vars).
 
 ## Download Kivo (v0.4.1)
 

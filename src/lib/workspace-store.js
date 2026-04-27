@@ -197,6 +197,9 @@ export function createRequest(name = "New Request", mode = REQUEST_MODES.HTTP) {
     scriptLastPhase: "",
     scriptLastStatus: "",
     scriptLastError: "",
+    scriptLastLogs: [],
+    scriptLastTests: [],
+    scriptLastVars: {},
     lastResponse: null
   };
 }
@@ -385,6 +388,19 @@ export function normalizeRequestRecord(request) {
     scriptLastPhase: typeof request?.scriptLastPhase === "string" ? request.scriptLastPhase : "",
     scriptLastStatus: typeof request?.scriptLastStatus === "string" ? request.scriptLastStatus : "",
     scriptLastError: typeof request?.scriptLastError === "string" ? request.scriptLastError : "",
+    scriptLastLogs: Array.isArray(request?.scriptLastLogs)
+      ? request.scriptLastLogs.map((entry) => String(entry ?? ""))
+      : [],
+    scriptLastTests: Array.isArray(request?.scriptLastTests)
+      ? request.scriptLastTests.map((entry) => ({
+        name: String(entry?.name ?? "Unnamed test"),
+        ok: Boolean(entry?.ok),
+        error: typeof entry?.error === "string" ? entry.error : "",
+      }))
+      : [],
+    scriptLastVars: request?.scriptLastVars && typeof request.scriptLastVars === "object" && !Array.isArray(request.scriptLastVars)
+      ? request.scriptLastVars
+      : {},
     auth: normalizeAuthState(request?.auth)
   };
 }
@@ -410,6 +426,17 @@ export function cloneRequest(request) {
     scriptLastPhase: String(request.scriptLastPhase || ""),
     scriptLastStatus: String(request.scriptLastStatus || ""),
     scriptLastError: String(request.scriptLastError || ""),
+    scriptLastLogs: Array.isArray(request.scriptLastLogs) ? request.scriptLastLogs.map((entry) => String(entry || "")) : [],
+    scriptLastTests: Array.isArray(request.scriptLastTests)
+      ? request.scriptLastTests.map((entry) => ({
+        name: String(entry?.name || "Unnamed test"),
+        ok: Boolean(entry?.ok),
+        error: String(entry?.error || ""),
+      }))
+      : [],
+    scriptLastVars: request.scriptLastVars && typeof request.scriptLastVars === "object" && !Array.isArray(request.scriptLastVars)
+      ? { ...request.scriptLastVars }
+      : {},
     auth: normalizeAuthState(request.auth),
     lastResponse: request.lastResponse ? { ...request.lastResponse } : null
   };

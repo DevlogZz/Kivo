@@ -40,6 +40,19 @@ function sanitizeRequestForSave(request) {
     scriptLastPhase: String(request?.scriptLastPhase ?? ""),
     scriptLastStatus: String(request?.scriptLastStatus ?? ""),
     scriptLastError: String(request?.scriptLastError ?? ""),
+    scriptLastLogs: Array.isArray(request?.scriptLastLogs)
+      ? request.scriptLastLogs.map((entry) => String(entry ?? ""))
+      : [],
+    scriptLastTests: Array.isArray(request?.scriptLastTests)
+      ? request.scriptLastTests.map((entry) => ({
+        name: String(entry?.name ?? "Unnamed test"),
+        ok: Boolean(entry?.ok),
+        error: String(entry?.error ?? ""),
+      }))
+      : [],
+    scriptLastVars: request?.scriptLastVars && typeof request.scriptLastVars === "object" && !Array.isArray(request.scriptLastVars)
+      ? request.scriptLastVars
+      : {},
     lastResponse: null
   };
 

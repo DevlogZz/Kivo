@@ -37,6 +37,72 @@ function normalizeFolderPath(path) {
     .join("/");
 }
 
+function normalizeScriptVarsForState(vars) {
+  if (!vars || typeof vars !== "object" || Array.isArray(vars)) {
+    return {};
+  }
+
+  function toSerializable(value) {
+    if (typeof value === "function") {
+      return "[Function]";
+    }
+    if (typeof value === "symbol") {
+      return String(value);
+    }
+    if (typeof value === "bigint") {
+      return value.toString();
+    }
+    if (value === undefined) {
+      return "undefined";
+    }
+
+    try {
+      return JSON.parse(JSON.stringify(value));
+    } catch {
+      return String(value);
+    }
+  }
+
+  return Object.entries(vars).reduce((accumulator, [key, value]) => {
+    accumulator[String(key)] = toSerializable(value);
+    return accumulator;
+  }, {});
+}
+
+function normalizeScriptTestsForState(tests) {
+  if (!Array.isArray(tests)) {
+    return [];
+  }
+
+  return tests.map((entry) => ({
+    name: String(entry?.name || "Unnamed test"),
+    ok: Boolean(entry?.ok),
+    error: String(entry?.error || ""),
+  }));
+}
+
+function buildScriptStatePatch(phase, run, savedAt) {
+  const phaseLabel = phase === "after-response" ? "After-response" : "Pre-request";
+  const tests = normalizeScriptTestsForState(run?.tests);
+  const failedTests = tests.filter((entry) => !entry.ok);
+  const testFailureMessage = failedTests.length > 0
+    ? failedTests.map((entry) => `${entry.name}: ${entry.error || "Failed"}`).join("\n")
+    : "";
+  const runtimeError = !run?.ok ? `${phaseLabel} script failed: ${run?.error || "Unknown error"}` : "";
+  const testError = run?.ok && testFailureMessage ? `${phaseLabel} tests failed:\n${testFailureMessage}` : "";
+  const scriptLastError = runtimeError || testError;
+
+  return {
+    scriptLastRunAt: savedAt,
+    scriptLastPhase: phase,
+    scriptLastStatus: scriptLastError ? "error" : "success",
+    scriptLastError,
+    scriptLastLogs: Array.isArray(run?.logs) ? run.logs.map((entry) => String(entry || "")) : [],
+    scriptLastTests: tests,
+    scriptLastVars: normalizeScriptVarsForState(run?.context?.vars),
+  };
+}
+
 function parseSocketIoEventPacket(rawMessage) {
   const message = String(rawMessage ?? "");
   if (!message.startsWith("42")) return null;
@@ -2305,6 +2371,30 @@ export function useWorkspaceStore() {
     const activeRequestName = activeRequest.name;
     const supportsScripts = activeRequest.requestMode === REQUEST_MODES.HTTP || activeRequest.requestMode === REQUEST_MODES.GRAPHQL;
     let scriptedRequest = activeRequest;
+    let scriptContext = { vars: {} };
+
+    async function runAfterResponseScript(savedResponse) {
+      if (!supportsScripts) {
+        return;
+      }
+
+      const postScriptSource = String(activeRequest.scriptAfterResponse || "").trim();
+      if (!postScriptSource) {
+        return;
+      }
+
+      const postRun = await runRequestScript({
+        phase: "after-response",
+        script: postScriptSource,
+        request: scriptedRequest,
+        response: savedResponse,
+        context: scriptContext,
+      });
+
+      scriptContext = postRun.context || scriptContext;
+      const scriptPatch = buildScriptStatePatch("after-response", postRun, formatSavedAt());
+      updateStore((current) => updateRequestScriptStateByIdentity(current, activeWorkspaceName, activeCollectionName, activeRequestName, scriptPatch));
+    }
 
     if (supportsScripts) {
       const preScriptSource = String(activeRequest.scriptPreRequest || "").trim();
@@ -2314,11 +2404,15 @@ export function useWorkspaceStore() {
           script: preScriptSource,
           request: activeRequest,
           response: null,
+          context: scriptContext,
         });
+
+        scriptContext = preRun.context || scriptContext;
+        const scriptPatch = buildScriptStatePatch("pre-request", preRun, formatSavedAt());
 
         if (!preRun.ok) {
           const savedAt = formatSavedAt();
-          const preError = `Pre-request script failed: ${preRun.error || "Unknown error"}`;
+          const preError = scriptPatch.scriptLastError || "Pre-request script failed: Unknown error";
           const warningResponse = {
             status: 0,
             badge: "Script error",
@@ -2339,10 +2433,8 @@ export function useWorkspaceStore() {
 
           updateStore((current) => updateRequestWithLocalResponseByIdentity(
             updateRequestScriptStateByIdentity(current, activeWorkspaceName, activeCollectionName, activeRequestName, {
+              ...scriptPatch,
               scriptLastRunAt: savedAt,
-              scriptLastPhase: "pre-request",
-              scriptLastStatus: "error",
-              scriptLastError: preError,
             }),
             activeWorkspaceName,
             activeCollectionName,
@@ -2354,13 +2446,7 @@ export function useWorkspaceStore() {
         }
 
         scriptedRequest = preRun.request;
-        const savedAt = formatSavedAt();
-        updateStore((current) => updateRequestScriptStateByIdentity(current, activeWorkspaceName, activeCollectionName, activeRequestName, {
-          scriptLastRunAt: savedAt,
-          scriptLastPhase: "pre-request",
-          scriptLastStatus: "success",
-          scriptLastError: "",
-        }));
+        updateStore((current) => updateRequestScriptStateByIdentity(current, activeWorkspaceName, activeCollectionName, activeRequestName, scriptPatch));
       }
     }
 
@@ -2486,33 +2572,7 @@ export function useWorkspaceStore() {
         })
       }));
 
-      if (supportsScripts) {
-        const postScriptSource = String(activeRequest.scriptAfterResponse || "").trim();
-        if (postScriptSource) {
-          const postRun = await runRequestScript({
-            phase: "after-response",
-            script: postScriptSource,
-            request: scriptedRequest,
-            response: savedResponse,
-          });
-
-          const failedTests = (postRun.tests || []).filter((entry) => !entry.ok);
-          const hasError = !postRun.ok || failedTests.length > 0;
-          const testFailureMessage = failedTests.length > 0
-            ? failedTests.map((entry) => `${entry.name}: ${entry.error || "Failed"}`).join("\n")
-            : "";
-          const postError = !postRun.ok
-            ? `After-response script failed: ${postRun.error || "Unknown error"}`
-            : (testFailureMessage ? `After-response tests failed:\n${testFailureMessage}` : "");
-
-          updateStore((current) => updateRequestScriptStateByIdentity(current, activeWorkspaceName, activeCollectionName, activeRequestName, {
-            scriptLastRunAt: formatSavedAt(),
-            scriptLastPhase: "after-response",
-            scriptLastStatus: hasError ? "error" : "success",
-            scriptLastError: hasError ? postError : "",
-          }));
-        }
-      }
+      await runAfterResponseScript(savedResponse);
     } catch (error) {
       if (activeHttpRequestIdRef.current !== requestId) {
         return;
@@ -2560,33 +2620,7 @@ export function useWorkspaceStore() {
         })
       }));
 
-      if (supportsScripts) {
-        const postScriptSource = String(activeRequest.scriptAfterResponse || "").trim();
-        if (postScriptSource) {
-          const postRun = await runRequestScript({
-            phase: "after-response",
-            script: postScriptSource,
-            request: scriptedRequest,
-            response: savedResponse,
-          });
-
-          const failedTests = (postRun.tests || []).filter((entry) => !entry.ok);
-          const hasError = !postRun.ok || failedTests.length > 0;
-          const testFailureMessage = failedTests.length > 0
-            ? failedTests.map((entry) => `${entry.name}: ${entry.error || "Failed"}`).join("\n")
-            : "";
-          const postError = !postRun.ok
-            ? `After-response script failed: ${postRun.error || "Unknown error"}`
-            : (testFailureMessage ? `After-response tests failed:\n${testFailureMessage}` : "");
-
-          updateStore((current) => updateRequestScriptStateByIdentity(current, activeWorkspaceName, activeCollectionName, activeRequestName, {
-            scriptLastRunAt: formatSavedAt(),
-            scriptLastPhase: "after-response",
-            scriptLastStatus: hasError ? "error" : "success",
-            scriptLastError: hasError ? postError : "",
-          }));
-        }
-      }
+      await runAfterResponseScript(savedResponse);
     } finally {
       if (activeHttpRequestIdRef.current === requestId) {
         activeHttpRequestIdRef.current = "";

@@ -1,4 +1,5 @@
 use serde::{Deserialize, Serialize};
+use serde_json::Value;
 use std::collections::HashMap;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -230,6 +231,12 @@ pub struct RequestRecord {
     pub script_last_status: String,
     #[serde(default, skip_serializing_if = "String::is_empty")]
     pub script_last_error: String,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub script_last_logs: Vec<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub script_last_tests: Vec<ScriptTestRecord>,
+    #[serde(default, skip_serializing_if = "HashMap::is_empty")]
+    pub script_last_vars: HashMap<String, Value>,
     #[serde(default)]
     pub active_editor_tab: String,
     #[serde(default)]
@@ -248,6 +255,17 @@ pub struct KeyValueRow {
     pub value: String,
     #[serde(default)]
     pub enabled: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ScriptTestRecord {
+    #[serde(default)]
+    pub name: String,
+    #[serde(default)]
+    pub ok: bool,
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub error: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq, Eq)]

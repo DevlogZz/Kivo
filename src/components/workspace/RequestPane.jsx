@@ -694,6 +694,32 @@ function ScriptsPanel({ state, onChange }) {
 
   const hasPreScript = Boolean(String(state.scriptPreRequest || "").trim());
   const hasAfterScript = Boolean(String(state.scriptAfterResponse || "").trim());
+  const scriptLastStatus = String(state.scriptLastStatus || "").trim();
+  const scriptLastPhase = String(state.scriptLastPhase || "").trim();
+  const scriptLastRunAt = String(state.scriptLastRunAt || "").trim();
+  const scriptLastError = String(state.scriptLastError || "").trim();
+  const scriptLastLogs = Array.isArray(state.scriptLastLogs) ? state.scriptLastLogs.map((entry) => String(entry || "")) : [];
+  const scriptLastTests = Array.isArray(state.scriptLastTests)
+    ? state.scriptLastTests.map((entry) => ({
+      name: String(entry?.name || "Unnamed test"),
+      ok: Boolean(entry?.ok),
+      error: String(entry?.error || ""),
+    }))
+    : [];
+  const scriptLastVars = state.scriptLastVars && typeof state.scriptLastVars === "object" && !Array.isArray(state.scriptLastVars)
+    ? state.scriptLastVars
+    : {};
+  const hasScriptRunDetails = Boolean(
+    scriptLastStatus ||
+    scriptLastPhase ||
+    scriptLastRunAt ||
+    scriptLastError ||
+    scriptLastLogs.length ||
+    scriptLastTests.length ||
+    Object.keys(scriptLastVars).length
+  );
+  const passedTestsCount = scriptLastTests.filter((entry) => entry.ok).length;
+  const failedTestsCount = scriptLastTests.length - passedTestsCount;
 
   return (
     <div className="grid h-full min-h-0 grid-rows-[auto_minmax(0,1fr)_auto_auto]">
@@ -768,9 +794,68 @@ function ScriptsPanel({ state, onChange }) {
         ))}
       </div>
 
-      {state.scriptLastError ? (
-        <div className="border-t border-amber-500/20 bg-amber-500/[0.08] px-3 py-1.5 text-[11px] text-amber-500 dark:text-amber-400">
-          {state.scriptLastError}
+      {hasScriptRunDetails ? (
+        <div className="grid gap-2 border-t border-border/25 bg-muted/[0.08] px-3 py-2 text-[11px]">
+          <div className="flex flex-wrap items-center gap-2 text-muted-foreground">
+            <span className="uppercase tracking-[0.14em]">Last Script Run</span>
+            {scriptLastStatus ? (
+              <span className={cn(
+                "rounded px-1.5 py-0.5 text-[10px] uppercase tracking-[0.1em]",
+                scriptLastStatus === "success"
+                  ? "bg-success/20 text-success"
+                  : "bg-amber-500/15 text-amber-500 dark:text-amber-400"
+              )}>
+                {scriptLastStatus}
+              </span>
+            ) : null}
+            {scriptLastPhase ? (
+              <span className="rounded bg-accent/35 px-1.5 py-0.5 text-[10px] uppercase tracking-[0.1em] text-foreground">
+                {scriptLastPhase}
+              </span>
+            ) : null}
+            {scriptLastRunAt ? <span>{scriptLastRunAt}</span> : null}
+          </div>
+
+          {scriptLastTests.length > 0 ? (
+            <div className="grid gap-1">
+              <div className="flex items-center gap-2 text-muted-foreground">
+                <span className="uppercase tracking-[0.14em]">Tests</span>
+                <span className="text-success">{passedTestsCount} passed</span>
+                <span className={failedTestsCount > 0 ? "text-amber-500 dark:text-amber-400" : "text-muted-foreground"}>{failedTestsCount} failed</span>
+              </div>
+              <div className="grid gap-1">
+                {scriptLastTests.map((entry, index) => (
+                  <div key={`${entry.name}-${index}`} className={cn("border px-2 py-1", entry.ok ? "border-success/30 bg-success/10" : "border-amber-500/25 bg-amber-500/[0.08]")}>
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="text-foreground">{entry.name}</span>
+                      <span className={cn("text-[10px] uppercase tracking-[0.1em]", entry.ok ? "text-success" : "text-amber-500 dark:text-amber-400")}>{entry.ok ? "pass" : "fail"}</span>
+                    </div>
+                    {!entry.ok && entry.error ? <div className="mt-1 whitespace-pre-wrap text-amber-500 dark:text-amber-400">{entry.error}</div> : null}
+                  </div>
+                ))}
+              </div>
+            </div>
+          ) : null}
+
+          {scriptLastError ? (
+            <div className="border border-amber-500/25 bg-amber-500/[0.08] px-2 py-1 whitespace-pre-wrap text-amber-500 dark:text-amber-400">
+              {scriptLastError}
+            </div>
+          ) : null}
+
+          {scriptLastLogs.length > 0 ? (
+            <div className="grid gap-1">
+              <div className="uppercase tracking-[0.14em] text-muted-foreground">Logs</div>
+              <pre className="thin-scrollbar max-h-28 overflow-auto border border-border/30 bg-background/55 px-2 py-1 whitespace-pre-wrap text-muted-foreground">{scriptLastLogs.join("\n")}</pre>
+            </div>
+          ) : null}
+
+          {Object.keys(scriptLastVars).length > 0 ? (
+            <div className="grid gap-1">
+              <div className="uppercase tracking-[0.14em] text-muted-foreground">Vars</div>
+              <pre className="thin-scrollbar max-h-28 overflow-auto border border-border/30 bg-background/55 px-2 py-1 whitespace-pre-wrap text-muted-foreground">{JSON.stringify(scriptLastVars, null, 2)}</pre>
+            </div>
+          ) : null}
         </div>
       ) : null}
     </div>

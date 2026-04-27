@@ -10,6 +10,17 @@ function stringifyLogPart(value) {
   }
 }
 
+function normalizeScriptVars(vars) {
+  if (!vars || typeof vars !== "object" || Array.isArray(vars)) {
+    return {};
+  }
+
+  return Object.entries(vars).reduce((accumulator, [key, value]) => {
+    accumulator[String(key)] = value;
+    return accumulator;
+  }, {});
+}
+
 function cloneRows(rows = []) {
   return Array.isArray(rows)
     ? rows.map((row) => ({
@@ -99,12 +110,13 @@ export async function runRequestScript({
   script,
   request,
   response,
+  context,
 }) {
   const source = String(script ?? "").trim();
   const requestDraft = cloneRequestForScript(request);
   const logs = [];
   const tests = [];
-  const varsStore = new Map();
+  const varsStore = new Map(Object.entries(normalizeScriptVars(context?.vars)));
 
   if (!source) {
     return {
@@ -112,6 +124,9 @@ export async function runRequestScript({
       request: requestDraft,
       logs,
       tests,
+      context: {
+        vars: Object.fromEntries(varsStore.entries()),
+      },
       error: "",
     };
   }
@@ -240,6 +255,9 @@ export async function runRequestScript({
       request: requestDraft,
       logs,
       tests,
+      context: {
+        vars: Object.fromEntries(varsStore.entries()),
+      },
       error: "",
     };
   } catch (error) {
@@ -248,6 +266,9 @@ export async function runRequestScript({
       request: requestDraft,
       logs,
       tests,
+      context: {
+        vars: Object.fromEntries(varsStore.entries()),
+      },
       error: error?.message || String(error),
     };
   }
