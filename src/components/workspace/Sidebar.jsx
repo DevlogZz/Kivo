@@ -85,6 +85,8 @@ const IMPORT_EXPORT_FORMATS = [
 ];
 
 const REQUEST_RENAME_EVENT = "kivo:request-rename-focus";
+const REQUEST_IMPORT_EVENT = "kivo:request-import-open";
+const CURL_IMPORT_EVENT = "kivo:curl-import-open";
 
 const SUPPORTED_IMPORT_FORMATS_LABEL = "Supported formats: Postman, OpenAPI 3.0, Swagger 2.0, Bruno (JSON/YAML).";
 
@@ -1145,6 +1147,37 @@ export function RequestsView({
       window.removeEventListener(REQUEST_RENAME_EVENT, handleRequestRename);
     };
   }, [onSelectRequest]);
+
+  useEffect(() => {
+    function handleImportRequestEvent(event) {
+      const detail = event?.detail || {};
+      const workspaceName = String(detail.workspaceName || "");
+      const collectionName = String(detail.collectionName || "");
+      const folderPath = normalizeFolderPath(detail.folderPath || "");
+      if (!workspaceName || !collectionName) return;
+      handleImportRequest(workspaceName, collectionName, folderPath);
+    }
+
+    function handleCurlImportEvent(event) {
+      const detail = event?.detail || {};
+      const workspaceName = String(detail.workspaceName || "");
+      const collectionName = String(detail.collectionName || "");
+      const folderPath = normalizeFolderPath(detail.folderPath || "");
+      if (!workspaceName || !collectionName) return;
+      setCurlImportState({
+        workspaceName,
+        collectionName,
+        targetFolderPath: folderPath
+      });
+    }
+
+    window.addEventListener(REQUEST_IMPORT_EVENT, handleImportRequestEvent);
+    window.addEventListener(CURL_IMPORT_EVENT, handleCurlImportEvent);
+    return () => {
+      window.removeEventListener(REQUEST_IMPORT_EVENT, handleImportRequestEvent);
+      window.removeEventListener(CURL_IMPORT_EVENT, handleCurlImportEvent);
+    };
+  }, []);
 
   useEffect(() => {
     if (!sidebarOptionsOpen) return;

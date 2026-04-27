@@ -7,6 +7,8 @@ import { getMethodTone } from "@/lib/http-ui.js";
 import { REQUEST_MODES, REQUEST_MODE_OPTIONS } from "@/lib/workspace-store.js";
 
 const REQUEST_RENAME_EVENT = "kivo:request-rename-focus";
+const REQUEST_IMPORT_EVENT = "kivo:request-import-open";
+const CURL_IMPORT_EVENT = "kivo:curl-import-open";
 
 export function RequestTabs({
   requestTabs,
@@ -115,6 +117,30 @@ export function RequestTabs({
     setCreateRequestMenu(null);
   }
 
+  function handleImportRequest() {
+    if (!activeWorkspaceName || !activeCollectionName) return;
+    window.dispatchEvent(new CustomEvent(REQUEST_IMPORT_EVENT, {
+      detail: {
+        workspaceName: activeWorkspaceName,
+        collectionName: activeCollectionName,
+        folderPath: ""
+      }
+    }));
+    setCreateRequestMenu(null);
+  }
+
+  function handleImportCurl() {
+    if (!activeWorkspaceName || !activeCollectionName) return;
+    window.dispatchEvent(new CustomEvent(CURL_IMPORT_EVENT, {
+      detail: {
+        workspaceName: activeWorkspaceName,
+        collectionName: activeCollectionName,
+        folderPath: ""
+      }
+    }));
+    setCreateRequestMenu(null);
+  }
+
   return (
     <div className="flex items-stretch overflow-x-auto border-b border-border/30 bg-card/28 px-1 thin-scrollbar lg:h-[44px]">
       {requestTabs.map((request) => (
@@ -194,6 +220,7 @@ export function RequestTabs({
           {REQUEST_MODE_OPTIONS.map((option) => (
             <button
               key={option.value}
+
               type="button"
               className="flex w-full items-center gap-2 px-3 py-2 text-left text-[12px] text-foreground hover:bg-accent/45"
               onClick={() => handleCreateByMode(option.value)}
@@ -201,6 +228,21 @@ export function RequestTabs({
               <Plus className="h-3.5 w-3.5" /> {option.label}
             </button>
           ))}
+          <div className="my-1 border-t border-border/40" />
+          <button
+            type="button"
+            className="flex w-full items-center gap-2 px-3 py-2 text-left text-[12px] text-foreground hover:bg-accent/45"
+            onClick={handleImportRequest}
+          >
+            <Plus className="h-3.5 w-3.5" /> Import Request
+          </button>
+          <button
+            type="button"
+            className="flex w-full items-center gap-2 px-3 py-2 text-left text-[12px] text-foreground hover:bg-accent/45"
+            onClick={handleImportCurl}
+          >
+            <Plus className="h-3.5 w-3.5" /> From cURL
+          </button>
         </div>,
         document.body
       ) : null}
