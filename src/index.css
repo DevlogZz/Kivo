@@ -35,6 +35,10 @@
   --tone-put: 31 92% 32%;
   --tone-patch: 270 55% 38%;
   --tone-delete: 355 68% 42%;
+  --tone-gql: 286 56% 33%;
+  --tone-grpc: 194 84% 31%;
+  --tone-ws: 37 90% 31%;
+  --tone-sio: 20 88% 34%;
   --json-key: 215 72% 40%;
   --json-string: 156 54% 28%;
   --json-boolean: 275 52% 42%;
@@ -83,6 +87,10 @@
   --tone-put: 35 78% 65%;
   --tone-patch: 283 55% 70%;
   --tone-delete: 355 74% 69%;
+  --tone-gql: 286 58% 72%;
+  --tone-grpc: 191 80% 70%;
+  --tone-ws: 35 78% 69%;
+  --tone-sio: 24 88% 70%;
   --json-key: 210 88% 72%;
   --json-string: 102 42% 67%;
   --json-boolean: 286 54% 70%;
@@ -206,6 +214,38 @@
 
   .tone-default-bg {
     background-color: hsl(var(--secondary) / 0.4);
+  }
+
+  .tone-gql-text {
+    color: hsl(var(--tone-gql));
+  }
+
+  .tone-gql-bg {
+    background-color: hsl(var(--tone-gql) / 0.13);
+  }
+
+  .tone-grpc-text {
+    color: hsl(var(--tone-grpc));
+  }
+
+  .tone-grpc-bg {
+    background-color: hsl(var(--tone-grpc) / 0.13);
+  }
+
+  .tone-ws-text {
+    color: hsl(var(--tone-ws));
+  }
+
+  .tone-ws-bg {
+    background-color: hsl(var(--tone-ws) / 0.13);
+  }
+
+  .tone-sio-text {
+    color: hsl(var(--tone-sio));
+  }
+
+  .tone-sio-bg {
+    background-color: hsl(var(--tone-sio) / 0.13);
   }
 
   .json-key {

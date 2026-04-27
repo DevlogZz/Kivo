@@ -395,7 +395,6 @@ export default function App() {
                 <RequestTabs
                   activeWorkspaceName={activeWorkspace?.name}
                   activeCollectionName={activeCollection?.name}
-                  activeCollectionRequests={activeCollection?.requests}
                   activeRequestName={activeRequest?.name}
                   requestTabs={requestTabs}
                   selectRequest={handleSelectRequest}

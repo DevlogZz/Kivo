@@ -4,39 +4,21 @@ import { Pin, Plus, X } from "lucide-react";
 
 import { cn } from "@/lib/utils.js";
 import { getMethodTone } from "@/lib/http-ui.js";
-import { getUniqueName, REQUEST_MODES, REQUEST_MODE_OPTIONS } from "@/lib/workspace-store.js";
+import { REQUEST_MODES, REQUEST_MODE_OPTIONS } from "@/lib/workspace-store.js";
 
 const REQUEST_RENAME_EVENT = "kivo:request-rename-focus";
-
-function getRequestBaseNameByMode(mode) {
-  switch (mode) {
-    case REQUEST_MODES.SSE:
-      return "SSE Request";
-    case REQUEST_MODES.GRAPHQL:
-      return "GraphQL Request";
-    case REQUEST_MODES.GRPC:
-      return "gRPC Request";
-    case REQUEST_MODES.WEBSOCKET:
-      return "WebSocket Request";
-    case REQUEST_MODES.SOCKET_IO:
-      return "Socket.IO Request";
-    case REQUEST_MODES.HTTP:
-    default:
-      return "HTTP Request";
-  }
-}
 
 export function RequestTabs({
   requestTabs,
   activeWorkspaceName,
   activeCollectionName,
-  activeCollectionRequests,
   activeRequestName,
   selectRequest,
   closeRequestTab,
   createRequestRecord,
 }) {
   const [createRequestMenu, setCreateRequestMenu] = useState(null);
+  const [pendingRenameTarget, setPendingRenameTarget] = useState(null);
   const createMenuRef = useRef(null);
 
   useEffect(() => {
@@ -62,6 +44,21 @@ export function RequestTabs({
     };
   }, [createRequestMenu]);
 
+  useEffect(() => {
+    if (!pendingRenameTarget) return;
+    if (!activeRequestName) return;
+    if (activeRequestName === pendingRenameTarget.previousActiveRequestName) return;
+
+    window.dispatchEvent(new CustomEvent(REQUEST_RENAME_EVENT, {
+      detail: {
+        workspaceName: pendingRenameTarget.workspaceName,
+        collectionName: pendingRenameTarget.collectionName,
+        requestName: activeRequestName,
+      },
+    }));
+    setPendingRenameTarget(null);
+  }, [activeRequestName, pendingRenameTarget]);
+
   function openCreateRequestMenu(event) {
     event.stopPropagation();
     const rect = event.currentTarget.getBoundingClientRect();
@@ -71,19 +68,12 @@ export function RequestTabs({
   function handleCreateByMode(mode) {
     if (!activeWorkspaceName || !activeCollectionName) return;
 
-    const existingNames = (Array.isArray(activeCollectionRequests) ? activeCollectionRequests : [])
-      .map((request) => String(request?.name || ""))
-      .filter(Boolean);
-    const nextName = getUniqueName(getRequestBaseNameByMode(mode), existingNames);
-
-    createRequestRecord(activeWorkspaceName, activeCollectionName, nextName, "", mode);
-    window.dispatchEvent(new CustomEvent(REQUEST_RENAME_EVENT, {
-      detail: {
-        workspaceName: activeWorkspaceName,
-        collectionName: activeCollectionName,
-        requestName: nextName,
-      },
-    }));
+    setPendingRenameTarget({
+      workspaceName: activeWorkspaceName,
+      collectionName: activeCollectionName,
+      previousActiveRequestName: activeRequestName,
+    });
+    createRequestRecord(activeWorkspaceName, activeCollectionName, "", "", mode);
     setCreateRequestMenu(null);
   }
 
@@ -105,14 +95,14 @@ export function RequestTabs({
             ? "WS"
             : (isSse ? "SSE" : (isSocketIo ? "SIO" : (isGrpc ? "gRPC" : (isGraphql ? "GQL" : request.method))));
           const methodTone = isWebSocket
-            ? "text-amber-800 bg-amber-500/20 dark:text-amber-300 dark:bg-amber-500/15"
+            ? "tone-ws-text tone-ws-bg"
             : (isSse
-              ? "text-emerald-800 bg-emerald-500/20 dark:text-emerald-300 dark:bg-emerald-500/15"
+              ? "tone-get-text tone-get-bg"
               : (isSocketIo
-                ? "text-orange-800 bg-orange-500/20 dark:text-orange-300 dark:bg-orange-500/15"
+                ? "tone-sio-text tone-sio-bg"
                 : (isGrpc
-              ? "text-cyan-800 bg-cyan-500/20 dark:text-cyan-300 dark:bg-cyan-500/15"
-              : (isGraphql ? "text-fuchsia-800 bg-fuchsia-500/20 dark:text-fuchsia-300 dark:bg-fuchsia-500/15" : getMethodTone(request.method)))));
+              ? "tone-grpc-text tone-grpc-bg"
+              : (isGraphql ? "tone-gql-text tone-gql-bg" : getMethodTone(request.method)))));
 
           return (
             <button
