@@ -1,7 +1,7 @@
 ﻿import { useEffect, useState } from "react";
 import {
   BookOpen, Code2, FileJson, FlaskConical, FolderOpen, Globe, Layers,
-  Save, Share2, RotateCcw, ChevronRight, Eye, EyeOff
+  Save, Share2, Trash2, Eye, EyeOff
 } from "lucide-react";
 
 import { invoke } from "@tauri-apps/api/core";
@@ -32,9 +32,74 @@ function HeadersTable({ rows, onChange, onDelete }) {
     onChange(rows.map((r) => (r.id === id ? { ...r, [field]: value } : r)));
   }
 
+  function addRow() {
+    onChange([...rows, createHeaderRow()]);
+  }
+
+  function removeRow(id) {
+    const nextRows = rows.filter((row) => row.id !== id);
+    onChange(nextRows);
+    onDelete?.(nextRows);
+  }
+
   return (
-    <div className="flex flex-col">
-      { /* ... */ }
+    <div className="flex h-full min-h-0 flex-col bg-transparent">
+      <div className="grid grid-cols-[32px_minmax(0,1fr)_minmax(0,1fr)_40px] items-center gap-2 border-b border-border/25 bg-transparent px-3 py-2 text-[10px] uppercase tracking-[0.14em] text-muted-foreground">
+        <span>On</span>
+        <span>Header</span>
+        <span>Value</span>
+        <span></span>
+      </div>
+
+      <div className="thin-scrollbar min-h-0 flex-1 overflow-auto bg-transparent px-1">
+        {rows.length > 0 ? (
+          <div className="grid">
+            {rows.map((row) => (
+              <div key={row.id} className="grid grid-cols-[32px_minmax(0,1fr)_minmax(0,1fr)_40px] items-center border-b border-border/10 px-1">
+                <label className="flex h-9 items-center justify-center">
+                  <input
+                    type="checkbox"
+                    checked={row.enabled !== false}
+                    onChange={(event) => update(row.id, "enabled", event.target.checked)}
+                    className="h-3.5 w-3.5"
+                  />
+                </label>
+                <Input
+                  value={row.key ?? ""}
+                  onChange={(event) => update(row.id, "key", event.target.value)}
+                  placeholder="Header name"
+                  className="h-10 border-0 bg-transparent text-[12px] focus-visible:ring-0 lg:text-[14px]"
+                />
+                <Input
+                  value={row.value ?? ""}
+                  onChange={(event) => update(row.id, "value", event.target.value)}
+                  placeholder="Header value"
+                  className="h-10 border-0 bg-transparent text-[12px] focus-visible:ring-0 lg:text-[14px]"
+                />
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  onClick={() => removeRow(row.id)}
+                  className="h-9 w-9 text-muted-foreground hover:text-destructive"
+                >
+                  <Trash2 className="h-3.5 w-3.5" />
+                </Button>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div className="flex h-full min-h-[220px] items-center justify-center text-[12px] text-muted-foreground/60">
+            No default headers yet.
+          </div>
+        )}
+      </div>
+
+      <div className="border-t border-border/20 bg-transparent px-3 py-2">
+        <Button type="button" variant="outline" className="h-8 text-[12px]" onClick={addRow}>
+          Add Header
+        </Button>
+      </div>
     </div>
   );
 }
@@ -62,7 +127,7 @@ function OverviewTab({ workspace, collection, storagePath, envVars, onNavigate }
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         { /* ... */ }
         <Card
-          className="flex flex-col flex-1 border-border/20 bg-background/50 p-5 shadow-sm transition-all hover:bg-card/80"
+          className="flex flex-col flex-1 border-border/20 bg-transparent p-5 shadow-sm transition-all hover:bg-transparent"
         >
           <div className="flex items-center gap-3 mb-3">
             <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-blue-500/10 text-blue-400">
@@ -70,7 +135,7 @@ function OverviewTab({ workspace, collection, storagePath, envVars, onNavigate }
             </div>
             <h3 className="font-semibold text-foreground text-[13px]">Storage Path</h3>
           </div>
-          <div className="mt-auto flex items-center justify-between rounded-md bg-accent/40 px-3 py-2.5 outline outline-1 outline-border/20 group-hover:bg-accent/60 transition-colors cursor-pointer" onClick={() => invoke("reveal_item", { workspaceName: workspace?.name, collectionName: collection?.name }).catch(console.error)}>
+          <div className="mt-auto flex items-center justify-between rounded-md bg-transparent px-3 py-2.5 outline outline-1 outline-border/20 group-hover:bg-transparent transition-colors cursor-pointer" onClick={() => invoke("reveal_item", { workspaceName: workspace?.name, collectionName: collection?.name }).catch(console.error)}>
             <p className="font-mono text-[11px] text-muted-foreground truncate w-full group-hover:text-foreground transition-colors" title={collectionPath}>
               {collectionPath}
             </p>
@@ -78,7 +143,7 @@ function OverviewTab({ workspace, collection, storagePath, envVars, onNavigate }
           </div>
         </Card>
 
-        <Card className="flex flex-col flex-1 border-border/20 bg-background/50 p-5 shadow-sm transition-all hover:bg-card/80">
+        <Card className="flex flex-col flex-1 border-border/20 bg-transparent p-5 shadow-sm transition-all hover:bg-transparent">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
               <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-purple-500/10 text-purple-400">
@@ -109,7 +174,7 @@ function HeadersTab({ config, updateConfig, onSave, onReset, isDirty, isSaving }
           Automatically attached to every request in this collection. Per-request headers will override these.
         </p>
       </div>
-      <Card className="flex flex-col gap-4 border-border/20 bg-background/40 p-1 shadow-sm overflow-hidden flex-1 min-h-0">
+      <Card className="flex flex-col gap-4 border-border/20 bg-transparent p-1 shadow-sm overflow-hidden flex-1 min-h-0">
         <HeadersTable
           rows={rows}
           onChange={(nextRows) => updateConfig({ defaultHeaders: nextRows })}
@@ -166,10 +231,10 @@ function AuthTab({ workspace, collection, config, updateConfig, onSave, onReset,
         </p>
       </div>
 
-      <Card className={cn("flex min-h-0 flex-col gap-5 border-border/20 bg-background/40 p-5 shadow-sm", auth.type === "oauth2" ? "flex-1 overflow-hidden p-0" : "")}>
-        <div className="grid gap-3 text-left w-full">
+      <Card className={cn("flex min-h-0 flex-col gap-5 border-border/20 bg-transparent p-5 shadow-sm", auth.type === "oauth2" ? "flex-1 overflow-hidden p-0" : "")}>
+        <div className={cn("grid gap-3 text-left w-full", auth.type === "oauth2" && "border-b border-border/20 px-5 py-4") }>
           <label className="text-[11px] font-semibold uppercase tracking-[0.1em] text-muted-foreground">Authentication Type</label>
-          <div className="mx-5 mt-5 flex flex-wrap items-center gap-2 rounded-lg border border-border/20 bg-accent/30 p-1 w-fit">
+          <div className="mt-1 inline-flex w-fit flex-wrap items-center gap-2 rounded-lg border border-border/20 bg-transparent p-1">
             {AUTH_MODES.map((m) => (
               <button
                 key={m.value}
@@ -179,7 +244,7 @@ function AuthTab({ workspace, collection, config, updateConfig, onSave, onReset,
                   "px-4 py-1.5 rounded-md text-[12px] font-medium transition-all",
                   auth.type === m.value
                     ? "bg-primary text-primary-foreground shadow-sm"
-                    : "text-muted-foreground hover:text-foreground hover:bg-accent/50"
+                    : "text-muted-foreground hover:text-foreground hover:bg-transparent"
                 )}
               >
                 {m.label}
@@ -197,13 +262,13 @@ function AuthTab({ workspace, collection, config, updateConfig, onSave, onReset,
                 onValueChange={(val) => updateConfig({ defaultAuth: { ...auth, token: val } })}
                 placeholder="eyJhbG..."
                 type={showToken ? "text" : "password"}
-                inputClassName="h-10 border-border/40 bg-accent/20 font-mono text-[12px] shadow-inner focus-visible:border-primary/50 focus-visible:ring-1 focus-visible:ring-primary/20 pr-10"
+                inputClassName="h-10 border-border/40 bg-transparent font-mono text-[12px] focus-visible:border-primary/50 focus-visible:ring-1 focus-visible:ring-primary/20 pr-10"
                 envVars={envVars}
               />
               <button
                 type="button"
                 onClick={() => setShowToken(!showToken)}
-                className="absolute right-2 top-1/2 -translate-y-1/2 flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-foreground z-10"
+                className="absolute right-2 top-1/2 -translate-y-1/2 flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-transparent hover:text-foreground z-10"
               >
                 {showToken ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
               </button>
@@ -220,7 +285,7 @@ function AuthTab({ workspace, collection, config, updateConfig, onSave, onReset,
                 value={auth.username ?? ""}
                 onValueChange={(val) => updateConfig({ defaultAuth: { ...auth, username: val } })}
                 placeholder="Enter username"
-                inputClassName="h-10 border-border/40 bg-accent/20 font-mono text-[12px] shadow-inner focus-visible:border-primary/50 focus-visible:ring-1 focus-visible:ring-primary/20"
+                inputClassName="h-10 border-border/40 bg-transparent font-mono text-[12px] focus-visible:border-primary/50 focus-visible:ring-1 focus-visible:ring-primary/20"
                 envVars={envVars}
               />
             </div>
@@ -232,13 +297,13 @@ function AuthTab({ workspace, collection, config, updateConfig, onSave, onReset,
                   onValueChange={(val) => updateConfig({ defaultAuth: { ...auth, password: val } })}
                   placeholder="Enter password"
                   type={showPassword ? "text" : "password"}
-                  inputClassName="h-10 border-border/40 bg-accent/20 font-mono text-[12px] shadow-inner focus-visible:border-primary/50 focus-visible:ring-1 focus-visible:ring-primary/20 pr-10"
+                  inputClassName="h-10 border-border/40 bg-transparent font-mono text-[12px] focus-visible:border-primary/50 focus-visible:ring-1 focus-visible:ring-primary/20 pr-10"
                   envVars={envVars}
                 />
                 <button
                   type="button"
                   onClick={() => setShowPassword(!showPassword)}
-                  className="absolute right-2 top-1/2 -translate-y-1/2 flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-foreground z-10"
+                  className="absolute right-2 top-1/2 -translate-y-1/2 flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-transparent hover:text-foreground z-10"
                 >
                   {showPassword ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
                 </button>
@@ -258,7 +323,7 @@ function AuthTab({ workspace, collection, config, updateConfig, onSave, onReset,
                 value={auth.apiKeyName ?? ""}
                 onValueChange={(val) => updateConfig({ defaultAuth: { ...auth, apiKeyName: val } })}
                 placeholder="e.g. X-API-Key"
-                inputClassName="h-10 border-border/40 bg-accent/20 font-mono text-[12px] shadow-inner focus-visible:border-primary/50 focus-visible:ring-1 focus-visible:ring-primary/20"
+                inputClassName="h-10 border-border/40 bg-transparent font-mono text-[12px] focus-visible:border-primary/50 focus-visible:ring-1 focus-visible:ring-primary/20"
                 envVars={envVars}
               />
             </div>
@@ -268,13 +333,13 @@ function AuthTab({ workspace, collection, config, updateConfig, onSave, onReset,
                 value={auth.apiKeyValue ?? ""}
                 onValueChange={(val) => updateConfig({ defaultAuth: { ...auth, apiKeyValue: val } })}
                 placeholder="Enter API key value"
-                inputClassName="h-10 border-border/40 bg-accent/20 font-mono text-[12px] shadow-inner focus-visible:border-primary/50 focus-visible:ring-1 focus-visible:ring-primary/20"
+                inputClassName="h-10 border-border/40 bg-transparent font-mono text-[12px] focus-visible:border-primary/50 focus-visible:ring-1 focus-visible:ring-primary/20"
                 envVars={envVars}
               />
             </div>
             <div className="grid gap-2">
               <label className="text-[11px] font-semibold uppercase tracking-[0.1em] text-muted-foreground">Add To</label>
-              <div className="mx-5 mt-5 flex flex-wrap items-center gap-2 rounded-lg border border-border/20 bg-accent/30 p-1 w-fit">
+              <div className="mx-5 mt-5 flex flex-wrap items-center gap-2 rounded-lg border border-border/20 bg-transparent p-1 w-fit">
                 {API_KEY_IN_OPTIONS.map((opt) => (
                   <button
                     key={opt.value}
@@ -284,7 +349,7 @@ function AuthTab({ workspace, collection, config, updateConfig, onSave, onReset,
                       "px-4 py-1.5 rounded-md text-[12px] font-medium transition-all",
                       (auth.apiKeyIn ?? "header") === opt.value
                         ? "bg-primary text-primary-foreground shadow-sm"
-                        : "text-muted-foreground hover:text-foreground hover:bg-accent/50"
+                        : "text-muted-foreground hover:text-foreground hover:bg-transparent"
                     )}
                   >
                     {opt.label}
@@ -302,19 +367,21 @@ function AuthTab({ workspace, collection, config, updateConfig, onSave, onReset,
         )}
 
         {auth.type === "oauth2" && (
-          <OAuth2Panel
-            auth={auth}
-            envVars={envVars}
-            workspaceName={workspace?.name}
-            collectionName={collection?.name}
-            scopeLabel="collection"
-            onChange={(nextAuth) => updateConfig({ defaultAuth: nextAuth })}
-            onPersist={async (nextAuth) => {
-              const nextConfig = { ...config, defaultAuth: nextAuth };
-              updateConfig(nextConfig);
-              await onSave(nextConfig);
-            }}
-          />
+          <div className="min-h-0 flex-1 px-1 pb-1">
+            <OAuth2Panel
+              auth={auth}
+              envVars={envVars}
+              workspaceName={workspace?.name}
+              collectionName={collection?.name}
+              scopeLabel="collection"
+              onChange={(nextAuth) => updateConfig({ defaultAuth: nextAuth })}
+              onPersist={async (nextAuth) => {
+                const nextConfig = { ...config, defaultAuth: nextAuth };
+                updateConfig(nextConfig);
+                await onSave(nextConfig);
+              }}
+            />
+          </div>
         )}
 
         {auth.type === "none" && (
@@ -385,9 +452,9 @@ export function CollectionSettingsPage({
   }
 
   return (
-    <div className="flex flex-col h-full min-h-0 overflow-hidden">
+    <div className="flex flex-col h-full min-h-0 overflow-hidden bg-[hsl(var(--card)/0.92)]">
       { }
-      <div className="flex items-center gap-3 border-b border-border/25 bg-background/30 px-6 py-4 shrink-0">
+      <div className="flex items-center gap-3 border-b border-border/25 bg-transparent px-6 py-4 shrink-0">
         <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary/10">
           <FileJson className="h-4 w-4 text-primary" />
         </div>
@@ -402,7 +469,7 @@ export function CollectionSettingsPage({
       </div>
 
       { }
-      <div className="flex items-center gap-1 border-b border-border/25 bg-background/20 px-4 shrink-0">
+      <div className="flex items-center gap-1 border-b border-border/25 bg-transparent px-4 shrink-0">
         {TABS.map((tab) => (
           <button
             key={tab.id}
@@ -421,7 +488,7 @@ export function CollectionSettingsPage({
       </div>
 
       { }
-      <div className="flex-1 min-h-0 overflow-auto">
+      <div className="flex-1 min-h-0 overflow-auto bg-[hsl(var(--card)/0.92)]">
         {activeTab === "Overview" && (
           <OverviewTab
             workspace={workspace}
@@ -452,7 +519,7 @@ export function CollectionSettingsPage({
                 URLs, headers, and payloads to interpolate them dynamically. Collection keys take priority.
               </p>
             </div>
-            <Card className="flex-1 min-h-0 border-border/20 bg-background/40 shadow-sm overflow-hidden flex flex-col mt-2">
+            <Card className="flex-1 min-h-0 border-border/20 bg-transparent shadow-sm overflow-hidden flex flex-col mt-2">
               <EnvEditor
                 workspaceName={workspace?.name}
                 collectionName={collection?.name}

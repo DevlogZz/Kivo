@@ -2506,9 +2506,18 @@ export function useWorkspaceStore() {
     try {
       const folderHeaderRows = resolveFolderHeaderRows(activeCollection, scriptedRequest.folderPath);
       const resolvedFolderAuth = resolveFolderAuth(activeCollection, scriptedRequest.folderPath);
+      const disabledRequestHeaderKeys = new Set(
+        (scriptedRequest.headers || [])
+          .filter((row) => row?.enabled === false && String(row?.key || "").trim())
+          .map((row) => String(row.key).trim().toLowerCase())
+      );
+      const inheritedHeaderRows = folderHeaderRows.filter((row) => {
+        const key = String(row?.key || "").trim().toLowerCase();
+        return !key || !disabledRequestHeaderKeys.has(key);
+      });
       const effectiveRequest = {
         ...scriptedRequest,
-        headers: [...folderHeaderRows, ...(scriptedRequest.headers || [])],
+        headers: [...inheritedHeaderRows, ...(scriptedRequest.headers || [])],
         auth: scriptedRequest?.auth?.type === "inherit" ? resolvedFolderAuth : scriptedRequest.auth
       };
 

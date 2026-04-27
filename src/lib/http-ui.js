@@ -314,6 +314,9 @@ export function buildRequestPayload(request, workspaceName, collectionName) {
   const auth = request?.auth ?? { type: "none" };
   const bodyType = request?.bodyType ?? "json";
   const bodyFilePath = bodyType === "file" ? String(request?.bodyFilePath ?? "") : "";
+  const disableUserAgent = Array.isArray(request?.headers)
+    ? request.headers.some((row) => String(row?.key || "").trim().toLowerCase() === "user-agent" && row?.enabled === false)
+    : false;
 
   return {
     method,
@@ -325,6 +328,7 @@ export function buildRequestPayload(request, workspaceName, collectionName) {
     collectionName: collectionName || "",
     authType: auth.type ?? "none",
     inheritHeaders: request?.inheritHeaders ?? true,
+    disableUserAgent,
     authPayload: auth.type === "inherit" ? null : {
       apiKeyIn: auth.apiKeyIn ?? "header",
       apiKeyName: auth.apiKeyName ?? "",

@@ -1,7 +1,18 @@
-import { useMemo, useRef } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import Prism from "prismjs";
+import "prismjs/components/prism-clike";
+import "prismjs/components/prism-javascript";
 
 import { cn } from "@/lib/utils.js";
 import { isJsonText } from "@/lib/formatters.js";
+
+const SUGGESTION_LIMIT = 24;
+
+if (Prism.languages.javascript && !Prism.languages.javascript["kivo-api"]) {
+  Prism.languages.insertBefore("javascript", "keyword", {
+    "kivo-api": /\bkivo\b/
+  });
+}
 
 const tokenPattern = /("(?:\\u[a-fA-F0-9]{4}|\\[^u]|[^\\"])*"\s*:|"(?:\\u[a-fA-F0-9]{4}|\\[^u]|[^\\"])*"|\btrue\b|\bfalse\b|\bnull\b|-?\d+(?:\.\d+)?(?:[eE][+\-]?\d+)?|[{}\[\],:])/g;
 const graphqlKeywords = new Set([
@@ -25,45 +36,101 @@ const graphqlKeywords = new Set([
   "implements"
 ]);
 const graphqlTokenPattern = /"""[\s\S]*?"""|"(?:\\.|[^"])*"|#[^\n]*|\.\.\.|@[A-Za-z_][A-Za-z0-9_]*|\$[A-Za-z_][A-Za-z0-9_]*|-?\d+(?:\.\d+)?|[A-Za-z_][A-Za-z0-9_]*|[!():=@\[\]{|},]/g;
-const javascriptKeywords = new Set([
-  "const",
-  "let",
-  "var",
-  "function",
-  "return",
-  "if",
-  "else",
-  "for",
-  "while",
-  "await",
-  "async",
-  "switch",
-  "case",
-  "default",
-  "break",
-  "continue",
-  "try",
-  "catch",
-  "finally",
-  "throw",
-  "new",
-  "class",
-  "extends",
-  "import",
-  "export",
-  "from",
-  "in",
-  "of",
-  "typeof",
-  "instanceof",
-  "void",
-  "delete",
-  "true",
-  "false",
-  "null",
-  "undefined"
-]);
-const javascriptTokenPattern = /\/\*[\s\S]*?\*\/|\/\/[^\n]*|"(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'|`(?:\\.|[^`\\])*`|\/(?:\\.|[^\/\n])+\/[dgimsuvy]*|\b(?:0x[\da-fA-F]+|\d+(?:\.\d+)?(?:[eE][+\-]?\d+)?)\b|=>|===|!==|==|!=|<=|>=|\+\+|--|\|\||&&|\?\?|\b[A-Za-z_$][A-Za-z0-9_$]*\b|[{}()[\].,;:+\-*/%!=<>|&?~^]/g;
+const prismToScriptClassMap = {
+  "kivo-api": "script-builtin",
+  comment: "script-comment",
+  string: "script-string",
+  "template-string": "script-string",
+  regex: "script-regex",
+  keyword: "script-keyword",
+  boolean: "script-keyword",
+  number: "script-number",
+  builtin: "script-builtin",
+  function: "script-builtin",
+  "function-variable": "script-builtin",
+  "class-name": "script-builtin",
+  operator: "script-punctuation",
+  punctuation: "script-punctuation",
+  interpolation: "script-punctuation",
+  constant: "script-builtin",
+  property: "script-identifier",
+};
+
+function getTokenPrefix(text, cursorPosition) {
+  const safeText = String(text || "");
+  const safeCursor = Number.isFinite(cursorPosition) ? cursorPosition : 0;
+  const beforeCursor = safeText.slice(0, safeCursor);
+  const match = beforeCursor.match(/[A-Za-z_$][A-Za-z0-9_$.]*$/);
+  return match ? match[0] : "";
+}
+
+function getTextareaCaretPosition(element, cursorPosition) {
+  if (!element) {
+    return { top: 8, left: 8 };
+  }
+
+  const text = element.value || "";
+  const safeCursor = Math.max(0, Math.min(text.length, Number(cursorPosition) || 0));
+  const mirror = document.createElement("div");
+  const style = window.getComputedStyle(element);
+  const properties = [
+    "boxSizing",
+    "width",
+    "height",
+    "overflowX",
+    "overflowY",
+    "borderTopWidth",
+    "borderRightWidth",
+    "borderBottomWidth",
+    "borderLeftWidth",
+    "paddingTop",
+    "paddingRight",
+    "paddingBottom",
+    "paddingLeft",
+    "fontStyle",
+    "fontVariant",
+    "fontWeight",
+    "fontStretch",
+    "fontSize",
+    "fontFamily",
+    "lineHeight",
+    "letterSpacing",
+    "textAlign",
+    "textTransform",
+    "textIndent",
+    "textDecoration",
+    "tabSize",
+    "MozTabSize",
+    "whiteSpace",
+    "wordWrap",
+    "wordBreak",
+  ];
+
+  mirror.style.position = "absolute";
+  mirror.style.visibility = "hidden";
+  mirror.style.pointerEvents = "none";
+  mirror.style.top = "0";
+  mirror.style.left = "-9999px";
+
+  for (const property of properties) {
+    mirror.style[property] = style[property];
+  }
+
+  mirror.style.whiteSpace = "pre-wrap";
+  mirror.style.wordWrap = "break-word";
+  mirror.textContent = text.slice(0, safeCursor);
+
+  const marker = document.createElement("span");
+  marker.textContent = text.slice(safeCursor) || ".";
+  mirror.appendChild(marker);
+  document.body.appendChild(mirror);
+
+  const top = marker.offsetTop - element.scrollTop;
+  const left = marker.offsetLeft - element.scrollLeft;
+  document.body.removeChild(mirror);
+
+  return { top, left };
+}
 
 function tokenClassName(token) {
   if (/^".*":$/.test(token)) {
@@ -118,69 +185,45 @@ function renderHighlightedJson(text) {
   return nodes;
 }
 
-function javascriptTokenClassName(token) {
-  if (token.startsWith("//") || token.startsWith("/*")) {
-    return "script-comment";
+function resolvePrismScriptClass(token) {
+  const aliases = Array.isArray(token?.alias)
+    ? token.alias
+    : (token?.alias ? [token.alias] : []);
+  const candidates = [token?.type, ...aliases].map((entry) => String(entry || "").toLowerCase());
+  for (const candidate of candidates) {
+    if (prismToScriptClassMap[candidate]) {
+      return prismToScriptClassMap[candidate];
+    }
   }
-
-  if (/^\/(?:\\.|[^\/\n])+\/[dgimsuvy]*$/.test(token)) {
-    return "script-regex";
-  }
-
-  if (/^"|^'|^`/.test(token)) {
-    return "script-string";
-  }
-
-  if (/^\d/.test(token)) {
-    return "script-number";
-  }
-
-  if (javascriptKeywords.has(token)) {
-    return "script-keyword";
-  }
-
-  if (/^(kivo|JSON|Math|Date|Object|Array|String|Number|Boolean|Promise)$/.test(token)) {
-    return "script-builtin";
-  }
-
-  if (/^[{}()[\].,;:+\-*/%!=<>|&?]$/.test(token)) {
-    return "script-punctuation";
-  }
-
-  if (/^(=>|===|!==|==|!=|<=|>=|\+\+|--|\|\||&&|\?\?)$/.test(token)) {
-    return "script-punctuation";
-  }
-
   return "script-identifier";
+}
+
+function renderPrismToken(token, keyPrefix) {
+  if (typeof token === "string") {
+    return token;
+  }
+
+  if (Array.isArray(token)) {
+    return token.map((item, index) => renderPrismToken(item, `${keyPrefix}-${index}`));
+  }
+
+  const className = resolvePrismScriptClass(token);
+  return (
+    <span key={keyPrefix} className={className}>
+      {renderPrismToken(token?.content, `${keyPrefix}-content`)}
+    </span>
+  );
 }
 
 function renderHighlightedJavascript(text) {
   const content = text || "";
-  const nodes = [];
-  let lastIndex = 0;
-  let match;
-
-  javascriptTokenPattern.lastIndex = 0;
-
-  while ((match = javascriptTokenPattern.exec(content)) !== null) {
-    if (match.index > lastIndex) {
-      nodes.push(content.slice(lastIndex, match.index));
-    }
-
-    const token = match[0];
-    nodes.push(
-      <span key={`${match.index}-${token}`} className={javascriptTokenClassName(token)}>
-        {token}
-      </span>
-    );
-    lastIndex = match.index + token.length;
+  const javascriptGrammar = Prism.languages.javascript || Prism.languages.js || Prism.languages.clike;
+  if (!javascriptGrammar) {
+    return content;
   }
 
-  if (lastIndex < content.length) {
-    nodes.push(content.slice(lastIndex));
-  }
-
-  return nodes;
+  const tokens = Prism.tokenize(content, javascriptGrammar);
+  return tokens.map((token, index) => renderPrismToken(token, `js-${index}`));
 }
 
 function getLineCount(text) {
@@ -258,16 +301,44 @@ export function CodeEditor({
   disabled = false,
   wrapLines = false,
   className,
-  lineNumbers = false
+  lineNumbers = false,
+  autocompleteItems = []
 }) {
   const highlightRef = useRef(null);
   const lineNumbersRef = useRef(null);
+  const textareaRef = useRef(null);
+  const suggestionsRef = useRef(null);
+  const suppressKeyUpRef = useRef(false);
+  const pendingCursorRef = useRef(null);
+  const [suggestions, setSuggestions] = useState([]);
+  const [selectedSuggestionIndex, setSelectedSuggestionIndex] = useState(0);
+  const [suggestionAnchor, setSuggestionAnchor] = useState({ top: 12, left: 12 });
   const isJson = language === "json" && isJsonText(value);
   const isGraphql = language === "graphql";
   const isJavascript = language === "javascript" || language === "js";
   const useOverlay = !readOnly && (language === "json" || language === "graphql" || isJavascript);
   const displayValue = useMemo(() => value || "", [value]);
   const totalLines = useMemo(() => getLineCount(displayValue), [displayValue]);
+  const suggestionEnabled = !readOnly && !disabled && isJavascript && Array.isArray(autocompleteItems) && autocompleteItems.length > 0;
+
+  useEffect(() => {
+    if (!textareaRef.current || pendingCursorRef.current == null) {
+      return;
+    }
+    const nextCursor = pendingCursorRef.current;
+    pendingCursorRef.current = null;
+    textareaRef.current.setSelectionRange(nextCursor, nextCursor);
+    textareaRef.current.focus();
+  }, [value]);
+
+  useEffect(() => {
+    if (!suggestionsRef.current || suggestions.length === 0) {
+      return;
+    }
+
+    const activeItem = suggestionsRef.current.querySelector(`[data-suggestion-index="${selectedSuggestionIndex}"]`);
+    activeItem?.scrollIntoView({ block: "nearest" });
+  }, [selectedSuggestionIndex, suggestions]);
 
   function syncScroll(event) {
     if (highlightRef.current) {
@@ -276,6 +347,114 @@ export function CodeEditor({
     }
     if (lineNumbersRef.current) {
       lineNumbersRef.current.scrollTop = event.target.scrollTop;
+    }
+  }
+
+  function updateSuggestionsByCursor(cursorPosition, sourceText = displayValue) {
+    if (!suggestionEnabled) {
+      setSuggestions([]);
+      setSelectedSuggestionIndex(0);
+      return;
+    }
+
+    const prefix = getTokenPrefix(sourceText, cursorPosition);
+    if (!prefix) {
+      setSuggestions([]);
+      setSelectedSuggestionIndex(0);
+      return;
+    }
+
+    const prefixLower = prefix.toLowerCase();
+    const next = autocompleteItems
+      .filter((item) => String(item?.label || "").toLowerCase().startsWith(prefixLower))
+      .sort((left, right) => {
+        const leftLabel = String(left?.label || "");
+        const rightLabel = String(right?.label || "");
+        const leftLower = leftLabel.toLowerCase();
+        const rightLower = rightLabel.toLowerCase();
+        const leftExact = leftLower === prefixLower ? 1 : 0;
+        const rightExact = rightLower === prefixLower ? 1 : 0;
+        if (leftExact !== rightExact) {
+          return rightExact - leftExact;
+        }
+
+        const leftDepth = leftLabel.split(".").length;
+        const rightDepth = rightLabel.split(".").length;
+        if (leftDepth !== rightDepth) {
+          return leftDepth - rightDepth;
+        }
+
+        if (leftLabel.length !== rightLabel.length) {
+          return leftLabel.length - rightLabel.length;
+        }
+
+        return leftLabel.localeCompare(rightLabel);
+      })
+      .map((item) => {
+        const label = String(item?.label || "");
+        const lastDotIndex = prefix.lastIndexOf(".");
+        const basePath = lastDotIndex >= 0 ? prefix.slice(0, lastDotIndex + 1) : "";
+        const suffixLabel = basePath && label.toLowerCase().startsWith(basePath.toLowerCase())
+          ? label.slice(basePath.length)
+          : "";
+        return {
+          ...item,
+          matchPrefix: prefix,
+          displayLabel: suffixLabel || label,
+        };
+      })
+      .slice(0, SUGGESTION_LIMIT);
+
+    if (textareaRef.current) {
+      const element = textareaRef.current;
+      const computedStyle = window.getComputedStyle(element);
+      const lineHeight = Number.parseFloat(computedStyle.lineHeight) || 24;
+      const caret = getTextareaCaretPosition(element, cursorPosition);
+      const estimatedHeight = 220;
+      const popupWidth = Math.min(320, Math.max(180, element.clientWidth - 16));
+
+      let top = caret.top + lineHeight + 6;
+      let left = caret.left + 4;
+
+      const minLeft = 8;
+      const maxLeft = Math.max(minLeft, element.clientWidth - popupWidth - 8);
+      left = Math.min(Math.max(minLeft, left), maxLeft);
+
+      if (top + estimatedHeight > element.clientHeight - 8) {
+        top = top - estimatedHeight - lineHeight - 10;
+      }
+
+      top = Math.min(Math.max(8, top), Math.max(8, element.clientHeight - estimatedHeight - 8));
+      setSuggestionAnchor({ top, left });
+    }
+
+    setSuggestions(next);
+    setSelectedSuggestionIndex(0);
+  }
+
+  function applySuggestion(item) {
+    if (!textareaRef.current || !item) {
+      return;
+    }
+
+    const selectionStart = textareaRef.current.selectionStart;
+    const selectionEnd = textareaRef.current.selectionEnd;
+    const prefix = String(item.matchPrefix || getTokenPrefix(displayValue, selectionStart));
+    const insertText = String(item.insertText || item.label || "");
+    const from = Math.max(0, selectionStart - prefix.length);
+    const to = Math.max(from, selectionEnd);
+    const nextValue = `${displayValue.slice(0, from)}${insertText}${displayValue.slice(to)}`;
+
+    pendingCursorRef.current = from + insertText.length;
+    onChange?.(nextValue);
+    setSuggestions([]);
+    setSelectedSuggestionIndex(0);
+  }
+
+  function handleEditorScroll(event) {
+    syncScroll(event);
+    if (suggestions.length > 0) {
+      updateSuggestionsByCursor(event.currentTarget.selectionStart, event.currentTarget.value);
     }
   }
 
@@ -325,13 +504,19 @@ export function CodeEditor({
       <div className={cn("relative grid h-full min-h-0 overflow-hidden bg-transparent", lineNumbers ? "grid-cols-[48px_minmax(0,1fr)]" : "grid-cols-[minmax(0,1fr)]", className)}>
         {lineNumbersColumn}
         <textarea
+          ref={textareaRef}
           value={value}
           onChange={(event) => onChange?.(event.target.value)}
-          onScroll={syncScroll}
+          onScroll={handleEditorScroll}
           placeholder={placeholder}
           disabled={disabled}
           spellCheck={false}
-          className="thin-scrollbar h-full w-full resize-none overflow-auto border-0 bg-transparent px-4 py-3 font-mono text-[12px] leading-6 text-foreground outline-none placeholder:text-muted-foreground/60 disabled:cursor-not-allowed disabled:opacity-50"
+          className={cn(
+            "thin-scrollbar h-full w-full resize-none border-0 bg-transparent px-4 py-3 font-mono text-[12px] leading-6 text-foreground outline-none placeholder:text-muted-foreground/60 disabled:cursor-not-allowed disabled:opacity-50",
+            wrapLines
+              ? "overflow-y-auto overflow-x-hidden whitespace-pre-wrap [overflow-wrap:anywhere]"
+              : "overflow-auto"
+          )}
         />
       </div>
     );
@@ -343,7 +528,13 @@ export function CodeEditor({
       <pre
         ref={highlightRef}
         aria-hidden="true"
-        className="editor-overlay-scroll-hidden pointer-events-none col-start-2 row-start-1 h-full overflow-auto px-4 py-3 font-mono text-[12px] leading-6 text-foreground"
+        className={cn(
+          "editor-overlay-scroll-hidden pointer-events-none row-start-1 h-full px-4 py-3 font-mono text-[12px] leading-6 text-foreground",
+          lineNumbers ? "col-start-2" : "col-start-1",
+          wrapLines
+            ? "overflow-y-auto overflow-x-hidden whitespace-pre-wrap [overflow-wrap:anywhere]"
+            : "overflow-auto"
+        )}
       >
         <code>
           {displayValue
@@ -358,15 +549,115 @@ export function CodeEditor({
         </code>
       </pre>
       <textarea
+        ref={textareaRef}
         value={value}
-        onChange={(event) => onChange?.(event.target.value)}
-        onScroll={syncScroll}
+        onChange={(event) => {
+          onChange?.(event.target.value);
+          updateSuggestionsByCursor(event.target.selectionStart, event.target.value);
+        }}
+        onKeyDown={(event) => {
+          const isArrowDown = event.key === "ArrowDown" || event.key === "Down" || event.code === "ArrowDown" || event.keyCode === 40;
+          const isArrowUp = event.key === "ArrowUp" || event.key === "Up" || event.code === "ArrowUp" || event.keyCode === 38;
+          if (suggestions.length > 0) {
+            if (isArrowDown) {
+              event.preventDefault();
+              suppressKeyUpRef.current = true;
+              setSelectedSuggestionIndex((current) => (current + 1) % suggestions.length);
+              return;
+            }
+
+            if (isArrowUp) {
+              event.preventDefault();
+              suppressKeyUpRef.current = true;
+              setSelectedSuggestionIndex((current) => (current - 1 + suggestions.length) % suggestions.length);
+              return;
+            }
+
+            if (event.key === "Enter" || event.key === "Tab") {
+              event.preventDefault();
+              suppressKeyUpRef.current = true;
+              applySuggestion(suggestions[selectedSuggestionIndex]);
+              return;
+            }
+
+            if (event.key === "Escape") {
+              suppressKeyUpRef.current = true;
+              setSuggestions([]);
+              setSelectedSuggestionIndex(0);
+              return;
+            }
+          }
+
+          if (suggestionEnabled && event.ctrlKey && event.key === " ") {
+            event.preventDefault();
+            setSuggestions(autocompleteItems.slice(0, SUGGESTION_LIMIT));
+            setSelectedSuggestionIndex(0);
+          }
+        }}
+        onClick={(event) => updateSuggestionsByCursor(event.currentTarget.selectionStart)}
+        onKeyUp={(event) => {
+          if (suppressKeyUpRef.current) {
+            suppressKeyUpRef.current = false;
+            return;
+          }
+
+          if (["ArrowDown", "ArrowUp", "Down", "Up", "Enter", "Tab", "Escape"].includes(event.key)) {
+            return;
+          }
+
+          updateSuggestionsByCursor(event.currentTarget.selectionStart);
+        }}
+        onBlur={() => {
+          window.setTimeout(() => {
+            setSuggestions([]);
+            setSelectedSuggestionIndex(0);
+          }, 90);
+        }}
+        onScroll={handleEditorScroll}
         placeholder={placeholder}
         disabled={disabled}
         spellCheck={false}
-        className="thin-scrollbar col-start-2 row-start-1 h-full w-full resize-none overflow-auto border-0 bg-transparent px-4 py-3 font-mono text-[12px] leading-6 text-transparent caret-foreground outline-none placeholder:text-muted-foreground/0 disabled:cursor-not-allowed disabled:opacity-50"
+        className={cn(
+          "thin-scrollbar row-start-1 h-full w-full resize-none border-0 bg-transparent px-4 py-3 font-mono text-[12px] leading-6 text-transparent caret-foreground outline-none placeholder:text-muted-foreground/0 disabled:cursor-not-allowed disabled:opacity-50",
+          lineNumbers ? "col-start-2" : "col-start-1",
+          wrapLines
+            ? "overflow-y-auto overflow-x-hidden whitespace-pre-wrap [overflow-wrap:anywhere]"
+            : "overflow-auto"
+        )}
       />
-      {!value ? <div className={cn("pointer-events-none col-start-2 row-start-1 pt-3 font-mono text-[12px] text-muted-foreground/60", lineNumbers ? "pl-4" : "pl-4")}>{placeholder}</div> : null}
+      {!value ? <div className={cn("pointer-events-none row-start-1 pt-3 font-mono text-[12px] text-muted-foreground/60", lineNumbers ? "col-start-2 pl-4" : "col-start-1 pl-4")}>{placeholder}</div> : null}
+      {suggestions.length > 0 ? (
+        <div className={cn("pointer-events-none row-start-1 relative z-30", lineNumbers ? "col-start-2" : "col-start-1")}>
+          <div
+            ref={suggestionsRef}
+            style={{ top: `${suggestionAnchor.top}px`, left: `${suggestionAnchor.left}px` }}
+            className="editor-suggestion-scroll pointer-events-auto absolute max-h-56 w-80 max-w-[calc(100%-16px)] overflow-auto rounded-none border border-border/60 bg-popover/97 shadow-[0_16px_32px_rgba(0,0,0,0.35)] backdrop-blur-md"
+          >
+            {suggestions.map((item, index) => (
+              <button
+                key={`${item.label}-${index}`}
+                data-suggestion-index={index}
+                type="button"
+                onMouseDown={(event) => event.preventDefault()}
+                onClick={() => applySuggestion(item)}
+                aria-selected={index === selectedSuggestionIndex}
+                className={cn(
+                  "relative flex w-full items-center justify-between gap-3 border-b border-border/15 px-3 py-2 text-left text-[12px] transition-colors last:border-b-0",
+                  index === selectedSuggestionIndex
+                    ? "bg-primary/35 text-foreground shadow-[inset_0_0_0_1px_hsl(var(--primary)/0.45)]"
+                    : "text-muted-foreground hover:bg-accent/30 hover:text-foreground"
+                )}
+              >
+                {index === selectedSuggestionIndex ? (
+                  <span className="absolute inset-y-0 left-0 w-[2px] bg-primary" aria-hidden="true"></span>
+                ) : null}
+                <span className={cn("font-mono text-[12px] text-foreground", index === selectedSuggestionIndex ? "font-semibold" : "")}>{item.displayLabel || item.label}</span>
+                <span className={cn("text-[10px] uppercase tracking-[0.12em]", index === selectedSuggestionIndex ? "text-primary" : "text-muted-foreground")}>tab</span>
+              </button>
+            ))}
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }

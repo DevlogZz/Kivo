@@ -51,7 +51,7 @@ function EnvTable({ rows, onChange, onDelete, workspaceVarKeys = [] }) {
 
   return (
     <div className="flex min-h-0 flex-col">
-      <div className="grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)_80px_44px] border-b border-border/10 bg-accent/20 px-2 text-[10px] uppercase tracking-[0.16em] text-muted-foreground">
+      <div className="grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)_80px_44px] border-b border-border/10 bg-transparent px-2 text-[10px] uppercase tracking-[0.16em] text-muted-foreground">
         <div className="px-2 py-2.5 font-semibold">Variable</div>
         <div className="px-2 py-2.5 font-semibold">Initial Value</div>
         <div className="py-2.5 text-center font-semibold">Secret</div>
@@ -59,25 +59,22 @@ function EnvTable({ rows, onChange, onDelete, workspaceVarKeys = [] }) {
       </div>
 
       <div className="thin-scrollbar overflow-auto">
-        {rows.map((row, idx) => {
+        {rows.map((row) => {
           const overridesGlobal = workspaceVarKeys.includes(row.key.trim()) && row.key.trim();
           return (
             <div
               key={row.id}
-              className={cn(
-                "group grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)_80px_44px] items-center border-b border-border/5 px-2 transition-colors hover:bg-accent/10",
-                idx % 2 === 0 ? "bg-background/5" : ""
-              )}
+              className="group grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)_80px_44px] items-center border-b border-border/5 bg-transparent px-2 transition-colors hover:bg-transparent"
             >
               <div className="relative flex h-10 items-center">
                 <Input
                   value={row.key}
                   onChange={(e) => updateRow(row.id, "key", e.target.value)}
                   placeholder="e.g. API_URL"
-                  className="h-full w-full rounded-none border-0 bg-transparent px-2 text-[13px] font-medium shadow-none focus-visible:bg-accent/20 focus-visible:ring-0"
+                  className="h-full w-full rounded-none border-0 bg-transparent px-2 text-[13px] font-medium shadow-none focus-visible:bg-transparent focus-visible:ring-0"
                 />
                 {overridesGlobal ? (
-                  <span className="absolute right-2 top-1/2 -translate-y-1/2 whitespace-nowrap rounded-sm border border-amber-500/20 bg-background px-1 text-[9px] uppercase tracking-wider text-amber-500/80 shadow-sm pointer-events-none">
+                  <span className="absolute right-2 top-1/2 -translate-y-1/2 whitespace-nowrap rounded-sm border border-amber-500/20 bg-transparent px-1 text-[9px] uppercase tracking-wider text-amber-500/80 shadow-sm pointer-events-none">
                     overrides global
                   </span>
                 ) : null}
@@ -88,7 +85,7 @@ function EnvTable({ rows, onChange, onDelete, workspaceVarKeys = [] }) {
                   onChange={(e) => updateRow(row.id, "value", e.target.value)}
                   placeholder="e.g. localhost:8080"
                   type={row.secret ? "password" : "text"}
-                  className="h-full w-full rounded-none border-0 bg-transparent px-2 font-mono text-[13px] text-muted-foreground shadow-none focus-visible:bg-accent/20 focus-visible:text-foreground focus-visible:ring-0"
+                  className="h-full w-full rounded-none border-0 bg-transparent px-2 font-mono text-[13px] text-muted-foreground shadow-none focus-visible:bg-transparent focus-visible:text-foreground focus-visible:ring-0"
                 />
               </div>
               <div className="flex h-10 items-center justify-center">
@@ -100,7 +97,7 @@ function EnvTable({ rows, onChange, onDelete, workspaceVarKeys = [] }) {
                     "flex h-7 w-7 items-center justify-center rounded-md transition-colors",
                     row.secret
                       ? "bg-primary/10 text-primary hover:bg-primary/20"
-                      : "text-muted-foreground hover:bg-accent hover:text-foreground"
+                      : "text-muted-foreground hover:bg-transparent hover:text-foreground"
                   )}
                 >
                   {row.secret ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
@@ -228,7 +225,7 @@ export function EnvEditor({ workspaceName, collectionName, initialTab = "workspa
 
   return (
     <div className="flex h-full min-h-0 flex-col">
-      <div className="flex items-center justify-between border-b border-border/25 bg-background/20 px-4 pt-1">
+      <div className="flex items-center justify-between border-b border-border/25 bg-transparent px-4 pt-1">
         <div className="flex items-center gap-1">
           {[
             { id: "workspace", label: "Workspace Globals" },
@@ -256,7 +253,7 @@ export function EnvEditor({ workspaceName, collectionName, initialTab = "workspa
         </span>
       </div>
 
-      <div className="flex-1 min-h-0 overflow-hidden bg-background/10">
+      <div className="flex-1 min-h-0 overflow-hidden bg-transparent">
         {activeIssues.length ? (
           <div className="border-b border-warning/20 bg-warning/10 px-4 py-2 text-[11px] text-warning">
             {activeIssues[0]}

@@ -148,6 +148,39 @@ export function AppSettingsPage({ storagePath, onStoragePathChanged }) {
         ? "bg-blue-500/12 text-blue-400 border-blue-500/30"
         : "bg-muted/35 text-muted-foreground border-border/30";
 
+  const reportIssueUrl = useMemo(() => {
+    const body = [
+      "## Bug Summary",
+      "Briefly describe what went wrong.",
+      "",
+      "## Steps To Reproduce",
+      "1. Go to ...",
+      "2. Click on ...",
+      "3. See error ...",
+      "",
+      "## Expected Behavior",
+      "What did you expect to happen?",
+      "",
+      "## Actual Behavior",
+      "What actually happened?",
+      "",
+      "## Environment",
+      `- App Version: v${appVersion}`,
+      `- Platform: `,
+      "",
+      "## Additional Context",
+      "Screenshots, logs, or anything else helpful.",
+    ].join("\n");
+
+    const params = new URLSearchParams({
+      title: "[Bug]: ",
+      labels: "bug",
+      body,
+    });
+
+    return `https://github.com/DevlogZz/Kivo/issues/new?${params.toString()}`;
+  }, [appVersion]);
+
   return (
     <div className="thin-scrollbar flex h-full min-h-0 flex-col overflow-y-auto overflow-x-hidden p-6 lg:p-7">
       <div className="mb-5 flex items-center gap-3">
@@ -334,7 +367,7 @@ export function AppSettingsPage({ storagePath, onStoragePathChanged }) {
 
             <button
               type="button"
-              onClick={() => handleOpenExternal("https://github.com/DevlogZz/Kivo/issues/new", "issue form")}
+              onClick={() => handleOpenExternal(reportIssueUrl, "issue form")}
               className="flex items-center justify-between rounded-lg border border-border/35 bg-accent/15 px-3 py-2.5 text-left transition-colors hover:bg-accent/30"
             >
               <span className="flex items-center gap-2 text-foreground"><Siren className="h-3.5 w-3.5 text-orange-400" />Report Issue</span>

@@ -101,6 +101,9 @@ pub struct RequestPayload {
     pub inherit_headers: Option<bool>,
 
     #[serde(default)]
+    pub disable_user_agent: Option<bool>,
+
+    #[serde(default)]
     pub auth_payload: Option<AuthPayload>,
 }
 

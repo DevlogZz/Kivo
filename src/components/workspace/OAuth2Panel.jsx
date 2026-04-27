@@ -42,7 +42,7 @@ function resolveEnvValue(text, envVars) {
 
 function SectionShell({ icon: Icon, title, subtitle, children, className }) {
   return (
-    <section className={cn("bg-transparent px-0 py-2", className)}>
+    <section className={cn("rounded-md border border-border/20 bg-transparent px-4 py-3", className)}>
       <div className="flex items-start gap-3">
         <div className="mt-0.5 flex h-7 w-7 items-center justify-center text-primary">
           <Icon className="h-3.5 w-3.5" />
@@ -52,7 +52,7 @@ function SectionShell({ icon: Icon, title, subtitle, children, className }) {
           {subtitle ? <div className="mt-0.5 text-[11px] leading-4 text-muted-foreground">{subtitle}</div> : null}
         </div>
       </div>
-      <div className="mt-3 grid gap-3">{children}</div>
+      <div className="mt-3 grid gap-3.5">{children}</div>
     </section>
   );
 }
@@ -96,7 +96,7 @@ function CompactSelect({ value, onChange, options, className }) {
       </button>
 
       {open ? (
-        <div className="absolute left-0 top-[calc(100%+4px)] z-[330] min-w-full overflow-hidden border border-border/45 bg-background shadow-xl">
+        <div className="absolute left-0 top-[calc(100%+4px)] z-[330] min-w-full overflow-hidden border border-border/45 bg-[hsl(var(--card)/0.92)] shadow-xl">
           {options.map((option) => {
             const active = option.value === value;
 
@@ -133,12 +133,13 @@ function Field({
   actions = null,
   hint = "",
   layout = "stacked",
+  className,
 }) {
   const [showSecret, setShowSecret] = useState(false);
   const isStacked = layout === "stacked";
 
   return (
-    <div className={cn("grid gap-1.5", isStacked ? "" : "sm:grid-cols-[156px_minmax(0,1fr)] sm:items-center sm:gap-3")}>
+    <div className={cn("grid gap-1.5", isStacked ? "" : "sm:grid-cols-[156px_minmax(0,1fr)] sm:items-center sm:gap-3", className)}>
       <label className={cn("text-[12px] font-medium text-foreground/90", isStacked ? "" : "sm:pr-2")}>{label}</label>
       <div className="min-w-0">
         <div className="relative">
@@ -148,7 +149,7 @@ function Field({
             envVars={envVars}
             placeholder={placeholder}
             type={secret && !showSecret ? "password" : "text"}
-            inputClassName={cn(secret || actions ? "pr-16" : "")}
+            inputClassName={cn("bg-transparent", secret || actions ? "pr-16" : "")}
           />
           {(actions || secret) ? (
             <div className="absolute right-2 top-1/2 z-10 flex -translate-y-1/2 items-center gap-1">
@@ -171,9 +172,9 @@ function Field({
   );
 }
 
-function FormRow({ label, children, hint = "" }) {
+function FormRow({ label, children, hint = "", className }) {
   return (
-    <div className="grid gap-1.5">
+    <div className={cn("grid gap-1.5", className)}>
       <div className="text-[12px] font-medium text-foreground/90">{label}</div>
       <div className="min-w-0">
         {children}
@@ -298,7 +299,7 @@ function CodeExchangeModal({ open, oauth, envVars, onClose, onApplyCode }) {
 
   return (
     <div className="absolute inset-0 z-40 flex items-center justify-center bg-background/70 p-5 backdrop-blur-sm">
-      <div className="panel-surface w-full max-w-2xl bg-background/20">
+      <div className="panel-surface w-full max-w-2xl bg-[hsl(var(--card)/0.95)]">
         <div className="flex items-center justify-between border-b border-border/18 px-4 py-3">
           <div>
             <div className="text-[10px] uppercase tracking-[0.16em] text-muted-foreground">OAuth helper</div>
@@ -582,7 +583,7 @@ export function OAuth2Panel({
         onApplyCode={(code) => updateOAuth({ authorizationCode: code })}
       />
       <div className="thin-scrollbar min-h-0 flex-1 overflow-auto">
-        <div className="mx-auto grid max-w-[920px] gap-3 px-4 py-3.5">
+        <div className="grid max-w-none gap-3 px-4 py-3.5">
           <FormRow
             label={(
               <span className="inline-flex items-center gap-2">
@@ -598,7 +599,7 @@ export function OAuth2Panel({
 
           <div className="grid gap-3">
             <SectionShell icon={Sparkles} title="Configuration" subtitle="Provider endpoints and client setup">
-              <div className="grid gap-2.5">
+              <div className="grid gap-2.5 lg:grid-cols-2">
                 <Field
                   label="Callback URL"
                   value={oauth.callbackUrl}
@@ -619,6 +620,7 @@ export function OAuth2Panel({
                   onChange={(authUrl) => updateOAuth({ authUrl })}
                   envVars={envVars}
                   placeholder="https://example.com/oauth/authorize"
+                  className="lg:col-span-2"
                 />
                 <Field
                   label="Access Token URL"
@@ -626,6 +628,7 @@ export function OAuth2Panel({
                   onChange={(tokenUrl) => updateOAuth({ tokenUrl })}
                   envVars={envVars}
                   placeholder="https://example.com/oauth/token"
+                  className="lg:col-span-2"
                 />
                 <Field
                   label="Client Secret"
@@ -649,7 +652,7 @@ export function OAuth2Panel({
                   envVars={envVars}
                   placeholder="Anti-CSRF state"
                 />
-                <FormRow label="Add Credentials To">
+                <FormRow label="Add Credentials To" className="lg:col-span-2">
                   <CompactSelect
                     value={oauth.clientAuthMethod}
                     onChange={(clientAuthMethod) => updateOAuth({ clientAuthMethod })}
@@ -660,7 +663,7 @@ export function OAuth2Panel({
 
               <DividerLabel label="Optional" />
 
-              <div className="grid gap-2.5">
+              <div className="grid gap-2.5 lg:grid-cols-2">
                 <Field
                   label="Audience"
                   value={oauth.audience}
@@ -675,7 +678,7 @@ export function OAuth2Panel({
                   envVars={envVars}
                   placeholder="Optional resource"
                 />
-                <FormRow label="Use PKCE">
+                <FormRow label="Use PKCE" className="lg:col-span-2">
                   <label className="inline-flex items-center gap-2 text-[12px] text-foreground">
                     <input
                       type="checkbox"
@@ -693,13 +696,14 @@ export function OAuth2Panel({
                     onChange={(codeVerifier) => updateOAuth({ codeVerifier })}
                     envVars={envVars}
                     placeholder="Generated automatically if left empty"
+                    className="lg:col-span-2"
                   />
                 ) : null}
               </div>
             </SectionShell>
 
             <SectionShell icon={KeyRound} title="Token" subtitle="Fetch and manage credentials">
-              <div className="grid gap-2.5">
+              <div className="grid gap-2.5 lg:grid-cols-2">
                 {oauth.grantType === "authorization_code" ? (
                   <Field
                     label="Authorization Code"
@@ -717,6 +721,7 @@ export function OAuth2Panel({
                         <Wand2 className="h-3.5 w-3.5" />
                       </button>
                     )}
+                    className="lg:col-span-2"
                   />
                 ) : null}
 
@@ -757,6 +762,7 @@ export function OAuth2Panel({
                       <Copy className="h-3.5 w-3.5" />
                     </button>
                   ) : null}
+                  className="lg:col-span-2"
                 />
                 <Field
                   label="Header Prefix"

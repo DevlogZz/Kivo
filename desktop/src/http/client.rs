@@ -308,7 +308,7 @@ fn normalize_url(raw: &str) -> Result<String, String> {
         .map_err(|_| format!("Invalid URL: {trimmed}"))
 }
 
-fn build_headers(headers: &HashMap<String, String>) -> Result<HeaderMap, String> {
+fn build_headers(headers: &HashMap<String, String>, disable_user_agent: bool) -> Result<HeaderMap, String> {
     let mut header_map = HeaderMap::new();
 
     for (key, value) in headers {
@@ -320,7 +320,7 @@ fn build_headers(headers: &HashMap<String, String>) -> Result<HeaderMap, String>
         header_map.insert(name, header_value);
     }
 
-    if !header_map.contains_key(USER_AGENT) {
+    if !disable_user_agent && !header_map.contains_key(USER_AGENT) {
         header_map.insert(USER_AGENT, HeaderValue::from_static(DEFAULT_USER_AGENT));
     }
 
@@ -1010,7 +1010,7 @@ pub async fn send_http_request(
 
     let mut request = client
         .request(method.clone(), &url)
-        .headers(build_headers(&merged_headers)?);
+        .headers(build_headers(&merged_headers, payload.disable_user_agent.unwrap_or(false))?);
 
     if let Some(path) = resolved_body_file_path {
         if !path.trim().is_empty() {
