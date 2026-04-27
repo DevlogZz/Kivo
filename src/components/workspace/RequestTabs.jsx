@@ -1,18 +1,92 @@
+import { useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { Pin, Plus, X } from "lucide-react";
 
 import { cn } from "@/lib/utils.js";
 import { getMethodTone } from "@/lib/http-ui.js";
-import { REQUEST_MODES } from "@/lib/workspace-store.js";
+import { getUniqueName, REQUEST_MODES, REQUEST_MODE_OPTIONS } from "@/lib/workspace-store.js";
+
+const REQUEST_RENAME_EVENT = "kivo:request-rename-focus";
+
+function getRequestBaseNameByMode(mode) {
+  switch (mode) {
+    case REQUEST_MODES.SSE:
+      return "SSE Request";
+    case REQUEST_MODES.GRAPHQL:
+      return "GraphQL Request";
+    case REQUEST_MODES.GRPC:
+      return "gRPC Request";
+    case REQUEST_MODES.WEBSOCKET:
+      return "WebSocket Request";
+    case REQUEST_MODES.SOCKET_IO:
+      return "Socket.IO Request";
+    case REQUEST_MODES.HTTP:
+    default:
+      return "HTTP Request";
+  }
+}
 
 export function RequestTabs({
   requestTabs,
   activeWorkspaceName,
   activeCollectionName,
+  activeCollectionRequests,
   activeRequestName,
   selectRequest,
   closeRequestTab,
   createRequestRecord,
 }) {
+  const [createRequestMenu, setCreateRequestMenu] = useState(null);
+  const createMenuRef = useRef(null);
+
+  useEffect(() => {
+    if (!createRequestMenu) return;
+
+    function handlePointer(event) {
+      if (createMenuRef.current && !createMenuRef.current.contains(event.target)) {
+        setCreateRequestMenu(null);
+      }
+    }
+
+    function handleEscape(event) {
+      if (event.key === "Escape") {
+        setCreateRequestMenu(null);
+      }
+    }
+
+    window.addEventListener("mousedown", handlePointer);
+    window.addEventListener("keydown", handleEscape);
+    return () => {
+      window.removeEventListener("mousedown", handlePointer);
+      window.removeEventListener("keydown", handleEscape);
+    };
+  }, [createRequestMenu]);
+
+  function openCreateRequestMenu(event) {
+    event.stopPropagation();
+    const rect = event.currentTarget.getBoundingClientRect();
+    setCreateRequestMenu({ x: rect.left, y: rect.bottom + 6 });
+  }
+
+  function handleCreateByMode(mode) {
+    if (!activeWorkspaceName || !activeCollectionName) return;
+
+    const existingNames = (Array.isArray(activeCollectionRequests) ? activeCollectionRequests : [])
+      .map((request) => String(request?.name || ""))
+      .filter(Boolean);
+    const nextName = getUniqueName(getRequestBaseNameByMode(mode), existingNames);
+
+    createRequestRecord(activeWorkspaceName, activeCollectionName, nextName, "", mode);
+    window.dispatchEvent(new CustomEvent(REQUEST_RENAME_EVENT, {
+      detail: {
+        workspaceName: activeWorkspaceName,
+        collectionName: activeCollectionName,
+        requestName: nextName,
+      },
+    }));
+    setCreateRequestMenu(null);
+  }
+
   return (
     <div className="flex items-stretch overflow-x-auto border-b border-border/30 bg-card/28 px-1 thin-scrollbar lg:h-[44px]">
       {requestTabs.map((request) => (
@@ -31,14 +105,15 @@ export function RequestTabs({
             ? "WS"
             : (isSse ? "SSE" : (isSocketIo ? "SIO" : (isGrpc ? "gRPC" : (isGraphql ? "GQL" : request.method))));
           const methodTone = isWebSocket
-            ? "text-amber-300 bg-amber-500/15"
+            ? "text-amber-800 bg-amber-500/20 dark:text-amber-300 dark:bg-amber-500/15"
             : (isSse
-              ? "text-emerald-300 bg-emerald-500/15"
+              ? "text-emerald-800 bg-emerald-500/20 dark:text-emerald-300 dark:bg-emerald-500/15"
               : (isSocketIo
-                ? "text-orange-300 bg-orange-500/15"
+                ? "text-orange-800 bg-orange-500/20 dark:text-orange-300 dark:bg-orange-500/15"
                 : (isGrpc
-              ? "text-cyan-300 bg-cyan-500/15"
-              : (isGraphql ? "text-fuchsia-300 bg-fuchsia-500/15" : getMethodTone(request.method)))));
+              ? "text-cyan-800 bg-cyan-500/20 dark:text-cyan-300 dark:bg-cyan-500/15"
+              : (isGraphql ? "text-fuchsia-800 bg-fuchsia-500/20 dark:text-fuchsia-300 dark:bg-fuchsia-500/15" : getMethodTone(request.method)))));
+
           return (
             <button
               key={request.name}
@@ -72,7 +147,7 @@ export function RequestTabs({
 
       <button
         type="button"
-        onClick={() => createRequestRecord(activeWorkspaceName, activeCollectionName)}
+        onClick={openCreateRequestMenu}
         className={cn(
           "flex w-9 items-center justify-center text-muted-foreground hover:bg-card/45 hover:text-foreground transition-opacity",
           !activeWorkspaceName && "opacity-0 pointer-events-none"
@@ -80,6 +155,27 @@ export function RequestTabs({
       >
         <Plus className="h-4 w-4" />
       </button>
+
+      {createRequestMenu ? createPortal(
+        <div
+          ref={createMenuRef}
+          className="fixed z-[220] min-w-[220px] border border-border/60 bg-popover p-1 shadow-2xl"
+          style={{ left: createRequestMenu.x, top: createRequestMenu.y }}
+          onMouseDown={(event) => event.stopPropagation()}
+        >
+          {REQUEST_MODE_OPTIONS.map((option) => (
+            <button
+              key={option.value}
+              type="button"
+              className="flex w-full items-center gap-2 px-3 py-2 text-left text-[12px] text-foreground hover:bg-accent/45"
+              onClick={() => handleCreateByMode(option.value)}
+            >
+              <Plus className="h-3.5 w-3.5" /> {option.label}
+            </button>
+          ))}
+        </div>,
+        document.body
+      ) : null}
     </div>
   );
 }

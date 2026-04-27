@@ -1867,15 +1867,15 @@ export function RequestPane({
       )}>
         {isWebSocketRequest ? (
           <div className="flex h-8 items-center px-3 lg:h-10">
-            <span className="font-semibold uppercase tracking-[0.14em] text-amber-300">WS</span>
+            <span className="font-semibold uppercase tracking-[0.14em] text-amber-700 dark:text-amber-300">WS</span>
           </div>
         ) : isSocketIoRequest ? (
           <div className="flex h-8 items-center px-3 lg:h-10">
-            <span className="font-semibold uppercase tracking-[0.14em] text-orange-300">Socket.IO</span>
+            <span className="font-semibold uppercase tracking-[0.14em] text-orange-700 dark:text-orange-300">Socket.IO</span>
           </div>
         ) : isGrpcRequest ? (
           <div className="flex h-8 items-center px-3 lg:h-10">
-            <span className="font-semibold uppercase tracking-[0.14em] text-cyan-300">gRPC</span>
+            <span className="font-semibold uppercase tracking-[0.14em] text-cyan-700 dark:text-cyan-300">gRPC</span>
           </div>
         ) : (
           <MethodPicker value={state.method} onChange={(method) => onChange("method", method)} />
@@ -2010,7 +2010,7 @@ export function RequestPane({
       {isGrpcRequest ? (
         <div className="flex items-center justify-between border-b border-border/20 bg-transparent px-3 py-2 text-[11px] text-muted-foreground">
           <div className="flex min-w-0 items-center gap-2 truncate">
-            <FileText className="h-3.5 w-3.5 shrink-0 text-cyan-300" />
+            <FileText className="h-3.5 w-3.5 shrink-0 text-cyan-700 dark:text-cyan-300" />
             <span className="truncate">{grpcSelectedProtoFileName || "No .proto file selected"}</span>
           </div>
           <Button type="button" variant="outline" size="sm" className="h-7 gap-1.5 px-2.5 text-[11px]" onClick={handleGrpcProtoBrowse}>
@@ -2099,7 +2099,7 @@ export function RequestPane({
           isGrpcRequest && hasGrpcMethodSelected ? (
             <div className="grid h-full min-h-0 grid-rows-[auto_minmax(0,1fr)]">
               <div className="flex items-center justify-between gap-3 border-b border-border/20 px-3 py-2 text-[11px] text-muted-foreground">
-                <div className="text-[12px] font-semibold uppercase tracking-[0.14em] text-cyan-300">{grpcBodyHeading}</div>
+                <div className="text-[12px] font-semibold uppercase tracking-[0.14em] text-cyan-700 dark:text-cyan-300">{grpcBodyHeading}</div>
                 <div className="text-[10px] uppercase tracking-[0.16em] text-muted-foreground">Body</div>
               </div>
               <CodeEditor

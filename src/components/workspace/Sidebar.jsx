@@ -41,6 +41,8 @@ const IMPORT_EXPORT_FORMATS = [
   { value: "bruno", label: "Bruno (YAML)", extension: "yml" },
 ];
 
+const REQUEST_RENAME_EVENT = "kivo:request-rename-focus";
+
 const SUPPORTED_IMPORT_FORMATS_LABEL = "Supported formats: Postman, OpenAPI 3.0, Swagger 2.0, Bruno (JSON/YAML).";
 
 const CURL_IMPORT_TARGETS = [
@@ -1072,6 +1074,25 @@ export function RequestsView({
 
   const activeWorkspace = useMemo(() => workspaces.find(w => w.name === activeWorkspaceName), [workspaces, activeWorkspaceName]);
   const effectiveWorkspaceName = activeWorkspace?.name ?? "";
+
+  useEffect(() => {
+    function handleRequestRename(event) {
+      const detail = event?.detail || {};
+      const workspaceName = String(detail.workspaceName || "");
+      const collectionName = String(detail.collectionName || "");
+      const requestName = String(detail.requestName || "");
+      if (!workspaceName || !collectionName || !requestName) return;
+
+      onSelectRequest(workspaceName, collectionName, requestName);
+      setExpandedCollectionNames((names) => Array.from(new Set([...names, collectionName])));
+      setEditingItemId(`req:${collectionName}:${requestName}`);
+    }
+
+    window.addEventListener(REQUEST_RENAME_EVENT, handleRequestRename);
+    return () => {
+      window.removeEventListener(REQUEST_RENAME_EVENT, handleRequestRename);
+    };
+  }, [onSelectRequest]);
 
   useEffect(() => {
     if (!sidebarOptionsOpen) return;
