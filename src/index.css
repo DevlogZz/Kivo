@@ -53,6 +53,13 @@
   --graphql-directive: 342 68% 42%;
   --graphql-comment: 24 8% 46%;
   --graphql-punctuation: 24 12% 28%;
+  --script-keyword: 278 58% 36%;
+  --script-builtin: 200 74% 33%;
+  --script-string: 154 52% 31%;
+  --script-number: 193 66% 35%;
+  --script-comment: 215 10% 46%;
+  --script-identifier: 220 15% 24%;
+  --script-punctuation: 220 8% 38%;
 }
 
 .theme-dark {
@@ -105,6 +112,13 @@
   --graphql-directive: 352 74% 71%;
   --graphql-comment: 218 10% 48%;
   --graphql-punctuation: 216 12% 66%;
+  --script-keyword: 286 58% 72%;
+  --script-builtin: 192 84% 72%;
+  --script-string: 102 42% 67%;
+  --script-number: 193 70% 67%;
+  --script-comment: 218 11% 62%;
+  --script-identifier: 220 16% 88%;
+  --script-punctuation: 216 12% 62%;
 }
 
 @layer base {
@@ -302,6 +316,34 @@
 
   .graphql-punctuation {
     color: hsl(var(--graphql-punctuation));
+  }
+
+  .script-keyword {
+    color: hsl(var(--script-keyword));
+  }
+
+  .script-builtin {
+    color: hsl(var(--script-builtin));
+  }
+
+  .script-string {
+    color: hsl(var(--script-string));
+  }
+
+  .script-number {
+    color: hsl(var(--script-number));
+  }
+
+  .script-comment {
+    color: hsl(var(--script-comment));
+  }
+
+  .script-identifier {
+    color: hsl(var(--script-identifier));
+  }
+
+  .script-punctuation {
+    color: hsl(var(--script-punctuation));
   }
 
   .mono-scroll {

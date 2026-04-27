@@ -727,8 +727,10 @@ function ScriptsPanel({ state, onChange }) {
           value={editorValue}
           onChange={handleEditorChange}
           language="javascript"
+          lineNumbers={true}
           placeholder={activePhase === "pre-request" ? "// Runs before the request is sent\n// Example:\n// kivo.request.addHeader(\"X-Trace\", \"1\");" : "// Runs after response is received\n// Example:\n// await kivo.test(\"status is 200\", () => {\n//   kivo.expect(kivo.response.status).toBe(200);\n// });"}
           disabled={false}
+          className="bg-muted/[0.14]"
         />
       </div>
 

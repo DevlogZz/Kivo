@@ -25,6 +25,28 @@ const graphqlKeywords = new Set([
   "implements"
 ]);
 const graphqlTokenPattern = /"""[\s\S]*?"""|"(?:\\.|[^"])*"|#[^\n]*|\.\.\.|@[A-Za-z_][A-Za-z0-9_]*|\$[A-Za-z_][A-Za-z0-9_]*|-?\d+(?:\.\d+)?|[A-Za-z_][A-Za-z0-9_]*|[!():=@\[\]{|},]/g;
+const javascriptKeywords = new Set([
+  "const",
+  "let",
+  "var",
+  "function",
+  "return",
+  "if",
+  "else",
+  "for",
+  "while",
+  "await",
+  "async",
+  "try",
+  "catch",
+  "throw",
+  "new",
+  "true",
+  "false",
+  "null",
+  "undefined"
+]);
+const javascriptTokenPattern = /\/\/[^\n]*|"(?:\\.|[^"])*"|'(?:\\.|[^'])*'|`(?:\\.|[^`])*`|\b\d+(?:\.\d+)?\b|\b[A-Za-z_$][A-Za-z0-9_$]*\b|[{}()[\].,;:+\-*/%!=<>|&?]/g;
 
 function tokenClassName(token) {
   if (/^".*":$/.test(token)) {
@@ -77,6 +99,68 @@ function renderHighlightedJson(text) {
   }
 
   return nodes;
+}
+
+function javascriptTokenClassName(token) {
+  if (token.startsWith("//")) {
+    return "script-comment";
+  }
+
+  if (/^"|^'|^`/.test(token)) {
+    return "script-string";
+  }
+
+  if (/^\d/.test(token)) {
+    return "script-number";
+  }
+
+  if (javascriptKeywords.has(token)) {
+    return "script-keyword";
+  }
+
+  if (/^(kivo|JSON|Math|Date|Object|Array|String|Number|Boolean|Promise)$/.test(token)) {
+    return "script-builtin";
+  }
+
+  if (/^[{}()[\].,;:+\-*/%!=<>|&?]$/.test(token)) {
+    return "script-punctuation";
+  }
+
+  return "script-identifier";
+}
+
+function renderHighlightedJavascript(text) {
+  const content = text || "";
+  const nodes = [];
+  let lastIndex = 0;
+  let match;
+
+  javascriptTokenPattern.lastIndex = 0;
+
+  while ((match = javascriptTokenPattern.exec(content)) !== null) {
+    if (match.index > lastIndex) {
+      nodes.push(content.slice(lastIndex, match.index));
+    }
+
+    const token = match[0];
+    nodes.push(
+      <span key={`${match.index}-${token}`} className={javascriptTokenClassName(token)}>
+        {token}
+      </span>
+    );
+    lastIndex = match.index + token.length;
+  }
+
+  if (lastIndex < content.length) {
+    nodes.push(content.slice(lastIndex));
+  }
+
+  return nodes;
+}
+
+function getLineCount(text) {
+  const source = String(text ?? "");
+  return Math.max(1, source.split("\n").length);
 }
 
 function graphqlTokenClassName(token) {
@@ -148,29 +232,52 @@ export function CodeEditor({
   language = "text",
   disabled = false,
   wrapLines = false,
-  className
+  className,
+  lineNumbers = false
 }) {
   const highlightRef = useRef(null);
+  const lineNumbersRef = useRef(null);
   const isJson = language === "json" && isJsonText(value);
   const isGraphql = language === "graphql";
-  const useOverlay = !readOnly && (language === "json" || language === "graphql");
+  const isJavascript = language === "javascript" || language === "js";
+  const useOverlay = !readOnly && (language === "json" || language === "graphql" || isJavascript);
   const displayValue = useMemo(() => value || "", [value]);
+  const totalLines = useMemo(() => getLineCount(displayValue), [displayValue]);
 
   function syncScroll(event) {
-    if (!highlightRef.current) {
-      return;
+    if (highlightRef.current) {
+      highlightRef.current.scrollTop = event.target.scrollTop;
+      highlightRef.current.scrollLeft = event.target.scrollLeft;
     }
-
-    highlightRef.current.scrollTop = event.target.scrollTop;
-    highlightRef.current.scrollLeft = event.target.scrollLeft;
+    if (lineNumbersRef.current) {
+      lineNumbersRef.current.scrollTop = event.target.scrollTop;
+    }
   }
+
+  const lineNumbersColumn = lineNumbers ? (
+    <pre
+      ref={lineNumbersRef}
+      aria-hidden="true"
+      className="editor-overlay-scroll-hidden pointer-events-none h-full overflow-hidden border-r border-border/30 bg-muted/20 px-2 py-3 text-right font-mono text-[11px] leading-6 text-muted-foreground/70"
+    >
+      <code>
+        {Array.from({ length: totalLines }, (_, index) => (
+          <span key={`line-${index + 1}`} className="block">
+            {index + 1}
+          </span>
+        ))}
+      </code>
+    </pre>
+  ) : null;
 
   if (readOnly) {
     return (
-      <div className={cn("relative min-h-0 flex-1 overflow-hidden bg-transparent", className)}>
+      <div className={cn("relative grid h-full min-h-0 overflow-hidden bg-transparent", lineNumbers ? "grid-cols-[48px_minmax(0,1fr)]" : "grid-cols-[minmax(0,1fr)]", className)}>
+        {lineNumbersColumn}
         <pre
           className={cn(
             "thin-scrollbar h-full px-4 py-3 font-mono text-[12px] leading-6 text-foreground",
+            lineNumbers ? "col-start-2" : "",
             wrapLines ? "overflow-y-auto overflow-x-hidden whitespace-pre-wrap [overflow-wrap:anywhere]" : "overflow-auto"
           )}
         >
@@ -179,6 +286,8 @@ export function CodeEditor({
               ? renderHighlightedJson(displayValue)
               : isGraphql
                 ? renderHighlightedGraphql(displayValue)
+                : isJavascript
+                  ? renderHighlightedJavascript(displayValue)
                 : displayValue}
           </code>
         </pre>
@@ -188,26 +297,28 @@ export function CodeEditor({
 
   if (!useOverlay) {
     return (
-      <textarea
-        value={value}
-        onChange={(event) => onChange?.(event.target.value)}
-        placeholder={placeholder}
-        disabled={disabled}
-        spellCheck={false}
-        className={cn(
-          "thin-scrollbar h-full w-full resize-none overflow-auto border-0 bg-transparent px-4 py-3 font-mono text-[12px] leading-6 text-foreground outline-none placeholder:text-muted-foreground/60 disabled:cursor-not-allowed disabled:opacity-50",
-          className
-        )}
-      />
+      <div className={cn("relative grid h-full min-h-0 overflow-hidden bg-transparent", lineNumbers ? "grid-cols-[48px_minmax(0,1fr)]" : "grid-cols-[minmax(0,1fr)]", className)}>
+        {lineNumbersColumn}
+        <textarea
+          value={value}
+          onChange={(event) => onChange?.(event.target.value)}
+          onScroll={syncScroll}
+          placeholder={placeholder}
+          disabled={disabled}
+          spellCheck={false}
+          className="thin-scrollbar h-full w-full resize-none overflow-auto border-0 bg-transparent px-4 py-3 font-mono text-[12px] leading-6 text-foreground outline-none placeholder:text-muted-foreground/60 disabled:cursor-not-allowed disabled:opacity-50"
+        />
+      </div>
     );
   }
 
   return (
-    <div className={cn("relative min-h-0 flex-1 overflow-hidden bg-transparent", className)}>
+    <div className={cn("relative grid h-full min-h-0 overflow-hidden bg-transparent", lineNumbers ? "grid-cols-[48px_minmax(0,1fr)]" : "grid-cols-[minmax(0,1fr)]", className)}>
+      {lineNumbersColumn}
       <pre
         ref={highlightRef}
         aria-hidden="true"
-        className="editor-overlay-scroll-hidden pointer-events-none h-full overflow-auto px-4 py-3 font-mono text-[12px] leading-6 text-foreground"
+        className="editor-overlay-scroll-hidden pointer-events-none col-start-2 row-start-1 h-full overflow-auto px-4 py-3 font-mono text-[12px] leading-6 text-foreground"
       >
         <code>
           {displayValue
@@ -215,6 +326,8 @@ export function CodeEditor({
               ? renderHighlightedJson(displayValue)
               : isGraphql
                 ? renderHighlightedGraphql(displayValue)
+                : isJavascript
+                  ? renderHighlightedJavascript(displayValue)
                 : displayValue
             : " "}
         </code>
@@ -226,9 +339,9 @@ export function CodeEditor({
         placeholder={placeholder}
         disabled={disabled}
         spellCheck={false}
-        className="thin-scrollbar absolute inset-0 h-full w-full resize-none overflow-auto border-0 bg-transparent px-4 py-3 font-mono text-[12px] leading-6 text-transparent caret-foreground outline-none placeholder:text-muted-foreground/0 disabled:cursor-not-allowed disabled:opacity-50"
+        className="thin-scrollbar col-start-2 row-start-1 h-full w-full resize-none overflow-auto border-0 bg-transparent px-4 py-3 font-mono text-[12px] leading-6 text-transparent caret-foreground outline-none placeholder:text-muted-foreground/0 disabled:cursor-not-allowed disabled:opacity-50"
       />
-      {!value ? <div className="pointer-events-none absolute left-4 top-3 font-mono text-[12px] text-muted-foreground/60">{placeholder}</div> : null}
+      {!value ? <div className={cn("pointer-events-none col-start-2 row-start-1 pt-3 font-mono text-[12px] text-muted-foreground/60", lineNumbers ? "pl-4" : "pl-4")}>{placeholder}</div> : null}
     </div>
   );
 }
