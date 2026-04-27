@@ -216,6 +216,20 @@ pub struct RequestRecord {
     pub timeout_ms: u64,
     #[serde(default, skip_serializing_if = "String::is_empty")]
     pub folder_path: String,
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub script_pre_request: String,
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub script_after_response: String,
+    #[serde(default = "default_script_active_phase", skip_serializing_if = "is_default_script_active_phase")]
+    pub script_active_phase: String,
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub script_last_run_at: String,
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub script_last_phase: String,
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub script_last_status: String,
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub script_last_error: String,
     #[serde(default)]
     pub active_editor_tab: String,
     #[serde(default)]
@@ -438,8 +452,16 @@ pub fn default_grpc_streaming_mode() -> String {
     "bidi".to_string()
 }
 
+pub fn default_script_active_phase() -> String {
+    "pre-request".to_string()
+}
+
 pub fn is_default_grpc_streaming_mode(value: &String) -> bool {
     value == "bidi"
+}
+
+pub fn is_default_script_active_phase(value: &String) -> bool {
+    value == "pre-request"
 }
 
 pub fn default_auth_record() -> AuthRecord {

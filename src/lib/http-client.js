@@ -33,6 +33,13 @@ function sanitizeRequestForSave(request) {
     maxRedirects: Number.isFinite(request?.maxRedirects) ? Number(request.maxRedirects) : 5,
     timeoutMs: Number.isFinite(request?.timeoutMs) ? Number(request.timeoutMs) : 0,
     folderPath: String(request?.folderPath ?? ""),
+    scriptPreRequest: String(request?.scriptPreRequest ?? ""),
+    scriptAfterResponse: String(request?.scriptAfterResponse ?? ""),
+    scriptActivePhase: request?.scriptActivePhase === "after-response" ? "after-response" : "pre-request",
+    scriptLastRunAt: String(request?.scriptLastRunAt ?? ""),
+    scriptLastPhase: String(request?.scriptLastPhase ?? ""),
+    scriptLastStatus: String(request?.scriptLastStatus ?? ""),
+    scriptLastError: String(request?.scriptLastError ?? ""),
     lastResponse: null
   };
 

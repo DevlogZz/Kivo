@@ -15,12 +15,100 @@ import { REQUEST_MODES } from "@/lib/workspace-store.js";
 import { cn } from "@/lib/utils.js";
 import { EnvHighlightInput } from "@/components/ui/EnvHighlightInput.jsx";
 
-const tabs = ["Params", "Body", "Auth", "Headers", "Docs", "Settings"];
+const tabs = ["Params", "Body", "Auth", "Headers", "Scripts", "Docs", "Settings"];
 const requestMethods = ["GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS"];
 const DEFAULT_USER_AGENT_VALUE = "kivo/0.4.1";
 const webSocketBodyModes = [
   { value: "json", label: "JSON" },
   { value: "text", label: "Raw" }
+];
+const SCRIPT_SNIPPET_GROUPS = [
+  {
+    key: "variables",
+    label: "Variable Snippets",
+    items: [
+      {
+        label: "Get a variable",
+        code: "const token = kivo.vars.get(\"token\");\nkivo.log(\"token\", token);"
+      },
+      {
+        label: "Set a variable",
+        code: "kivo.vars.set(\"sessionId\", \"abc-123\");"
+      },
+      {
+        label: "Clear a variable",
+        code: "kivo.vars.unset(\"sessionId\");"
+      }
+    ]
+  },
+  {
+    key: "request",
+    label: "Request Manipulation",
+    items: [
+      {
+        label: "Add query param",
+        code: "kivo.request.addQueryParam(\"k1\", \"v1\");"
+      },
+      {
+        label: "Set method",
+        code: "kivo.request.setMethod(\"GET\");"
+      },
+      {
+        label: "Add a header",
+        code: "kivo.request.addHeader(\"X-Debug\", \"1\");"
+      },
+      {
+        label: "Remove header",
+        code: "kivo.request.removeHeader(\"X-Debug\");"
+      },
+      {
+        label: "Update body",
+        code: "kivo.request.setBody(JSON.stringify({ hello: \"kivo\" }, null, 2));"
+      }
+    ]
+  },
+  {
+    key: "response",
+    label: "Response Handling",
+    items: [
+      {
+        label: "Print status",
+        code: "kivo.log(\"status\", kivo.response.status, kivo.response.statusText);"
+      },
+      {
+        label: "Parse JSON body",
+        code: "const data = kivo.response.json();\nkivo.log(\"response json\", data);"
+      }
+    ]
+  },
+  {
+    key: "tests",
+    label: "Test Utils",
+    items: [
+      {
+        label: "Check status is 200",
+        code: "await kivo.test(\"status is 200\", () => {\n  kivo.expect(kivo.response.status).toBe(200);\n});"
+      },
+      {
+        label: "Assert response has property",
+        code: "await kivo.test(\"response has id\", () => {\n  const data = kivo.response.json();\n  kivo.expect(data).toHaveProperty(\"id\");\n});"
+      }
+    ]
+  },
+  {
+    key: "misc",
+    label: "Misc",
+    items: [
+      {
+        label: "Delay",
+        code: "await kivo.wait(1000);"
+      },
+      {
+        label: "Print log",
+        code: "kivo.log(\"Script phase:\", kivo.execution.location);"
+      }
+    ]
+  }
 ];
 
 function WebSocketSettingsPanel({ state, onChange }) {
@@ -579,6 +667,110 @@ function RequestSettingsPanel({ state, onChange }) {
           </div>
         </div>
       </div>
+    </div>
+  );
+}
+
+function ScriptsPanel({ state, onChange }) {
+  const activePhase = state.scriptActivePhase === "after-response" ? "after-response" : "pre-request";
+  const editorValue = activePhase === "after-response"
+    ? String(state.scriptAfterResponse || "")
+    : String(state.scriptPreRequest || "");
+  const [openGroupKey, setOpenGroupKey] = useState("");
+
+  function handleEditorChange(value) {
+    if (activePhase === "after-response") {
+      onChange("scriptAfterResponse", value);
+      return;
+    }
+    onChange("scriptPreRequest", value);
+  }
+
+  function appendSnippet(code) {
+    const current = String(editorValue || "");
+    const next = current.trim() ? `${current}\n\n${code}` : code;
+    handleEditorChange(next);
+  }
+
+  const hasPreScript = Boolean(String(state.scriptPreRequest || "").trim());
+  const hasAfterScript = Boolean(String(state.scriptAfterResponse || "").trim());
+
+  return (
+    <div className="grid h-full min-h-0 grid-rows-[auto_minmax(0,1fr)_auto_auto]">
+      <div className="flex items-center gap-2 border-b border-border/25 px-3 py-2">
+        <button
+          type="button"
+          onClick={() => onChange("scriptActivePhase", "pre-request")}
+          className={cn(
+            "inline-flex items-center gap-1.5 px-2.5 py-1.5 text-[11px] uppercase tracking-[0.14em] transition-colors",
+            activePhase === "pre-request" ? "bg-primary/18 text-foreground" : "text-muted-foreground hover:bg-accent/35 hover:text-foreground"
+          )}
+        >
+          Pre-request
+          <span className={cn("h-1.5 w-1.5 rounded-full", hasPreScript ? "bg-success" : "bg-border")}></span>
+        </button>
+        <button
+          type="button"
+          onClick={() => onChange("scriptActivePhase", "after-response")}
+          className={cn(
+            "inline-flex items-center gap-1.5 px-2.5 py-1.5 text-[11px] uppercase tracking-[0.14em] transition-colors",
+            activePhase === "after-response" ? "bg-primary/18 text-foreground" : "text-muted-foreground hover:bg-accent/35 hover:text-foreground"
+          )}
+        >
+          After-response
+          <span className={cn("h-1.5 w-1.5 rounded-full", hasAfterScript ? "bg-success" : "bg-border")}></span>
+        </button>
+      </div>
+
+      <div className="min-h-0 overflow-hidden">
+        <CodeEditor
+          value={editorValue}
+          onChange={handleEditorChange}
+          language="javascript"
+          placeholder={activePhase === "pre-request" ? "// Runs before the request is sent\n// Example:\n// kivo.request.addHeader(\"X-Trace\", \"1\");" : "// Runs after response is received\n// Example:\n// await kivo.test(\"status is 200\", () => {\n//   kivo.expect(kivo.response.status).toBe(200);\n// });"}
+          disabled={false}
+        />
+      </div>
+
+      <div className="flex flex-wrap items-center gap-2 border-t border-border/25 px-3 py-2">
+        {SCRIPT_SNIPPET_GROUPS.map((group) => (
+          <div key={group.key} className="relative">
+            <button
+              type="button"
+              className={cn(
+                "px-2 py-1 text-[10px] uppercase tracking-[0.15em] transition-colors",
+                openGroupKey === group.key ? "bg-accent/45 text-foreground" : "text-muted-foreground hover:bg-accent/25 hover:text-foreground"
+              )}
+              onClick={() => setOpenGroupKey((current) => (current === group.key ? "" : group.key))}
+            >
+              {group.label}
+            </button>
+            {openGroupKey === group.key ? (
+              <div className="absolute bottom-[calc(100%+8px)] left-0 z-30 min-w-[220px] border border-border/60 bg-popover p-1 shadow-2xl">
+                {group.items.map((item) => (
+                  <button
+                    key={item.label}
+                    type="button"
+                    className="flex w-full items-center gap-2 px-3 py-2 text-left text-[12px] text-foreground hover:bg-accent/45"
+                    onClick={() => {
+                      appendSnippet(item.code);
+                      setOpenGroupKey("");
+                    }}
+                  >
+                    <Plus className="h-3.5 w-3.5" /> {item.label}
+                  </button>
+                ))}
+              </div>
+            ) : null}
+          </div>
+        ))}
+      </div>
+
+      {state.scriptLastError ? (
+        <div className="border-t border-amber-500/20 bg-amber-500/[0.08] px-3 py-1.5 text-[11px] text-amber-500 dark:text-amber-400">
+          {state.scriptLastError}
+        </div>
+      ) : null}
     </div>
   );
 }
@@ -2242,6 +2434,10 @@ export function RequestPane({
           isWebSocketRequest
             ? <WebSocketSettingsPanel state={state} onChange={onChange} />
             : <RequestSettingsPanel state={state} onChange={onChange} />
+        ) : null}
+
+        {activeTab === "Scripts" && !isRealtimeRequest && !isGrpcRequest ? (
+          <ScriptsPanel state={state} onChange={onChange} />
         ) : null}
       </div>
 

@@ -23,6 +23,7 @@ import { clampSidebarWidth, normalizeStore, parseCookies } from "@/lib/workspace
 import { formatResponseBody, isJsonText } from "@/lib/formatters.js";
 import { normalizeUrl } from "@/lib/http-ui.js";
 import { normalizeAuthState } from "@/lib/oauth.js";
+import { runRequestScript } from "@/lib/request-scripts.js";
 
 const SIDEBAR_COLLAPSED_WIDTH = 52;
 const SIDEBAR_MIN_WIDTH = 220;
@@ -189,6 +190,29 @@ function updateRequestWithLocalResponse(current, requestName, savedResponse, res
             requests: collection.requests.map((request) => (
               request.name === requestName
                 ? { ...request, responseBodyView, lastResponse: savedResponse }
+                : request
+            ))
+          };
+        })
+      };
+    })
+  };
+}
+
+function updateRequestScriptStateByIdentity(current, workspaceName, collectionName, requestName, patch = {}) {
+  return {
+    ...current,
+    workspaces: current.workspaces.map((workspace) => {
+      if (workspace.name !== workspaceName) return workspace;
+      return {
+        ...workspace,
+        collections: workspace.collections.map((collection) => {
+          if (collection.name !== collectionName) return collection;
+          return {
+            ...collection,
+            requests: collection.requests.map((request) => (
+              request.name === requestName
+                ? { ...request, ...patch }
                 : request
             ))
           };
@@ -2276,9 +2300,73 @@ export function useWorkspaceStore() {
       return;
     }
 
+    const activeWorkspaceName = activeWorkspace?.name ?? "";
+    const activeCollectionName = activeCollection?.name ?? "";
+    const activeRequestName = activeRequest.name;
+    const supportsScripts = activeRequest.requestMode === REQUEST_MODES.HTTP || activeRequest.requestMode === REQUEST_MODES.GRAPHQL;
+    let scriptedRequest = activeRequest;
+
+    if (supportsScripts) {
+      const preScriptSource = String(activeRequest.scriptPreRequest || "").trim();
+      if (preScriptSource) {
+        const preRun = await runRequestScript({
+          phase: "pre-request",
+          script: preScriptSource,
+          request: activeRequest,
+          response: null,
+        });
+
+        if (!preRun.ok) {
+          const savedAt = formatSavedAt();
+          const preError = `Pre-request script failed: ${preRun.error || "Unknown error"}`;
+          const warningResponse = {
+            status: 0,
+            badge: "Script error",
+            statusText: "Script error",
+            duration: "-",
+            size: "0 B",
+            headers: {},
+            cookies: [],
+            body: preError,
+            rawBody: preError,
+            isJson: false,
+            meta: {
+              url: activeRequest.url || "-",
+              method: activeRequest.method || "GET"
+            },
+            savedAt
+          };
+
+          updateStore((current) => updateRequestWithLocalResponseByIdentity(
+            updateRequestScriptStateByIdentity(current, activeWorkspaceName, activeCollectionName, activeRequestName, {
+              scriptLastRunAt: savedAt,
+              scriptLastPhase: "pre-request",
+              scriptLastStatus: "error",
+              scriptLastError: preError,
+            }),
+            activeWorkspaceName,
+            activeCollectionName,
+            activeRequestName,
+            warningResponse,
+            "Raw"
+          ));
+          return;
+        }
+
+        scriptedRequest = preRun.request;
+        const savedAt = formatSavedAt();
+        updateStore((current) => updateRequestScriptStateByIdentity(current, activeWorkspaceName, activeCollectionName, activeRequestName, {
+          scriptLastRunAt: savedAt,
+          scriptLastPhase: "pre-request",
+          scriptLastStatus: "success",
+          scriptLastError: "",
+        }));
+      }
+    }
+
     let finalUrl = "";
     try {
-      finalUrl = buildUrlWithParams(activeRequest.url, activeRequest.queryParams);
+      finalUrl = buildUrlWithParams(scriptedRequest.url, scriptedRequest.queryParams);
     } catch (error) {
       console.error("Failed to build URL:", error);
     }
@@ -2310,7 +2398,7 @@ export function useWorkspaceStore() {
                           body: "Enter a valid URL before sending the request.",
                           rawBody: "Enter a valid URL before sending the request.",
                           isJson: false,
-                          meta: { url: activeRequest.url || "-", method: activeRequest.method },
+                          meta: { url: scriptedRequest.url || "-", method: scriptedRequest.method },
                           savedAt: formatSavedAt()
                         }
                       }
@@ -2330,18 +2418,18 @@ export function useWorkspaceStore() {
     setSendStartedAt(Date.now());
 
     try {
-      const folderHeaderRows = resolveFolderHeaderRows(activeCollection, activeRequest.folderPath);
-      const resolvedFolderAuth = resolveFolderAuth(activeCollection, activeRequest.folderPath);
+      const folderHeaderRows = resolveFolderHeaderRows(activeCollection, scriptedRequest.folderPath);
+      const resolvedFolderAuth = resolveFolderAuth(activeCollection, scriptedRequest.folderPath);
       const effectiveRequest = {
-        ...activeRequest,
-        headers: [...folderHeaderRows, ...(activeRequest.headers || [])],
-        auth: activeRequest?.auth?.type === "inherit" ? resolvedFolderAuth : activeRequest.auth
+        ...scriptedRequest,
+        headers: [...folderHeaderRows, ...(scriptedRequest.headers || [])],
+        auth: scriptedRequest?.auth?.type === "inherit" ? resolvedFolderAuth : scriptedRequest.auth
       };
 
       const requestPayload = buildRequestPayload(
         effectiveRequest,
-        activeWorkspace?.name ?? "",
-        activeCollection?.name ?? ""
+        activeWorkspaceName,
+        activeCollectionName
       );
       const result = await sendHttpRequest({ ...requestPayload, requestId });
 
@@ -2367,7 +2455,7 @@ export function useWorkspaceStore() {
         isJson: responseIsJson,
         meta: {
           url: finalUrl,
-          method: activeRequest.method
+          method: scriptedRequest.method
         },
         savedAt
       };
@@ -2397,6 +2485,34 @@ export function useWorkspaceStore() {
           };
         })
       }));
+
+      if (supportsScripts) {
+        const postScriptSource = String(activeRequest.scriptAfterResponse || "").trim();
+        if (postScriptSource) {
+          const postRun = await runRequestScript({
+            phase: "after-response",
+            script: postScriptSource,
+            request: scriptedRequest,
+            response: savedResponse,
+          });
+
+          const failedTests = (postRun.tests || []).filter((entry) => !entry.ok);
+          const hasError = !postRun.ok || failedTests.length > 0;
+          const testFailureMessage = failedTests.length > 0
+            ? failedTests.map((entry) => `${entry.name}: ${entry.error || "Failed"}`).join("\n")
+            : "";
+          const postError = !postRun.ok
+            ? `After-response script failed: ${postRun.error || "Unknown error"}`
+            : (testFailureMessage ? `After-response tests failed:\n${testFailureMessage}` : "");
+
+          updateStore((current) => updateRequestScriptStateByIdentity(current, activeWorkspaceName, activeCollectionName, activeRequestName, {
+            scriptLastRunAt: formatSavedAt(),
+            scriptLastPhase: "after-response",
+            scriptLastStatus: hasError ? "error" : "success",
+            scriptLastError: hasError ? postError : "",
+          }));
+        }
+      }
     } catch (error) {
       if (activeHttpRequestIdRef.current !== requestId) {
         return;
@@ -2443,6 +2559,34 @@ export function useWorkspaceStore() {
           };
         })
       }));
+
+      if (supportsScripts) {
+        const postScriptSource = String(activeRequest.scriptAfterResponse || "").trim();
+        if (postScriptSource) {
+          const postRun = await runRequestScript({
+            phase: "after-response",
+            script: postScriptSource,
+            request: scriptedRequest,
+            response: savedResponse,
+          });
+
+          const failedTests = (postRun.tests || []).filter((entry) => !entry.ok);
+          const hasError = !postRun.ok || failedTests.length > 0;
+          const testFailureMessage = failedTests.length > 0
+            ? failedTests.map((entry) => `${entry.name}: ${entry.error || "Failed"}`).join("\n")
+            : "";
+          const postError = !postRun.ok
+            ? `After-response script failed: ${postRun.error || "Unknown error"}`
+            : (testFailureMessage ? `After-response tests failed:\n${testFailureMessage}` : "");
+
+          updateStore((current) => updateRequestScriptStateByIdentity(current, activeWorkspaceName, activeCollectionName, activeRequestName, {
+            scriptLastRunAt: formatSavedAt(),
+            scriptLastPhase: "after-response",
+            scriptLastStatus: hasError ? "error" : "success",
+            scriptLastError: hasError ? postError : "",
+          }));
+        }
+      }
     } finally {
       if (activeHttpRequestIdRef.current === requestId) {
         activeHttpRequestIdRef.current = "";

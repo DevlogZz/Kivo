@@ -190,6 +190,13 @@ export function createRequest(name = "New Request", mode = REQUEST_MODES.HTTP) {
     socketIoEvents: Array.isArray(template.socketIoEvents) ? template.socketIoEvents.map((event) => ({ ...event })) : [],
     socketIoSelectedEventId: template.socketIoSelectedEventId ?? "",
     folderPath: "",
+    scriptPreRequest: "",
+    scriptAfterResponse: "",
+    scriptActivePhase: "pre-request",
+    scriptLastRunAt: "",
+    scriptLastPhase: "",
+    scriptLastStatus: "",
+    scriptLastError: "",
     lastResponse: null
   };
 }
@@ -371,6 +378,13 @@ export function normalizeRequestRecord(request) {
     socketIoEvents,
     socketIoSelectedEventId: hasSelectedSocketIoEvent ? selectedSocketIoEventId : (defaultSocketIoEvent?.id || ""),
     folderPath: typeof request?.folderPath === "string" ? request.folderPath : "",
+    scriptPreRequest: typeof request?.scriptPreRequest === "string" ? request.scriptPreRequest : "",
+    scriptAfterResponse: typeof request?.scriptAfterResponse === "string" ? request.scriptAfterResponse : "",
+    scriptActivePhase: request?.scriptActivePhase === "after-response" ? "after-response" : "pre-request",
+    scriptLastRunAt: typeof request?.scriptLastRunAt === "string" ? request.scriptLastRunAt : "",
+    scriptLastPhase: typeof request?.scriptLastPhase === "string" ? request.scriptLastPhase : "",
+    scriptLastStatus: typeof request?.scriptLastStatus === "string" ? request.scriptLastStatus : "",
+    scriptLastError: typeof request?.scriptLastError === "string" ? request.scriptLastError : "",
     auth: normalizeAuthState(request?.auth)
   };
 }
@@ -389,6 +403,13 @@ export function cloneRequest(request) {
       files: Array.isArray(group?.files) ? group.files.map((path) => String(path)) : []
     })),
     tags: (request.tags || []).map((tag) => String(tag)),
+    scriptPreRequest: String(request.scriptPreRequest || ""),
+    scriptAfterResponse: String(request.scriptAfterResponse || ""),
+    scriptActivePhase: request.scriptActivePhase === "after-response" ? "after-response" : "pre-request",
+    scriptLastRunAt: String(request.scriptLastRunAt || ""),
+    scriptLastPhase: String(request.scriptLastPhase || ""),
+    scriptLastStatus: String(request.scriptLastStatus || ""),
+    scriptLastError: String(request.scriptLastError || ""),
     auth: normalizeAuthState(request.auth),
     lastResponse: request.lastResponse ? { ...request.lastResponse } : null
   };
