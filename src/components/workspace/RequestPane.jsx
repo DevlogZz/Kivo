@@ -710,7 +710,7 @@ function GrpcProtoPickerModal({
                 <div key={`file-${path}`} className="grid grid-cols-[28px_minmax(0,1fr)_auto] items-center gap-2 px-2 py-2">
                   <input type="radio" name="grpc-proto-path" checked={draftSelectedPath === path} onChange={() => setDraftSelectedPath(path)} className="h-3.5 w-3.5 accent-primary" />
                   <div className="flex min-w-0 items-center gap-2 text-[12px] text-foreground">
-                    <FileText className="h-3.5 w-3.5 shrink-0 text-cyan-300" />
+                    <FileText className="h-3.5 w-3.5 shrink-0 tone-grpc-text" />
                     <span className="truncate">{getPathFileName(path)}</span>
                   </div>
                   <Button type="button" variant="ghost" size="icon" onClick={() => onRemoveDirectFile(path)} className="h-7 w-7">
@@ -723,7 +723,7 @@ function GrpcProtoPickerModal({
                 <div key={`dir-${group.path}`} className="px-2 py-2">
                   <div className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-2">
                     <div className="flex items-center gap-2 text-[12px] font-medium text-foreground">
-                      <Folder className="h-3.5 w-3.5 text-amber-300" />
+                      <Folder className="h-3.5 w-3.5 tone-ws-text" />
                       <span className="truncate">{getPathLeafFolder(group.path) || group.path}</span>
                     </div>
                     <Button type="button" variant="ghost" size="icon" onClick={() => onRemoveDirectory(group.path)} className="h-7 w-7">
@@ -737,7 +737,7 @@ function GrpcProtoPickerModal({
                         <input type="radio" name="grpc-proto-path" checked={draftSelectedPath === path} onChange={() => setDraftSelectedPath(path)} className="h-3.5 w-3.5 accent-primary" />
                         <div className="flex min-w-0 items-center gap-2 text-[12px] text-foreground">
                           <span className="text-muted-foreground">|_</span>
-                          <FileText className="h-3.5 w-3.5 shrink-0 text-cyan-300" />
+                          <FileText className="h-3.5 w-3.5 shrink-0 tone-grpc-text" />
                           <span className="truncate">{getPathFileName(path)}</span>
                         </div>
                         <Button type="button" variant="ghost" size="icon" onClick={() => onRemoveDirectoryFile(group.path, path)} className="h-7 w-7">
@@ -1867,15 +1867,15 @@ export function RequestPane({
       )}>
         {isWebSocketRequest ? (
           <div className="flex h-8 items-center px-3 lg:h-10">
-            <span className="font-semibold uppercase tracking-[0.14em] text-amber-900 dark:text-amber-300">WS</span>
+            <span className="font-semibold uppercase tracking-[0.14em] tone-ws-text">WS</span>
           </div>
         ) : isSocketIoRequest ? (
           <div className="flex h-8 items-center px-3 lg:h-10">
-            <span className="font-semibold uppercase tracking-[0.14em] text-orange-900 dark:text-orange-300">Socket.IO</span>
+            <span className="font-semibold uppercase tracking-[0.14em] tone-sio-text">Socket.IO</span>
           </div>
         ) : isGrpcRequest ? (
           <div className="flex h-8 items-center px-3 lg:h-10">
-            <span className="font-semibold uppercase tracking-[0.14em] text-cyan-900 dark:text-cyan-300">gRPC</span>
+            <span className="font-semibold uppercase tracking-[0.14em] tone-grpc-text">gRPC</span>
           </div>
         ) : (
           <MethodPicker value={state.method} onChange={(method) => onChange("method", method)} />
@@ -2010,7 +2010,7 @@ export function RequestPane({
       {isGrpcRequest ? (
         <div className="flex items-center justify-between border-b border-border/20 bg-transparent px-3 py-2 text-[11px] text-muted-foreground">
           <div className="flex min-w-0 items-center gap-2 truncate">
-            <FileText className="h-3.5 w-3.5 shrink-0 text-cyan-900 dark:text-cyan-300" />
+            <FileText className="h-3.5 w-3.5 shrink-0 tone-grpc-text" />
             <span className="truncate">{grpcSelectedProtoFileName || "No .proto file selected"}</span>
           </div>
           <Button type="button" variant="outline" size="sm" className="h-7 gap-1.5 px-2.5 text-[11px]" onClick={handleGrpcProtoBrowse}>
@@ -2099,7 +2099,7 @@ export function RequestPane({
           isGrpcRequest && hasGrpcMethodSelected ? (
             <div className="grid h-full min-h-0 grid-rows-[auto_minmax(0,1fr)]">
               <div className="flex items-center justify-between gap-3 border-b border-border/20 px-3 py-2 text-[11px] text-muted-foreground">
-                <div className="text-[12px] font-semibold uppercase tracking-[0.14em] text-cyan-900 dark:text-cyan-300">{grpcBodyHeading}</div>
+                <div className="text-[12px] font-semibold uppercase tracking-[0.14em] tone-grpc-text">{grpcBodyHeading}</div>
                 <div className="text-[10px] uppercase tracking-[0.16em] text-muted-foreground">Body</div>
               </div>
               <CodeEditor

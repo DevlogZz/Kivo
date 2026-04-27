@@ -385,15 +385,15 @@ function getRequestBadgeMeta(request) {
   const mode = request?.requestMode ?? REQUEST_MODES.HTTP;
   switch (mode) {
     case REQUEST_MODES.GRAPHQL:
-      return { label: "GQL", tone: "text-fuchsia-900 dark:text-fuchsia-300" };
+      return { label: "GQL", tone: "tone-gql-text" };
     case REQUEST_MODES.GRPC:
-      return { label: "gRPC", tone: "text-cyan-900 dark:text-cyan-300" };
+      return { label: "gRPC", tone: "tone-grpc-text" };
     case REQUEST_MODES.WEBSOCKET:
-      return { label: "WS", tone: "text-amber-900 dark:text-amber-300" };
+      return { label: "WS", tone: "tone-ws-text" };
     case REQUEST_MODES.SOCKET_IO:
-      return { label: "SIO", tone: "text-orange-900 dark:text-orange-300" };
+      return { label: "SIO", tone: "tone-sio-text" };
     case REQUEST_MODES.SSE:
-      return { label: "SSE", tone: "text-emerald-900 dark:text-emerald-300" };
+      return { label: "SSE", tone: "tone-get-text" };
     case REQUEST_MODES.HTTP:
     default:
       return {
