@@ -22,7 +22,7 @@ import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button.jsx";
 import { EnvHighlightInput } from "@/components/ui/EnvHighlightInput.jsx";
-import { cancelOAuthExchange, exchangeOAuthToken } from "@/lib/http-client.js";
+import { cancelOAuthExchange, exchangeOAuthToken, getAppSettings, waitForOAuthCallback } from "@/lib/http-client.js";
 import {
   buildAuthorizationUrl,
   createOAuthRow,
@@ -32,6 +32,7 @@ import {
   getOAuthWarnings,
   oauthClientAuthMethodOptions,
   oauthGrantOptions,
+  parseOAuthCallbackInput,
 } from "@/lib/oauth.js";
 import { cn } from "@/lib/utils.js";
 
@@ -286,7 +287,7 @@ function TokenStatus({ oauth }) {
   );
 }
 
-function CodeExchangeModal({ open, oauth, envVars, onClose, onApplyCode }) {
+function CodeExchangeModal({ open, oauth, envVars, onClose, onApplyInput }) {
   const [value, setValue] = useState("");
 
   useEffect(() => {
@@ -327,7 +328,7 @@ function CodeExchangeModal({ open, oauth, envVars, onClose, onApplyCode }) {
             <Button
               type="button"
               onClick={() => {
-                onApplyCode(extractAuthorizationCode(value));
+                onApplyInput(value);
                 onClose();
               }}
             >
@@ -355,10 +356,12 @@ export function OAuth2Panel({
   const [notice, setNotice] = useState("");
   const [error, setError] = useState("");
   const [showCodeModal, setShowCodeModal] = useState(false);
+  const [isWaitingCallback, setIsWaitingCallback] = useState(false);
   const [feedbackNonce, setFeedbackNonce] = useState(0);
   const hasMountedResponseRef = useRef(false);
   const lastToastNonceRef = useRef(0);
   const activeExchangeIdRef = useRef("");
+  const [appSettings, setAppSettings] = useState(null);
 
   const warnings = useMemo(() => getOAuthWarnings(auth), [auth]);
   const validationErrors = useMemo(() => getOAuthValidationErrors(auth), [auth]);
@@ -375,6 +378,25 @@ export function OAuth2Panel({
 
     setFeedbackNonce((value) => value + 1);
   }, [response?.savedAt]);
+
+  useEffect(() => {
+    let cancelled = false;
+    getAppSettings()
+      .then((settings) => {
+        if (!cancelled) {
+          setAppSettings(settings && typeof settings === "object" ? settings : null);
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setAppSettings(null);
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   useEffect(() => {
     if (!feedbackNonce) return;
@@ -467,11 +489,15 @@ export function OAuth2Panel({
   async function handleOpenAuthorizationPage() {
     try {
       setError("");
+      setNotice("");
       const nextState = oauth.state || generateOAuthStateToken();
       const { url, codeVerifier } = await buildAuthorizationUrl(
         { ...oauth, state: nextState },
         (value) => resolveEnvValue(value, envVars)
       );
+
+      const resolvedCallback = resolveEnvValue(oauth.callbackUrl, envVars);
+      const useSystemBrowser = appSettings?.useSystemBrowserForOauth2Authorization ?? true;
 
       await persistAndNotify(
         {
@@ -484,8 +510,53 @@ export function OAuth2Panel({
         "Browser opened. Finish sign-in, then paste the callback URL or code."
       );
 
-      await openUrl(url);
+      if (useSystemBrowser) {
+        await openUrl(url);
+      } else {
+        window.open(url, "_blank", "noopener,noreferrer");
+      }
       setShowCodeModal(true);
+
+      const canAutoListen = (() => {
+        try {
+          const parsed = new URL(resolvedCallback);
+          const host = parsed.hostname.toLowerCase();
+          return parsed.protocol === "http:" && (host === "localhost" || host === "127.0.0.1" || host === "::1");
+        } catch {
+          return false;
+        }
+      })();
+
+      if (canAutoListen) {
+        setIsWaitingCallback(true);
+        waitForOAuthCallback({
+          callbackUrl: resolvedCallback,
+          expectedState: nextState,
+          timeoutMs: 120000,
+        })
+          .then(async (result) => {
+            const code = String(result?.authorizationCode || "").trim();
+            if (!code) return;
+            await persistAndNotify(
+              {
+                authorizationCode: code,
+                lastStatus: "callback-received",
+                lastWarning: "",
+                lastError: "",
+              },
+              "Authorization callback received. You can fetch token now."
+            );
+          })
+          .catch((waitError) => {
+            const message = waitError?.toString?.() || "Failed waiting for OAuth callback.";
+            setError(message);
+            setNotice("");
+            setFeedbackNonce((value) => value + 1);
+          })
+          .finally(() => {
+            setIsWaitingCallback(false);
+          });
+      }
     } catch (nextError) {
       const message = nextError?.message || "Failed to open the authorization page.";
       updateOAuth({ lastError: message, lastStatus: "authorization-open-failed" });
@@ -503,6 +574,24 @@ export function OAuth2Panel({
     setNotice("");
 
     try {
+      const parsedCallback = parseOAuthCallbackInput(oauth.authorizationCode);
+      if (grantTypeOverride === "authorization_code") {
+        if (parsedCallback.error) {
+          const details = parsedCallback.errorDescription ? ` (${parsedCallback.errorDescription})` : "";
+          throw new Error(`Authorization failed: ${parsedCallback.error}${details}`);
+        }
+        if (oauth.state && parsedCallback.callbackUrl && !parsedCallback.state) {
+          throw new Error("OAuth state is missing in callback URL.");
+        }
+        if (oauth.state && parsedCallback.state && parsedCallback.state !== oauth.state) {
+          throw new Error("OAuth state mismatch. Callback was rejected for security reasons.");
+        }
+      }
+
+      const normalizedAuthorizationCode = grantTypeOverride === "authorization_code"
+        ? (parsedCallback.code || extractAuthorizationCode(oauth.authorizationCode))
+        : extractAuthorizationCode(oauth.authorizationCode);
+
       const result = await exchangeOAuthToken({
         workspaceName: workspaceName || "",
         collectionName: collectionName || "",
@@ -510,7 +599,7 @@ export function OAuth2Panel({
         oauth: {
           ...oauth,
           grantType: grantTypeOverride,
-          authorizationCode: extractAuthorizationCode(oauth.authorizationCode),
+          authorizationCode: normalizedAuthorizationCode,
         },
       });
 
@@ -521,7 +610,7 @@ export function OAuth2Panel({
       await persistAndNotify(
         {
           grantType: grantTypeOverride,
-          authorizationCode: extractAuthorizationCode(oauth.authorizationCode),
+          authorizationCode: normalizedAuthorizationCode,
           accessToken: result.accessToken ?? "",
           refreshToken: result.refreshToken || oauth.refreshToken || "",
           tokenType: result.tokenType || "Bearer",
@@ -580,7 +669,37 @@ export function OAuth2Panel({
         oauth={oauth}
         envVars={envVars}
         onClose={() => setShowCodeModal(false)}
-        onApplyCode={(code) => updateOAuth({ authorizationCode: code })}
+        onApplyInput={(value) => {
+          const parsed = parseOAuthCallbackInput(value);
+          if (parsed.error) {
+            const details = parsed.errorDescription ? ` (${parsed.errorDescription})` : "";
+            setError(`Authorization failed: ${parsed.error}${details}`);
+            setNotice("");
+            setFeedbackNonce((nonce) => nonce + 1);
+            return;
+          }
+          if (oauth.state && parsed.callbackUrl && !parsed.state) {
+            setError("OAuth state is missing in callback URL.");
+            setNotice("");
+            setFeedbackNonce((nonce) => nonce + 1);
+            return;
+          }
+          if (oauth.state && parsed.state && parsed.state !== oauth.state) {
+            setError("OAuth state mismatch. Callback was rejected for security reasons.");
+            setNotice("");
+            setFeedbackNonce((nonce) => nonce + 1);
+            return;
+          }
+          updateOAuth({
+            authorizationCode: parsed.code || extractAuthorizationCode(value),
+            lastStatus: "callback-received",
+            lastError: "",
+            lastWarning: "",
+          });
+          setError("");
+          setNotice("Authorization callback accepted.");
+          setFeedbackNonce((nonce) => nonce + 1);
+        }}
       />
       <div className="thin-scrollbar min-h-0 flex-1 overflow-auto">
         <div className="grid max-w-none gap-3 px-4 py-3.5">
@@ -861,7 +980,7 @@ export function OAuth2Panel({
 
       <div className="border-t border-border/18 bg-transparent px-4 py-3">
         <div className="mx-auto flex max-w-[980px] flex-wrap items-center justify-between gap-2">
-          <div className="flex items-center gap-2 text-[11px] text-muted-foreground">
+          <div className="flex items-center justify-between rounded-md border border-border/20 bg-transparent px-3 py-2 text-[11px] text-muted-foreground">
             <SlidersHorizontal className="h-3.5 w-3.5" />
             <span>
               {oauth.grantType === "authorization_code"
@@ -869,6 +988,11 @@ export function OAuth2Panel({
                 : "Set credentials, then fetch or refresh the token."}
             </span>
           </div>
+          {isWaitingCallback ? (
+            <div className="rounded-md border border-border/20 bg-accent/15 px-3 py-2 text-[11px] text-muted-foreground">
+              Waiting for local OAuth callback on redirect URL...
+            </div>
+          ) : null}
           <div className="flex flex-wrap gap-2">
             <Button
               type="button"

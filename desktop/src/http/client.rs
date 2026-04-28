@@ -1,5 +1,8 @@
 use std::collections::HashMap;
+use std::error::Error as StdError;
 use std::fs;
+use std::io::{Read, Write};
+use std::net::TcpListener;
 use std::path::PathBuf;
 use std::str::FromStr;
 use std::sync::{Mutex, OnceLock};
@@ -21,10 +24,14 @@ use tonic::transport::Endpoint;
 use tonic::{Request, Status};
 
 use super::models::{
-    CookieJarEntry, GrpcRequestPayload, OAuthTokenExchangePayload, OAuthTokenExchangeResult,
-    RequestPayload, ResponsePayload, UpsertCookieJarEntryPayload,
+    CookieJarEntry, GrpcRequestPayload, OAuthCallbackWaitPayload, OAuthCallbackWaitResult,
+    OAuthTokenExchangePayload, OAuthTokenExchangeResult, RequestPayload, ResponsePayload,
+    UpsertCookieJarEntryPayload,
 };
-use crate::storage::{get_collection_dir, get_storage_root, load_collection_config_from_path, load_env_vars};
+use crate::storage::{
+    get_app_config, get_collection_dir, get_storage_root, load_collection_config_from_path,
+    load_env_vars, AppSettings,
+};
 
 const DEFAULT_USER_AGENT: &str = concat!("kivo/", env!("CARGO_PKG_VERSION"));
 const COOKIE_STORE_FILE_NAME: &str = "cookies.json";
@@ -33,6 +40,265 @@ const COOKIE_STORE_FILE_NAME: &str = "cookies.json";
 struct DynamicCodec {
     input: prost_reflect::MessageDescriptor,
     output: prost_reflect::MessageDescriptor,
+}
+
+fn write_callback_response(stream: &mut std::net::TcpStream, status_line: &str, message: &str) {
+    let body = format!(
+        "<html><body style=\"font-family: sans-serif; padding: 24px;\"><h3>{}</h3><p>You can return to Kivo now.</p></body></html>",
+        message
+    );
+    let response = format!(
+        "{status_line}\r\nContent-Type: text/html; charset=utf-8\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
+        body.len(),
+        body
+    );
+    let _ = stream.write_all(response.as_bytes());
+    let _ = stream.flush();
+}
+
+#[tauri::command]
+pub async fn wait_for_oauth_callback(
+    payload: OAuthCallbackWaitPayload,
+) -> Result<OAuthCallbackWaitResult, String> {
+    let callback_url = payload.callback_url.trim().to_string();
+    if callback_url.is_empty() {
+        return Err("Callback URL is required.".to_string());
+    }
+
+    let parsed = reqwest::Url::parse(&callback_url)
+        .map_err(|_| "Invalid callback URL.".to_string())?;
+    if parsed.scheme() != "http" {
+        return Err("Callback URL must use http:// for local listener flow.".to_string());
+    }
+
+    let host = parsed.host_str().unwrap_or_default().to_ascii_lowercase();
+    if host != "localhost" && host != "127.0.0.1" && host != "::1" {
+        return Err("Callback URL must use localhost, 127.0.0.1, or ::1.".to_string());
+    }
+
+    let port = parsed
+        .port_or_known_default()
+        .ok_or_else(|| "Callback URL must include a local port.".to_string())?;
+    let expected_path = if parsed.path().trim().is_empty() {
+        "/".to_string()
+    } else {
+        parsed.path().to_string()
+    };
+    let bind_addr = if host == "::1" {
+        format!("[::1]:{port}")
+    } else {
+        format!("127.0.0.1:{port}")
+    };
+
+    let expected_state = payload.expected_state.trim().to_string();
+    let timeout_ms = payload.timeout_ms.unwrap_or(120_000).clamp(1_000, 600_000);
+
+    tokio::task::spawn_blocking(move || -> Result<OAuthCallbackWaitResult, String> {
+        let listener = TcpListener::bind(&bind_addr)
+            .map_err(|err| format!("Failed to bind OAuth callback listener on {bind_addr}: {err}"))?;
+        listener
+            .set_nonblocking(true)
+            .map_err(|err| format!("Failed to configure callback listener: {err}"))?;
+
+        let started_at = Instant::now();
+
+        loop {
+            if started_at.elapsed() >= Duration::from_millis(timeout_ms) {
+                return Err("Timed out while waiting for OAuth callback.".to_string());
+            }
+
+            match listener.accept() {
+                Ok((mut stream, _peer)) => {
+                    let _ = stream.set_read_timeout(Some(Duration::from_secs(3)));
+                    let mut buffer = [0u8; 8192];
+                    let read_count = stream
+                        .read(&mut buffer)
+                        .map_err(|err| format!("Failed to read OAuth callback request: {err}"))?;
+                    let request_text = String::from_utf8_lossy(&buffer[..read_count]).to_string();
+                    let first_line = request_text
+                        .lines()
+                        .next()
+                        .ok_or_else(|| "Malformed OAuth callback request.".to_string())?;
+                    let mut parts = first_line.split_whitespace();
+                    let _method = parts.next().unwrap_or_default();
+                    let target = parts.next().unwrap_or("/");
+
+                    let callback_request_url = reqwest::Url::parse(&format!("http://localhost:{port}{target}"))
+                        .map_err(|_| "Invalid OAuth callback target URL.".to_string())?;
+
+                    if callback_request_url.path() != expected_path {
+                        write_callback_response(
+                            &mut stream,
+                            "HTTP/1.1 404 Not Found",
+                            "OAuth callback path mismatch.",
+                        );
+                        continue;
+                    }
+
+                    let oauth_error = callback_request_url.query_pairs().find_map(|(key, value)| {
+                        if key == "error" {
+                            Some(value.to_string())
+                        } else {
+                            None
+                        }
+                    });
+                    if let Some(err_code) = oauth_error {
+                        let err_description = callback_request_url
+                            .query_pairs()
+                            .find_map(|(key, value)| {
+                                if key == "error_description" {
+                                    Some(value.to_string())
+                                } else {
+                                    None
+                                }
+                            })
+                            .unwrap_or_default();
+                        write_callback_response(
+                            &mut stream,
+                            "HTTP/1.1 400 Bad Request",
+                            "OAuth authorization failed.",
+                        );
+                        return Err(if err_description.trim().is_empty() {
+                            format!("OAuth authorization failed: {err_code}")
+                        } else {
+                            format!("OAuth authorization failed: {err_code} ({err_description})")
+                        });
+                    }
+
+                    let mut code = String::new();
+                    let mut received_state = String::new();
+                    for (key, value) in callback_request_url.query_pairs() {
+                        if key == "code" {
+                            code = value.to_string();
+                        } else if key == "state" {
+                            received_state = value.to_string();
+                        }
+                    }
+
+                    if code.trim().is_empty() {
+                        write_callback_response(
+                            &mut stream,
+                            "HTTP/1.1 400 Bad Request",
+                            "Authorization code missing in callback.",
+                        );
+                        return Err("Authorization code missing in callback URL.".to_string());
+                    }
+
+                    if !expected_state.is_empty() && expected_state != received_state {
+                        write_callback_response(
+                            &mut stream,
+                            "HTTP/1.1 400 Bad Request",
+                            "OAuth state mismatch.",
+                        );
+                        return Err("OAuth state mismatch. Callback was rejected for security reasons.".to_string());
+                    }
+
+                    write_callback_response(
+                        &mut stream,
+                        "HTTP/1.1 200 OK",
+                        "OAuth authorization received.",
+                    );
+
+                    return Ok(OAuthCallbackWaitResult {
+                        authorization_code: code,
+                        received_state,
+                        callback_url: callback_request_url.to_string(),
+                    });
+                }
+                Err(err) if err.kind() == std::io::ErrorKind::WouldBlock => {
+                    std::thread::sleep(Duration::from_millis(50));
+                }
+                Err(err) => {
+                    return Err(format!("OAuth callback listener error: {err}"));
+                }
+            }
+        }
+    })
+    .await
+    .map_err(|err| format!("OAuth callback listener task failed: {err}"))?
+}
+
+fn parse_no_proxy_list(no_proxy: &str) -> Vec<String> {
+    no_proxy
+        .split(',')
+        .map(|entry| entry.trim().to_ascii_lowercase())
+        .filter(|entry| !entry.is_empty())
+        .collect()
+}
+
+fn host_bypasses_proxy(url: &str, no_proxy_list: &[String]) -> bool {
+    if no_proxy_list.is_empty() {
+        return false;
+    }
+
+    let host = match reqwest::Url::parse(url)
+        .ok()
+        .and_then(|parsed| parsed.host_str().map(|value| value.to_ascii_lowercase()))
+    {
+        Some(value) => value,
+        None => return false,
+    };
+
+    no_proxy_list.iter().any(|pattern| {
+        if pattern == "*" {
+            return true;
+        }
+        let normalized = pattern.trim_start_matches('.');
+        if normalized.is_empty() {
+            return false;
+        }
+        host == normalized || host.ends_with(&format!(".{normalized}"))
+    })
+}
+
+fn load_custom_ca_cert(path: &str) -> Result<reqwest::Certificate, String> {
+    let bytes = fs::read(path).map_err(|err| format!("Failed to read CA certificate file: {err}"))?;
+    reqwest::Certificate::from_pem(&bytes)
+        .or_else(|_| reqwest::Certificate::from_der(&bytes))
+        .map_err(|err| format!("Invalid CA certificate file: {err}"))
+}
+
+fn build_http_client(
+    settings: &AppSettings,
+    request_url: &str,
+    timeout_ms: u64,
+    validate_certs: bool,
+) -> Result<reqwest::Client, String> {
+    let mut builder = reqwest::Client::builder().redirect(reqwest::redirect::Policy::limited(10));
+
+    if timeout_ms > 0 {
+        builder = builder.timeout(Duration::from_millis(timeout_ms));
+    }
+
+    if !validate_certs {
+        builder = builder.danger_accept_invalid_certs(true);
+    }
+
+    if settings.use_custom_ca_certificate && !settings.custom_ca_certificate_path.trim().is_empty() {
+        let cert = load_custom_ca_cert(settings.custom_ca_certificate_path.trim())?;
+        if !settings.keep_default_ca_certificates {
+            builder = builder.tls_built_in_root_certs(false);
+        }
+        builder = builder.add_root_certificate(cert);
+    }
+
+    if settings.proxy_enabled {
+        let no_proxy_list = parse_no_proxy_list(&settings.no_proxy);
+        if !host_bypasses_proxy(request_url, &no_proxy_list) {
+            if !settings.proxy_http.trim().is_empty() {
+                let proxy = reqwest::Proxy::http(settings.proxy_http.trim())
+                    .map_err(|err| format!("Invalid HTTP proxy URL: {err}"))?;
+                builder = builder.proxy(proxy);
+            }
+            if !settings.proxy_https.trim().is_empty() {
+                let proxy = reqwest::Proxy::https(settings.proxy_https.trim())
+                    .map_err(|err| format!("Invalid HTTPS proxy URL: {err}"))?;
+                builder = builder.proxy(proxy);
+            }
+        }
+    }
+
+    builder.build().map_err(|err| err.to_string())
 }
 
 impl DynamicCodec {
@@ -383,6 +649,20 @@ async fn send_http_request_with_cancel(
     request: reqwest::RequestBuilder,
     cancel_rx: &mut Option<watch::Receiver<bool>>,
 ) -> Result<reqwest::Response, String> {
+    fn format_reqwest_error(err: &reqwest::Error) -> String {
+        let mut message = err.to_string();
+        let mut causes = Vec::new();
+        let mut current = StdError::source(err);
+        while let Some(source) = current {
+            causes.push(source.to_string());
+            current = source.source();
+        }
+        if !causes.is_empty() {
+            message = format!("{message} | caused by: {}", causes.join(" -> "));
+        }
+        message
+    }
+
     if let Some(receiver) = cancel_rx.as_mut() {
         tokio::select! {
             changed = receiver.changed() => {
@@ -399,11 +679,14 @@ async fn send_http_request_with_cancel(
                 }
             }
             response = request.send() => {
-                response.map_err(|err| err.to_string())
+                response.map_err(|err| format_reqwest_error(&err))
             }
         }
     } else {
-        request.send().await.map_err(|err| err.to_string())
+        request
+            .send()
+            .await
+            .map_err(|err| format_reqwest_error(&err))
     }
 }
 
@@ -1081,6 +1364,9 @@ pub async fn oauth_exchange_token(
     let mut cancel_rx = register_oauth_cancel(&request_id);
 
     let env_vars = get_env_context(&app, &payload.workspace_name, &payload.collection_name);
+    let app_settings = get_app_config(app.clone())
+        .map(|state| state.app_settings)
+        .unwrap_or_default();
     let oauth = payload.oauth;
 
     let token_url = normalize_url(&resolve_payload_value(&oauth.token_url, &env_vars))?;
@@ -1090,11 +1376,17 @@ pub async fn oauth_exchange_token(
         oauth.grant_type.trim().to_string()
     };
 
-    let client = reqwest::Client::builder()
-        .redirect(reqwest::redirect::Policy::limited(10))
-        .timeout(Duration::from_secs(45))
-        .build()
-        .map_err(|err| err.to_string())?;
+    let oauth_timeout_ms = if app_settings.request_timeout_ms > 0 {
+        app_settings.request_timeout_ms
+    } else {
+        45_000
+    };
+    let client = build_http_client(
+        &app_settings,
+        &token_url,
+        oauth_timeout_ms,
+        app_settings.validate_certificates_during_authentication,
+    )?;
 
     let client_id = resolve_payload_value(&oauth.client_id, &env_vars);
     let client_secret = resolve_payload_value(&oauth.client_secret, &env_vars);
@@ -1312,6 +1604,9 @@ pub async fn send_http_request(
     };
 
     let env_vars = load_env_vars(&workspace_path, collection_path.as_deref());
+    let app_settings = get_app_config(app.clone())
+        .map(|state| state.app_settings)
+        .unwrap_or_default();
 
     let col_config = collection_path
         .as_deref()
@@ -1432,10 +1727,17 @@ pub async fn send_http_request(
         }
     }
 
-    let client = reqwest::Client::builder()
-        .redirect(reqwest::redirect::Policy::limited(10))
-        .build()
-        .map_err(|err| err.to_string())?;
+    let effective_timeout_ms = if payload.timeout_ms.unwrap_or(0) > 0 {
+        payload.timeout_ms.unwrap_or(0)
+    } else {
+        app_settings.request_timeout_ms
+    };
+    let client = build_http_client(
+        &app_settings,
+        &url,
+        effective_timeout_ms,
+        app_settings.ssl_tls_certificate_verification,
+    )?;
 
     let method_str = payload.method.to_uppercase();
     let method = reqwest::Method::from_bytes(method_str.as_bytes())
@@ -1448,10 +1750,12 @@ pub async fn send_http_request(
         .headers(build_headers(&merged_headers, payload.disable_user_agent.unwrap_or(false))?);
 
     let use_cookie_jar = payload.use_cookie_jar.unwrap_or(true);
+    let should_send_cookies = use_cookie_jar && app_settings.send_cookies_automatically;
+    let should_store_cookies = use_cookie_jar && app_settings.store_cookies_automatically;
     let has_cookie_header = merged_headers
         .keys()
         .any(|key| key.trim().eq_ignore_ascii_case("cookie"));
-    if use_cookie_jar && !has_cookie_header {
+    if should_send_cookies && !has_cookie_header {
         if let Some(cookie_header) = build_cookie_header_from_store(
             &app,
             &payload.workspace_name,
@@ -1485,7 +1789,7 @@ pub async fn send_http_request(
         .iter()
         .filter_map(|value| value.to_str().ok().map(|text| text.to_string()))
         .collect::<Vec<_>>();
-    if use_cookie_jar {
+    if should_store_cookies {
         let _ = merge_set_cookie_headers(
             &app,
             &payload.workspace_name,

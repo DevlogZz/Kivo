@@ -1,6 +1,7 @@
-import { BadgeCheck, ChevronLeft, ChevronRight, Clock3, Cookie, FileJson2, ListTree, LoaderCircle, Plus, Search, Trash2, X } from "lucide-react";
+import { BadgeCheck, ChevronLeft, ChevronRight, Clock3, Cookie, Copy, Download, FileJson2, ListTree, LoaderCircle, Plus, Search, Trash2, X } from "lucide-react";
 import { useState, useMemo, useEffect } from "react";
 import { createPortal } from "react-dom";
+import { save } from "@tauri-apps/plugin-dialog";
 
 import { CodeEditor } from "@/components/workspace/CodeEditor.jsx";
 import { Button } from "@/components/ui/button.jsx";
@@ -8,7 +9,7 @@ import { Card } from "@/components/ui/card.jsx";
 import { Input } from "@/components/ui/input.jsx";
 import { cn } from "@/lib/utils.js";
 import { filterJson } from "@/lib/json-filter.js";
-import { clearCookieJar, deleteCookieJarEntry, getCookieJar, upsertCookieJarEntry } from "@/lib/http-client.js";
+import { clearCookieJar, deleteCookieJarEntry, exportResponseFile, getCookieJar, upsertCookieJarEntry } from "@/lib/http-client.js";
 
 import { JsonTree } from "@/components/ui/JsonTree.jsx";
 
@@ -106,6 +107,7 @@ export function ResponsePane({
   onTabChange,
   bodyView,
   onBodyViewChange,
+  onClearResponse,
 }) {
   const tone = getTone(response.status);
 
@@ -353,6 +355,48 @@ export function ResponsePane({
     }
   }
 
+  function buildResponseExportPayload() {
+    return {
+      status: response.status,
+      badge: response.badge,
+      statusText: response.statusText,
+      duration: response.duration,
+      size: response.size,
+      headers: response.headers,
+      cookies: response.cookies,
+      body: response.body,
+      rawBody: response.rawBody,
+      isJson: response.isJson,
+      meta: response.meta,
+      savedAt: response.savedAt,
+    };
+  }
+
+  async function handleCopyResponse() {
+    try {
+      await navigator.clipboard.writeText(JSON.stringify(buildResponseExportPayload(), null, 2));
+    } catch {
+    }
+  }
+
+  async function handleSaveResponseFile() {
+    try {
+      const selected = await save({
+        defaultPath: "response.json",
+        filters: [{ name: "JSON", extensions: ["json"] }],
+      });
+      if (!selected || typeof selected !== "string") {
+        return;
+      }
+      await exportResponseFile(selected, buildResponseExportPayload());
+    } catch {
+    }
+  }
+
+  function handleClearResponse() {
+    onClearResponse?.();
+  }
+
   return (
     <Card className="flex h-full min-h-0 flex-col gap-0 overflow-hidden border-0 bg-background p-0 shadow-none">
       <div className="flex items-center justify-between border-b border-border/25 px-3 py-2 text-[11px] text-muted-foreground lg:py-2.5 lg:text-[12px]">
@@ -377,19 +421,47 @@ export function ResponsePane({
       </div>
 
       <div className="border-b border-border/25 px-3 py-2 text-[12px] lg:text-[13px]">
-        <div className="flex items-center gap-1">
-          {responseTabs.map((tab) => (
+        <div className="flex items-center justify-between gap-2">
+          <div className="flex min-w-0 flex-1 items-center gap-0.5 overflow-hidden pr-1">
+            {responseTabs.map((tab) => (
+              <button
+                key={tab}
+                type="button"
+                onClick={() => onTabChange(tab)}
+                className={cn("shrink-0 whitespace-nowrap px-1.5 py-1 text-[11px] text-muted-foreground transition-colors lg:px-2.5 lg:py-1.5 lg:text-[13px]", activeTab === tab && "text-foreground")}
+              >
+                {tab}
+                {tab === "Headers" ? ` ${Object.keys(response.headers).length}` : ""}
+                {tab === "Cookies" ? ` ${response.cookies.length}` : ""}
+              </button>
+            ))}
+          </div>
+          <div className="ml-1 flex shrink-0 items-center gap-0.5 text-muted-foreground">
             <button
-              key={tab}
               type="button"
-              onClick={() => onTabChange(tab)}
-              className={cn("px-2 py-1 text-muted-foreground transition-colors lg:px-3 lg:py-1.5", activeTab === tab && "text-foreground")}
+              className="inline-flex h-6 w-6 items-center justify-center transition-colors hover:text-foreground"
+              onClick={handleCopyResponse}
+              title="Copy response"
             >
-              {tab}
-              {tab === "Headers" ? ` ${Object.keys(response.headers).length}` : ""}
-              {tab === "Cookies" ? ` ${response.cookies.length}` : ""}
+              <Copy className="h-3 w-3" />
             </button>
-          ))}
+            <button
+              type="button"
+              className="inline-flex h-6 w-6 items-center justify-center transition-colors hover:text-foreground"
+              onClick={handleSaveResponseFile}
+              title="Save response to file"
+            >
+              <Download className="h-3 w-3" />
+            </button>
+            <button
+              type="button"
+              className="inline-flex h-6 w-6 items-center justify-center transition-colors hover:text-red-400"
+              onClick={handleClearResponse}
+              title="Clear response"
+            >
+              <Trash2 className="h-3 w-3" />
+            </button>
+          </div>
         </div>
       </div>
 

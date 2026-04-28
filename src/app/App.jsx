@@ -1,3 +1,5 @@
+/* @refresh reset */
+
 import { useEffect, useState } from "react";
 import { openUrl } from "@tauri-apps/plugin-opener";
 
@@ -416,6 +418,7 @@ export default function App() {
                   onCancelSend={cancelSend}
                   onFieldChange={handleRequestFieldChange}
                   onUpdateActiveRequest={updateActiveRequest}
+                  onClearResponse={() => updateActiveRequest({ lastResponse: null })}
                   response={response}
                   envVars={envVars}
                   workspaceName={activeWorkspace?.name}

@@ -13,7 +13,7 @@ pub mod io;
 pub mod models;
 
 pub use models::{
-    default_state, CollectionConfig, CollectionRecord, EnvVar, EnvVarsResult,
+    default_state, AppSettings, CollectionConfig, CollectionRecord, EnvVar, EnvVarsResult,
     ImportedCollectionResult, ImportedRequestsResult, PersistedAppState, RequestRecord,
     StoragePathValidationResult, StorageSwitchPayload, WorkspaceFile,
 };
@@ -44,6 +44,31 @@ pub struct GrpcMethodOption {
     pub value: String,
     pub label: String,
     pub streaming_mode: String,
+}
+
+#[tauri::command]
+pub fn get_app_settings(app: AppHandle) -> Result<AppSettings, String> {
+    Ok(get_app_config(app)?.app_settings)
+}
+
+#[tauri::command]
+pub fn set_app_settings(app: AppHandle, settings: AppSettings) -> Result<AppSettings, String> {
+    let state_path = get_state_path(&app)?;
+    let mut state = if state_path.exists() {
+        let contents =
+            fs::read_to_string(&state_path).map_err(|e| format!("Failed to read state: {e}"))?;
+        serde_json::from_str::<PersistedAppState>(&contents).unwrap_or_else(|_| default_state())
+    } else {
+        default_state()
+    };
+
+    state.app_settings = settings;
+
+    let serialized = serde_json::to_string_pretty(&state)
+        .map_err(|e| format!("Failed to serialize state: {e}"))?;
+    fs::write(&state_path, serialized).map_err(|e| format!("Failed to write state: {e}"))?;
+
+    Ok(state.app_settings)
 }
 
 #[tauri::command]
@@ -514,6 +539,13 @@ pub fn export_request_file(
     let value = build_export_value(&format, &name, &[request])?;
     let content = serialize_export_value(&format, &value)?;
     fs::write(&file_path, content).map_err(|e| format!("Failed to write export file: {e}"))
+}
+
+#[tauri::command]
+pub fn export_response_file(file_path: String, response: serde_json::Value) -> Result<(), String> {
+    let content = serde_json::to_string_pretty(&response)
+        .map_err(|e| format!("Failed to serialize response JSON: {e}"))?;
+    fs::write(&file_path, content).map_err(|e| format!("Failed to write response file: {e}"))
 }
 
 #[tauri::command]

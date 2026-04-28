@@ -20,6 +20,26 @@ export const REQUEST_MODE_OPTIONS = [
 
 export const DEFAULT_USER_AGENT_VALUE = "kivo/0.4.1";
 
+export function createDefaultAppSettings() {
+  return {
+    clearOAuthSessionOnStart: false,
+    validateCertificatesDuringAuthentication: true,
+    sslTlsCertificateVerification: true,
+    useCustomCaCertificate: false,
+    customCaCertificatePath: "",
+    keepDefaultCaCertificates: true,
+    storeLastResponseByDefault: false,
+    storeCookiesAutomatically: true,
+    sendCookiesAutomatically: true,
+    useSystemBrowserForOauth2Authorization: true,
+    requestTimeoutMs: 0,
+    proxyEnabled: false,
+    proxyHttp: "",
+    proxyHttps: "",
+    noProxy: "",
+  };
+}
+
 function withDefaultUserAgent(headers = []) {
   const normalized = Array.isArray(headers) ? headers.map((row) => ({ ...row })) : [];
   const hasUserAgent = normalized.some((row) => String(row?.key || "").trim().toLowerCase() === "user-agent");
@@ -228,6 +248,7 @@ export function createDefaultStore() {
   return {
     version: 1,
     storagePath: null,
+    appSettings: createDefaultAppSettings(),
     activeWorkspaceName: "",
     activeCollectionName: "",
     activeRequestName: "",

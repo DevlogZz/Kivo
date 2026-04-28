@@ -183,6 +183,57 @@ export function extractAuthorizationCode(value) {
   return raw;
 }
 
+export function parseOAuthCallbackInput(value) {
+  const raw = String(value || "").trim();
+  if (!raw) {
+    return {
+      code: "",
+      state: "",
+      error: "",
+      errorDescription: "",
+      callbackUrl: "",
+    };
+  }
+
+  try {
+    const parsed = new URL(raw);
+    const query = parsed.searchParams;
+    const hash = parsed.hash?.startsWith("#") ? parsed.hash.slice(1) : parsed.hash;
+    const hashParams = new URLSearchParams(hash || "");
+
+    const readParam = (name) => query.get(name) || hashParams.get(name) || "";
+
+    return {
+      code: readParam("code"),
+      state: readParam("state"),
+      error: readParam("error"),
+      errorDescription: readParam("error_description"),
+      callbackUrl: parsed.toString(),
+    };
+  } catch {
+    const queryCode = extractAuthorizationCode(raw);
+    const stateMatch = raw.match(/(?:^|[?&#])state=([^&#\s]+)/i);
+    const errorMatch = raw.match(/(?:^|[?&#])error=([^&#\s]+)/i);
+    const errorDescMatch = raw.match(/(?:^|[?&#])error_description=([^&#\s]+)/i);
+    const decodeSafe = (valuePart) => {
+      if (!valuePart) return "";
+      try {
+        return decodeURIComponent(valuePart);
+      } catch {
+        return valuePart;
+      }
+    };
+
+    return {
+      code: queryCode,
+      state: decodeSafe(stateMatch?.[1]),
+      error: decodeSafe(errorMatch?.[1]),
+      errorDescription: decodeSafe(errorDescMatch?.[1]),
+      callbackUrl: "",
+    };
+  }
+}
+
 export function createOAuthFingerprint(oauth) {
   const normalized = normalizeAuthState({ type: "oauth2", oauth2: oauth }).oauth2;
   return JSON.stringify({

@@ -71,6 +71,63 @@ impl Default for CollectionConfig {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+pub struct AppSettings {
+    #[serde(default)]
+    pub clear_oauth_session_on_start: bool,
+    #[serde(default = "default_true")]
+    pub validate_certificates_during_authentication: bool,
+    #[serde(default = "default_true")]
+    pub ssl_tls_certificate_verification: bool,
+    #[serde(default)]
+    pub use_custom_ca_certificate: bool,
+    #[serde(default)]
+    pub custom_ca_certificate_path: String,
+    #[serde(default = "default_true")]
+    pub keep_default_ca_certificates: bool,
+    #[serde(default)]
+    pub store_last_response_by_default: bool,
+    #[serde(default = "default_true")]
+    pub store_cookies_automatically: bool,
+    #[serde(default = "default_true")]
+    pub send_cookies_automatically: bool,
+    #[serde(default = "default_true")]
+    pub use_system_browser_for_oauth2_authorization: bool,
+    #[serde(default)]
+    pub request_timeout_ms: u64,
+    #[serde(default)]
+    pub proxy_enabled: bool,
+    #[serde(default)]
+    pub proxy_http: String,
+    #[serde(default)]
+    pub proxy_https: String,
+    #[serde(default)]
+    pub no_proxy: String,
+}
+
+impl Default for AppSettings {
+    fn default() -> Self {
+        Self {
+            clear_oauth_session_on_start: false,
+            validate_certificates_during_authentication: true,
+            ssl_tls_certificate_verification: true,
+            use_custom_ca_certificate: false,
+            custom_ca_certificate_path: String::new(),
+            keep_default_ca_certificates: true,
+            store_last_response_by_default: false,
+            store_cookies_automatically: true,
+            send_cookies_automatically: true,
+            use_system_browser_for_oauth2_authorization: true,
+            request_timeout_ms: 0,
+            proxy_enabled: false,
+            proxy_http: String::new(),
+            proxy_https: String::new(),
+            no_proxy: String::new(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct PersistedAppState {
     #[serde(default)]
     pub version: u8,
@@ -85,6 +142,8 @@ pub struct PersistedAppState {
     pub sidebar_tab: String,
     #[serde(default = "default_sidebar_width")]
     pub sidebar_width: u16,
+    #[serde(default)]
+    pub app_settings: AppSettings,
     #[serde(default)]
     pub workspaces: Vec<WorkspaceRecord>,
 }
@@ -519,6 +578,7 @@ pub fn default_state() -> PersistedAppState {
         active_request_name: String::new(),
         sidebar_tab: "requests".to_string(),
         sidebar_width: default_sidebar_width(),
+        app_settings: AppSettings::default(),
         workspaces: vec![],
     }
 }

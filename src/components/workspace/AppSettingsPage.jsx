@@ -3,13 +3,12 @@ import { createPortal } from "react-dom";
 import { open } from "@tauri-apps/plugin-dialog";
 import { getVersion } from "@tauri-apps/api/app";
 import { openUrl } from "@tauri-apps/plugin-opener";
-import { BookOpen, Cookie, ExternalLink, FileText, FolderOpen, Github, HardDrive, Heart, Plus, RefreshCw, Settings2, Siren, Star, Trash2, X } from "lucide-react";
-import { toast } from "sonner";
+import { BookOpen, Cookie, ExternalLink, FileText, FolderOpen, Github, HardDrive, Heart, Plus, RefreshCw, Settings2, ShieldCheck, Siren, Star, Trash2, X } from "lucide-react";
 
 import { Button } from "@/components/ui/button.jsx";
 import { Card } from "@/components/ui/card.jsx";
 import { Input } from "@/components/ui/input.jsx";
-import { clearCookieJar, deleteCookieJarEntry, getCookieJar, switchStoragePath, upsertCookieJarEntry, validateStoragePath } from "@/lib/http-client.js";
+import { clearCookieJar, deleteCookieJarEntry, getAppSettings, getCookieJar, setAppSettings, switchStoragePath, upsertCookieJarEntry, validateStoragePath } from "@/lib/http-client.js";
 
 const EMPTY_COOKIE_DRAFT = {
   id: "",
@@ -26,7 +25,48 @@ const EMPTY_COOKIE_DRAFT = {
   collectionName: "",
 };
 
-const SETTINGS_TABS = ["Storage", "Cookie Jar", "Updates", "Resources"];
+const SETTINGS_TABS = ["Storage", "Security", "Proxy", "Cookie Jar", "Updates", "Resources"];
+
+const DEFAULT_APP_SETTINGS = {
+  clearOAuthSessionOnStart: false,
+  validateCertificatesDuringAuthentication: true,
+  sslTlsCertificateVerification: true,
+  useCustomCaCertificate: false,
+  customCaCertificatePath: "",
+  keepDefaultCaCertificates: true,
+  storeLastResponseByDefault: false,
+  storeCookiesAutomatically: true,
+  sendCookiesAutomatically: true,
+  useSystemBrowserForOauth2Authorization: true,
+  requestTimeoutMs: 0,
+  proxyEnabled: false,
+  proxyHttp: "",
+  proxyHttps: "",
+  noProxy: "",
+};
+
+function normalizeAppSettingsInput(settings) {
+  const source = settings && typeof settings === "object" ? settings : {};
+  return {
+    ...DEFAULT_APP_SETTINGS,
+    ...source,
+    clearOAuthSessionOnStart: Boolean(source.clearOAuthSessionOnStart ?? DEFAULT_APP_SETTINGS.clearOAuthSessionOnStart),
+    validateCertificatesDuringAuthentication: Boolean(source.validateCertificatesDuringAuthentication ?? DEFAULT_APP_SETTINGS.validateCertificatesDuringAuthentication),
+    sslTlsCertificateVerification: Boolean(source.sslTlsCertificateVerification ?? DEFAULT_APP_SETTINGS.sslTlsCertificateVerification),
+    useCustomCaCertificate: Boolean(source.useCustomCaCertificate ?? DEFAULT_APP_SETTINGS.useCustomCaCertificate),
+    customCaCertificatePath: String(source.customCaCertificatePath ?? DEFAULT_APP_SETTINGS.customCaCertificatePath),
+    keepDefaultCaCertificates: true,
+    storeLastResponseByDefault: Boolean(source.storeLastResponseByDefault ?? DEFAULT_APP_SETTINGS.storeLastResponseByDefault),
+    storeCookiesAutomatically: Boolean(source.storeCookiesAutomatically ?? DEFAULT_APP_SETTINGS.storeCookiesAutomatically),
+    sendCookiesAutomatically: Boolean(source.sendCookiesAutomatically ?? DEFAULT_APP_SETTINGS.sendCookiesAutomatically),
+    useSystemBrowserForOauth2Authorization: Boolean(source.useSystemBrowserForOauth2Authorization ?? DEFAULT_APP_SETTINGS.useSystemBrowserForOauth2Authorization),
+    requestTimeoutMs: Number.isFinite(source.requestTimeoutMs) ? Math.max(0, Number(source.requestTimeoutMs)) : 0,
+    proxyEnabled: Boolean(source.proxyEnabled ?? DEFAULT_APP_SETTINGS.proxyEnabled),
+    proxyHttp: String(source.proxyHttp ?? DEFAULT_APP_SETTINGS.proxyHttp),
+    proxyHttps: String(source.proxyHttps ?? DEFAULT_APP_SETTINGS.proxyHttps),
+    noProxy: String(source.noProxy ?? DEFAULT_APP_SETTINGS.noProxy),
+  };
+}
 
 function normalizePath(path) {
   return String(path ?? "").trim().replace(/[\\/]+$/, "").toLowerCase();
@@ -60,6 +100,8 @@ export function AppSettingsPage({ storagePath, onStoragePathChanged }) {
   const [isCookieEditorOpen, setIsCookieEditorOpen] = useState(false);
   const [isSavingCookie, setIsSavingCookie] = useState(false);
   const [activeSettingsTab, setActiveSettingsTab] = useState("Storage");
+  const [appSettings, setSettingsState] = useState(DEFAULT_APP_SETTINGS);
+  const [isSavingSettings, setIsSavingSettings] = useState(false);
 
   useEffect(() => {
     setPathInput(storagePath ?? "");
@@ -91,7 +133,6 @@ export function AppSettingsPage({ storagePath, onStoragePathChanged }) {
       } catch {
         if (!cancelled) {
           setCookieEntries([]);
-          toast.error("Unable to load cookie jar.");
         }
       } finally {
         if (!cancelled) {
@@ -101,6 +142,28 @@ export function AppSettingsPage({ storagePath, onStoragePathChanged }) {
     }
 
     loadCookies();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadSettings() {
+      try {
+        const settings = await getAppSettings();
+        if (!cancelled) {
+          setSettingsState(normalizeAppSettingsInput(settings));
+        }
+      } catch {
+        if (!cancelled) {
+          setSettingsState(DEFAULT_APP_SETTINGS);
+        }
+      }
+    }
+
+    loadSettings();
     return () => {
       cancelled = true;
     };
@@ -117,7 +180,45 @@ export function AppSettingsPage({ storagePath, onStoragePathChanged }) {
     try {
       await openUrl(url);
     } catch {
-      toast.error(`Unable to open ${label}.`);
+    }
+  }
+
+  async function persistSettings(nextSettings) {
+    const normalized = normalizeAppSettingsInput(nextSettings);
+    setSettingsState(normalized);
+    setIsSavingSettings(true);
+    try {
+      const saved = await setAppSettings(normalized);
+      const normalizedSaved = normalizeAppSettingsInput(saved);
+      setSettingsState(normalizedSaved);
+      window.dispatchEvent(new CustomEvent("kivo-app-settings-updated", { detail: normalizedSaved }));
+    } catch {
+    } finally {
+      setIsSavingSettings(false);
+    }
+  }
+
+  function updateSettingsPatch(patch) {
+    const next = normalizeAppSettingsInput({ ...appSettings, ...patch });
+    return persistSettings(next);
+  }
+
+  async function handleSelectCustomCaPath() {
+    try {
+      const selected = await open({
+        directory: false,
+        multiple: false,
+        filters: [
+          { name: "Certificates", extensions: ["pem", "crt", "cer", "der"] },
+          { name: "All Files", extensions: ["*"] },
+        ],
+      });
+      if (!selected) return;
+      await updateSettingsPatch({
+        customCaCertificatePath: String(selected),
+        useCustomCaCertificate: true,
+      });
+    } catch {
     }
   }
 
@@ -134,7 +235,6 @@ export function AppSettingsPage({ storagePath, onStoragePathChanged }) {
         setPathValidation(null);
       }
     } catch {
-      toast.error("Unable to open folder picker.");
     }
   }
 
@@ -180,7 +280,6 @@ export function AppSettingsPage({ storagePath, onStoragePathChanged }) {
     try {
       await switchStoragePath(resolvedTargetPath, mode);
       onStoragePathChanged?.(resolvedTargetPath);
-      toast.success("Storage path updated.");
     } catch (error) {
       setPathError(String(error ?? "Failed to switch storage path."));
     } finally {
@@ -288,7 +387,6 @@ export function AppSettingsPage({ storagePath, onStoragePathChanged }) {
 
   async function handleSaveCookie() {
     if (!cookieDraft.name.trim() || !cookieDraft.domain.trim()) {
-      toast.error("Cookie name and domain are required.");
       return;
     }
 
@@ -315,9 +413,7 @@ export function AppSettingsPage({ storagePath, onStoragePathChanged }) {
       });
       setIsCookieEditorOpen(false);
       resetCookieDraft();
-      toast.success("Cookie saved.");
-    } catch (error) {
-      toast.error(String(error ?? "Failed to save cookie."));
+    } catch {
     } finally {
       setIsSavingCookie(false);
     }
@@ -329,7 +425,6 @@ export function AppSettingsPage({ storagePath, onStoragePathChanged }) {
       const list = await getCookieJar(null, null);
       setCookieEntries(Array.isArray(list) ? list : []);
     } catch {
-      toast.error("Unable to refresh cookie jar.");
     } finally {
       setIsCookieLoading(false);
     }
@@ -342,7 +437,6 @@ export function AppSettingsPage({ storagePath, onStoragePathChanged }) {
         setCookieEntries((prev) => prev.filter((entry) => entry.id !== id));
       }
     } catch {
-      toast.error("Failed to delete cookie.");
     }
   }
 
@@ -352,9 +446,7 @@ export function AppSettingsPage({ storagePath, onStoragePathChanged }) {
       if (removed > 0) {
         setCookieEntries([]);
       }
-      toast.success("Cookie jar cleared.");
     } catch {
-      toast.error("Failed to clear cookie jar.");
     }
   }
 
@@ -366,8 +458,7 @@ export function AppSettingsPage({ storagePath, onStoragePathChanged }) {
         </div>
         <div>
           <h2 className="text-xl font-semibold tracking-tight text-foreground">App Settings</h2>
-          <p className="text-[13px] text-muted-foreground">Storage, updates, and project resources.</p>
-          <p className="text-[11px] text-muted-foreground/60 mt-0.5 font-medium">Author: dexter-xD, Now part of DevlogZz</p>
+          <p className="text-[11px] text-muted-foreground/60 mt-0.5 font-medium">Author: dexter-xD, Now part of Devlogz</p>
         </div>
       </div>
 
@@ -386,6 +477,7 @@ export function AppSettingsPage({ storagePath, onStoragePathChanged }) {
 
       <div className="flex w-full flex-col gap-4 lg:w-2/3">
         {activeSettingsTab === "Storage" ? (
+          <>
           <Card className="border border-border/35 bg-gradient-to-b from-background/75 to-background/45 p-5 shadow-[0_10px_24px_hsl(var(--background)/0.28)]">
           <div className="mb-4 flex items-start justify-between gap-3">
             <div className="flex items-center gap-2 text-foreground">
@@ -471,7 +563,64 @@ export function AppSettingsPage({ storagePath, onStoragePathChanged }) {
             </div>
           </div>
           </Card>
-        ) : null}
+        </>
+      ) : null}
+
+      {activeSettingsTab === "Proxy" ? (
+        <Card className="border border-border/35 bg-gradient-to-b from-background/75 to-background/45 p-5 shadow-[0_10px_24px_hsl(var(--background)/0.28)]">
+          <div className="mb-4 flex items-center justify-between gap-2 text-foreground">
+            <h3 className="text-[14px] font-semibold">Network Proxy</h3>
+            <div className="text-[10px] text-muted-foreground uppercase tracking-[0.12em]">
+              {appSettings.proxyEnabled ? "Enabled" : "Disabled"}
+            </div>
+          </div>
+
+          <div className="grid gap-3 text-[12px]">
+            <label className="inline-flex items-center gap-2 text-foreground">
+              <input
+                type="checkbox"
+                className="accent-primary"
+                checked={appSettings.proxyEnabled}
+                onChange={(event) => updateSettingsPatch({ proxyEnabled: event.target.checked })}
+              />
+              Enable proxy
+            </label>
+
+            <div className="grid gap-2 lg:grid-cols-3">
+              <div className="grid gap-1">
+                <div className="text-muted-foreground">Proxy for HTTP</div>
+                <Input
+                  value={appSettings.proxyHttp}
+                  onChange={(event) => setSettingsState((prev) => ({ ...prev, proxyHttp: event.target.value }))}
+                  onBlur={(event) => updateSettingsPatch({ proxyHttp: event.target.value.trim() })}
+                  placeholder="http://localhost:8005"
+                  className="h-9 border-border/35 bg-background/30 text-[12px]"
+                />
+              </div>
+              <div className="grid gap-1">
+                <div className="text-muted-foreground">Proxy for HTTPS</div>
+                <Input
+                  value={appSettings.proxyHttps}
+                  onChange={(event) => setSettingsState((prev) => ({ ...prev, proxyHttps: event.target.value }))}
+                  onBlur={(event) => updateSettingsPatch({ proxyHttps: event.target.value.trim() })}
+                  placeholder="http://localhost:8005"
+                  className="h-9 border-border/35 bg-background/30 text-[12px]"
+                />
+              </div>
+              <div className="grid gap-1">
+                <div className="text-muted-foreground">No proxy</div>
+                <Input
+                  value={appSettings.noProxy}
+                  onChange={(event) => setSettingsState((prev) => ({ ...prev, noProxy: event.target.value }))}
+                  onBlur={(event) => updateSettingsPatch({ noProxy: event.target.value.trim() })}
+                  placeholder="localhost,127.0.0.1"
+                  className="h-9 border-border/35 bg-background/30 text-[12px]"
+                />
+              </div>
+            </div>
+          </div>
+        </Card>
+      ) : null}
 
         {activeSettingsTab === "Cookie Jar" ? (
           <Card className="border border-border/35 bg-gradient-to-b from-background/70 to-background/45 p-5 shadow-[0_8px_20px_hsl(var(--background)/0.2)]">
@@ -549,6 +698,107 @@ export function AppSettingsPage({ storagePath, onStoragePathChanged }) {
             </div>
           </div>
           </Card>
+        ) : null}
+
+        {activeSettingsTab === "Security" ? (
+          <>
+          <Card className="border border-border/35 bg-gradient-to-b from-background/75 to-background/45 p-5 shadow-[0_10px_24px_hsl(var(--background)/0.28)]">
+            <div className="mb-4 flex items-start justify-between gap-3">
+              <div className="flex items-center gap-2 text-foreground">
+                <ShieldCheck className="h-4 w-4 text-primary" />
+                <h3 className="text-[14px] font-semibold">Authentication Security</h3>
+              </div>
+              <div className="text-[10px] text-muted-foreground uppercase tracking-[0.12em]">
+                {isSavingSettings ? "Saving..." : "Saved"}
+              </div>
+            </div>
+
+            <div className="grid gap-2 text-[12px]">
+              <label className="inline-flex items-center gap-2 text-foreground">
+                <input
+                  type="checkbox"
+                  className="accent-primary"
+                  checked={appSettings.clearOAuthSessionOnStart}
+                  onChange={(event) => updateSettingsPatch({ clearOAuthSessionOnStart: event.target.checked })}
+                />
+                Clear OAuth sessions on app start
+              </label>
+
+              <label className="inline-flex items-center gap-2 text-foreground">
+                <input
+                  type="checkbox"
+                  className="accent-primary"
+                  checked={appSettings.validateCertificatesDuringAuthentication}
+                  onChange={(event) => updateSettingsPatch({ validateCertificatesDuringAuthentication: event.target.checked })}
+                />
+                Validate certificates during authentication
+              </label>
+
+              <label className="inline-flex items-center gap-2 text-foreground">
+                <input
+                  type="checkbox"
+                  className="accent-primary"
+                  checked={appSettings.storeLastResponseByDefault}
+                  onChange={(event) => updateSettingsPatch({ storeLastResponseByDefault: event.target.checked })}
+                />
+                Store last response by default
+              </label>
+            </div>
+          </Card>
+
+          <Card className="border border-border/35 bg-gradient-to-b from-background/75 to-background/45 p-5 shadow-[0_10px_24px_hsl(var(--background)/0.28)]">
+            <div className="mb-4 flex items-center gap-2 text-foreground">
+              <ShieldCheck className="h-4 w-4 text-primary" />
+              <h3 className="text-[14px] font-semibold">Certificate Trust</h3>
+            </div>
+
+            <div className="grid gap-2 text-[12px]">
+              <label className="inline-flex items-center gap-2 text-foreground">
+                <input
+                  type="checkbox"
+                  className="accent-primary"
+                  checked={appSettings.sslTlsCertificateVerification}
+                  onChange={(event) => updateSettingsPatch({ sslTlsCertificateVerification: event.target.checked })}
+                />
+                SSL/TLS certificate verification for requests
+              </label>
+
+              <label className="inline-flex items-center gap-2 text-foreground">
+                <input
+                  type="checkbox"
+                  className="accent-primary"
+                  checked={appSettings.useCustomCaCertificate}
+                  onChange={(event) => updateSettingsPatch({ useCustomCaCertificate: event.target.checked })}
+                />
+                Use custom CA certificate
+              </label>
+
+              <div className="flex items-center gap-2 pl-6">
+                <Button type="button" variant="secondary" size="sm" className="h-8 border border-border/40 bg-accent/40" onClick={handleSelectCustomCaPath}>
+                  Select file
+                </Button>
+                <Input
+                  value={appSettings.customCaCertificatePath}
+                  onChange={(event) => setSettingsState((prev) => ({ ...prev, customCaCertificatePath: event.target.value }))}
+                  onBlur={(event) => updateSettingsPatch({ customCaCertificatePath: event.target.value.trim() })}
+                  placeholder="Custom CA certificate path"
+                  className="h-8 border-border/35 bg-background/30 text-[12px]"
+                />
+              </div>
+
+              <label className="inline-flex items-center gap-2 pl-6 text-foreground">
+                <input
+                  type="checkbox"
+                  className="accent-primary"
+                  checked
+                  disabled
+                  readOnly
+                />
+                Keep default CA certificates
+              </label>
+            </div>
+          </Card>
+          </>
         ) : null}
 
         {activeSettingsTab === "Updates" ? (

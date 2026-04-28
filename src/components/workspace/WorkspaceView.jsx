@@ -13,6 +13,7 @@ export function WorkspaceView({
   onCancelSend,
   onFieldChange,
   onUpdateActiveRequest,
+  onClearResponse,
   response,
   envVars,
   workspaceName,
@@ -51,6 +52,7 @@ export function WorkspaceView({
         onTabChange={(tab) => onUpdateActiveRequest((r) => ({ ...r, activeResponseTab: tab }))}
         bodyView={request.responseBodyView ?? "Raw"}
         onBodyViewChange={(view) => onUpdateActiveRequest((r) => ({ ...r, responseBodyView: view }))}
+        onClearResponse={onClearResponse}
       />
     </div>
   );

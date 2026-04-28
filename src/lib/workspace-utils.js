@@ -1,4 +1,4 @@
-import { createDefaultStore, normalizeRequestRecord, orderRequests } from "./workspace-store.js";
+import { createDefaultAppSettings, createDefaultStore, normalizeRequestRecord, orderRequests } from "./workspace-store.js";
 import { normalizeAuthState } from "./oauth.js";
 
 export const SIDEBAR_COLLAPSED_WIDTH = 52;
@@ -24,6 +24,7 @@ export function clampSidebarWidth(value) {
 
 export function normalizeStore(store) {
   const fallback = createDefaultStore();
+  const fallbackSettings = createDefaultAppSettings();
   const nextStore = store && typeof store === "object" ? store : fallback;
   const validSidebarTabs = new Set(["requests", "settings"]);
   const workspaces = Array.isArray(nextStore.workspaces)
@@ -50,17 +51,45 @@ export function normalizeStore(store) {
     : [];
   const activeWorkspace = workspaces.find((workspace) => workspace.name === nextStore.activeWorkspaceName) ?? workspaces[0] ?? null;
   const activeCollection = activeWorkspace?.collections?.find((c) => c.name === nextStore.activeCollectionName) ?? activeWorkspace?.collections?.[0] ?? null;
-  const activeRequest = activeCollection?.requests?.find((request) => request.name === nextStore.activeRequestName && activeCollection.openRequestNames.includes(request.name)) ?? null;
+  const activeRequestByName = activeCollection?.requests?.find((request) => request.name === nextStore.activeRequestName) ?? null;
+  const activeRequestFromOpenTabs = activeCollection?.requests?.find((request) => activeCollection.openRequestNames.includes(request.name)) ?? null;
+  const activeRequest = activeRequestByName ?? activeRequestFromOpenTabs ?? activeCollection?.requests?.[0] ?? null;
+  const normalizedWorkspaces = workspaces.map((workspace) => {
+    if (!activeRequest || workspace.name !== activeWorkspace?.name) {
+      return workspace;
+    }
+    return {
+      ...workspace,
+      collections: workspace.collections.map((collection) => {
+        if (collection.name !== activeCollection?.name) {
+          return collection;
+        }
+        const openRequestNames = Array.isArray(collection.openRequestNames) ? collection.openRequestNames : [];
+        if (openRequestNames.includes(activeRequest.name)) {
+          return collection;
+        }
+        return {
+          ...collection,
+          openRequestNames: [...openRequestNames, activeRequest.name],
+        };
+      }),
+    };
+  });
 
   return {
     version: 1,
     sidebarTab: validSidebarTabs.has(nextStore.sidebarTab) ? nextStore.sidebarTab : "requests",
     storagePath: nextStore.storagePath || null,
+    appSettings: {
+      ...fallbackSettings,
+      ...(nextStore.appSettings && typeof nextStore.appSettings === "object" ? nextStore.appSettings : {}),
+      requestTimeoutMs: Number.isFinite(nextStore?.appSettings?.requestTimeoutMs) ? Number(nextStore.appSettings.requestTimeoutMs) : fallbackSettings.requestTimeoutMs,
+    },
     sidebarCollapsed: Boolean(nextStore.sidebarCollapsed),
     activeWorkspaceName: activeWorkspace?.name ?? "",
     activeCollectionName: activeCollection?.name ?? "",
     activeRequestName: activeRequest?.name ?? "",
     sidebarWidth: clampSidebarWidth(Number(nextStore.sidebarWidth || fallback.sidebarWidth)),
-    workspaces
+    workspaces: normalizedWorkspaces
   };
 }

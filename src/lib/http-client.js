@@ -1,5 +1,189 @@
 import { invoke } from "@tauri-apps/api/core";
 
+const AUTH_ENCRYPTION_KEY_ID = "kivo.auth.enc.key.v1";
+const AUTH_ENCRYPTION_PREFIX = "enc:v1:";
+const AUTH_SENSITIVE_KEYS = new Set([
+  "token",
+  "password",
+  "apiKeyValue",
+  "clientSecret",
+  "accessToken",
+  "refreshToken",
+  "authorizationCode",
+  "codeVerifier",
+]);
+
+const textEncoder = new TextEncoder();
+const textDecoder = new TextDecoder();
+
+function base64Encode(bytes) {
+  const chunkSize = 0x8000;
+  let binary = "";
+  for (let index = 0; index < bytes.length; index += chunkSize) {
+    const chunk = bytes.subarray(index, index + chunkSize);
+    binary += String.fromCharCode(...chunk);
+  }
+  return btoa(binary);
+}
+
+function base64Decode(value) {
+  const binary = atob(String(value || ""));
+  const bytes = new Uint8Array(binary.length);
+  for (let index = 0; index < binary.length; index += 1) {
+    bytes[index] = binary.charCodeAt(index);
+  }
+  return bytes;
+}
+
+async function getAuthCryptoKey() {
+  try {
+    if (!window?.crypto?.subtle || !window?.localStorage) return null;
+    let seed = window.localStorage.getItem(AUTH_ENCRYPTION_KEY_ID);
+    if (!seed) {
+      const random = new Uint8Array(32);
+      window.crypto.getRandomValues(random);
+      seed = base64Encode(random);
+      window.localStorage.setItem(AUTH_ENCRYPTION_KEY_ID, seed);
+    }
+
+    const keyMaterial = await window.crypto.subtle.importKey(
+      "raw",
+      textEncoder.encode(seed),
+      { name: "PBKDF2" },
+      false,
+      ["deriveKey"]
+    );
+
+    return window.crypto.subtle.deriveKey(
+      {
+        name: "PBKDF2",
+        salt: textEncoder.encode("kivo-auth-encryption-salt-v1"),
+        iterations: 100_000,
+        hash: "SHA-256",
+      },
+      keyMaterial,
+      { name: "AES-GCM", length: 256 },
+      false,
+      ["encrypt", "decrypt"]
+    );
+  } catch {
+    return null;
+  }
+}
+
+async function encryptSensitiveText(value, key) {
+  const raw = String(value ?? "");
+  if (!raw || raw.startsWith(AUTH_ENCRYPTION_PREFIX) || !key) return raw;
+
+  try {
+    const iv = new Uint8Array(12);
+    window.crypto.getRandomValues(iv);
+    const encrypted = await window.crypto.subtle.encrypt(
+      { name: "AES-GCM", iv },
+      key,
+      textEncoder.encode(raw)
+    );
+    return `${AUTH_ENCRYPTION_PREFIX}${base64Encode(iv)}:${base64Encode(new Uint8Array(encrypted))}`;
+  } catch {
+    return raw;
+  }
+}
+
+async function decryptSensitiveText(value, key) {
+  const raw = String(value ?? "");
+  if (!raw.startsWith(AUTH_ENCRYPTION_PREFIX) || !key) return raw;
+
+  try {
+    const payload = raw.slice(AUTH_ENCRYPTION_PREFIX.length);
+    const [ivB64, cipherB64] = payload.split(":");
+    if (!ivB64 || !cipherB64) return "";
+    const iv = base64Decode(ivB64);
+    const cipher = base64Decode(cipherB64);
+    const decrypted = await window.crypto.subtle.decrypt(
+      { name: "AES-GCM", iv },
+      key,
+      cipher
+    );
+    return textDecoder.decode(decrypted);
+  } catch {
+    return "";
+  }
+}
+
+async function transformAuthNode(value, key, mode) {
+  if (Array.isArray(value)) {
+    const result = [];
+    for (const entry of value) {
+      result.push(await transformAuthNode(entry, key, mode));
+    }
+    return result;
+  }
+
+  if (!value || typeof value !== "object") {
+    return value;
+  }
+
+  const output = {};
+  for (const [field, fieldValue] of Object.entries(value)) {
+    if (typeof fieldValue === "string" && AUTH_SENSITIVE_KEYS.has(field)) {
+      output[field] = mode === "encrypt"
+        ? await encryptSensitiveText(fieldValue, key)
+        : await decryptSensitiveText(fieldValue, key);
+    } else if (fieldValue && typeof fieldValue === "object") {
+      output[field] = await transformAuthNode(fieldValue, key, mode);
+    } else {
+      output[field] = fieldValue;
+    }
+  }
+  return output;
+}
+
+async function transformCollectionAuth(collection, key, mode) {
+  return {
+    ...collection,
+    folderSettings: Array.isArray(collection?.folderSettings)
+      ? await Promise.all(collection.folderSettings.map(async (setting) => ({
+        ...setting,
+        defaultAuth: setting?.defaultAuth
+          ? await transformAuthNode(setting.defaultAuth, key, mode)
+          : setting?.defaultAuth,
+      })))
+      : collection?.folderSettings,
+    requests: Array.isArray(collection?.requests)
+      ? await Promise.all(collection.requests.map(async (request) => ({
+        ...request,
+        auth: request?.auth ? await transformAuthNode(request.auth, key, mode) : request?.auth,
+      })))
+      : collection?.requests,
+  };
+}
+
+async function transformStateAuth(payload, mode) {
+  const key = await getAuthCryptoKey();
+  if (!payload || typeof payload !== "object") return payload;
+
+  return {
+    ...payload,
+    workspaces: Array.isArray(payload.workspaces)
+      ? await Promise.all(payload.workspaces.map(async (workspace) => ({
+        ...workspace,
+        collections: Array.isArray(workspace?.collections)
+          ? await Promise.all(workspace.collections.map((collection) => transformCollectionAuth(collection, key, mode)))
+          : workspace?.collections,
+      })))
+      : payload.workspaces,
+  };
+}
+
+async function transformCollectionConfigAuth(config, mode) {
+  const key = await getAuthCryptoKey();
+  if (!config || typeof config !== "object") return config;
+  return {
+    ...config,
+    defaultAuth: config.defaultAuth ? await transformAuthNode(config.defaultAuth, key, mode) : config.defaultAuth,
+  };
+}
+
 export function sendHttpRequest(payload) {
   return invoke("send_http_request", { payload });
 }
@@ -8,9 +192,46 @@ export function sendGrpcRequest(payload) {
   return invoke("send_grpc_request", { payload });
 }
 
-function sanitizeRequestForSave(request) {
+function sanitizeLastResponseForSave(lastResponse) {
+  if (!lastResponse || typeof lastResponse !== "object") {
+    return null;
+  }
+
+  const headers = lastResponse.headers && typeof lastResponse.headers === "object" && !Array.isArray(lastResponse.headers)
+    ? Object.fromEntries(Object.entries(lastResponse.headers).map(([k, v]) => [String(k), String(v ?? "")]))
+    : {};
+
+  const cookies = Array.isArray(lastResponse.cookies)
+    ? lastResponse.cookies.map((cookie) => String(cookie ?? ""))
+    : [];
+
+  const meta = lastResponse.meta && typeof lastResponse.meta === "object"
+    ? {
+      url: String(lastResponse.meta.url ?? "-"),
+      method: String(lastResponse.meta.method ?? "-"),
+    }
+    : { url: "-", method: "-" };
+
+  return {
+    status: Number.isFinite(lastResponse.status) ? Number(lastResponse.status) : 0,
+    badge: String(lastResponse.badge ?? ""),
+    statusText: String(lastResponse.statusText ?? ""),
+    duration: String(lastResponse.duration ?? "-"),
+    size: String(lastResponse.size ?? "0 B"),
+    headers,
+    cookies,
+    body: String(lastResponse.body ?? ""),
+    rawBody: String(lastResponse.rawBody ?? ""),
+    isJson: Boolean(lastResponse.isJson),
+    meta,
+    savedAt: String(lastResponse.savedAt ?? ""),
+  };
+}
+
+function sanitizeRequestForSave(request, options = {}) {
   const bodyType = String(request?.bodyType ?? "json");
   const requestMode = String(request?.requestMode ?? "http");
+  const persistLastResponse = Boolean(options.persistLastResponse);
 
   const sanitized = {
     name: String(request?.name ?? ""),
@@ -54,7 +275,7 @@ function sanitizeRequestForSave(request) {
     scriptLastVars: request?.scriptLastVars && typeof request.scriptLastVars === "object" && !Array.isArray(request.scriptLastVars)
       ? request.scriptLastVars
       : {},
-    lastResponse: null
+    lastResponse: persistLastResponse ? sanitizeLastResponseForSave(request?.lastResponse) : null
   };
 
   if (requestMode === "grpc") {
@@ -120,12 +341,25 @@ export function exchangeOAuthToken(payload) {
   return invoke("oauth_exchange_token", { payload });
 }
 
+export function waitForOAuthCallback(payload) {
+  return invoke("wait_for_oauth_callback", { payload });
+}
+
 export function cancelOAuthExchange(requestId) {
   return invoke("cancel_oauth_exchange", { requestId });
 }
 
-export function loadAppState() {
-  return invoke("load_app_state");
+export async function loadAppState() {
+  const state = await invoke("load_app_state");
+  return transformStateAuth(state, "decrypt");
+}
+
+export function getAppSettings() {
+  return invoke("get_app_settings");
+}
+
+export function setAppSettings(settings) {
+  return invoke("set_app_settings", { settings });
 }
 
 function sanitizeAuthForSave(auth) {
@@ -203,19 +437,21 @@ function sanitizeRequestBodyForSave(request) {
   return raw;
 }
 
-export function saveAppState(payload) {
+export async function saveAppState(payload) {
+  const persistLastResponse = Boolean(payload?.appSettings?.storeLastResponseByDefault);
   const cleanPayload = {
     ...payload,
     workspaces: payload.workspaces?.map((workspace) => ({
       ...workspace,
       collections: workspace.collections?.map((collection) => ({
         ...collection,
-        requests: collection.requests?.map((request) => sanitizeRequestForSave(request))
+        requests: collection.requests?.map((request) => sanitizeRequestForSave(request, { persistLastResponse }))
       }))
     }))
   };
 
-  return invoke("save_app_state", { payload: cleanPayload });
+  const encryptedPayload = await transformStateAuth(cleanPayload, "encrypt");
+  return invoke("save_app_state", { payload: encryptedPayload });
 }
 
 export function getEnvVars(workspaceName, collectionName) {
@@ -242,11 +478,13 @@ export function saveEnvVars(workspaceName, collectionName, vars) {
 }
 
 export function getCollectionConfig(workspaceName, collectionName) {
-  return invoke("get_collection_config", { workspaceName, collectionName });
+  return invoke("get_collection_config", { workspaceName, collectionName })
+    .then((config) => transformCollectionConfigAuth(config, "decrypt"));
 }
 
-export function saveCollectionConfig(workspaceName, collectionName, config) {
-  return invoke("save_collection_config", { workspaceName, collectionName, config });
+export async function saveCollectionConfig(workspaceName, collectionName, config) {
+  const encryptedConfig = await transformCollectionConfigAuth(config, "encrypt");
+  return invoke("save_collection_config", { workspaceName, collectionName, config: encryptedConfig });
 }
 
 export function getResolvedStoragePath() {
@@ -284,6 +522,13 @@ export function exportRequestFile(filePath, format, name, request) {
     format,
     name,
     request,
+  });
+}
+
+export function exportResponseFile(filePath, response) {
+  return invoke("export_response_file", {
+    filePath,
+    response,
   });
 }
 

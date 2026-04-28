@@ -2,7 +2,16 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import { invoke } from "@tauri-apps/api/core";
 
-import { cancelHttpRequest, loadAppState, saveAppState, sendGrpcRequest, sendHttpRequest } from "@/lib/http-client.js";
+import {
+  cancelHttpRequest,
+  exchangeOAuthToken,
+  getCollectionConfig,
+  loadAppState,
+  saveAppState,
+  saveCollectionConfig,
+  sendGrpcRequest,
+  sendHttpRequest,
+} from "@/lib/http-client.js";
 import { buildRequestPayload, buildUrlWithParams, serializeHeaders } from "@/lib/http-ui.js";
 import {
   cloneRequest,
@@ -35,6 +44,65 @@ function normalizeFolderPath(path) {
     .map((segment) => segment.trim())
     .filter(Boolean)
     .join("/");
+}
+
+function clearOAuthTokensFromAuth(auth) {
+  if (!auth || typeof auth !== "object") return auth;
+  if (auth.type !== "oauth2" || !auth.oauth2 || typeof auth.oauth2 !== "object") {
+    return auth;
+  }
+  return {
+    ...auth,
+    oauth2: {
+      ...auth.oauth2,
+      accessToken: "",
+      refreshToken: "",
+      authorizationCode: "",
+      expiresAt: "",
+      lastStatus: "token-cleared",
+      lastError: "",
+      lastWarning: "",
+    },
+  };
+}
+
+function clearOAuthSessionsInStore(store) {
+  if (!store || typeof store !== "object") return store;
+  return {
+    ...store,
+    workspaces: Array.isArray(store.workspaces)
+      ? store.workspaces.map((workspace) => ({
+        ...workspace,
+        collections: Array.isArray(workspace?.collections)
+          ? workspace.collections.map((collection) => ({
+            ...collection,
+            folderSettings: Array.isArray(collection?.folderSettings)
+              ? collection.folderSettings.map((setting) => ({
+                ...setting,
+                defaultAuth: clearOAuthTokensFromAuth(setting?.defaultAuth),
+              }))
+              : collection?.folderSettings,
+            requests: Array.isArray(collection?.requests)
+              ? collection.requests.map((request) => ({
+                ...request,
+                auth: clearOAuthTokensFromAuth(request?.auth),
+              }))
+              : collection?.requests,
+          }))
+          : workspace?.collections,
+      }))
+      : store.workspaces,
+  };
+}
+
+function shouldAutoRefreshOAuth(oauth) {
+  if (!oauth || typeof oauth !== "object") return false;
+  if (!String(oauth.accessToken || "").trim()) return false;
+  if (!String(oauth.refreshToken || "").trim()) return false;
+  if (!String(oauth.tokenUrl || "").trim()) return false;
+  const expiresAtMs = Date.parse(String(oauth.expiresAt || ""));
+  if (Number.isNaN(expiresAtMs)) return false;
+  return expiresAtMs <= Date.now() + 15000;
 }
 
 function normalizeScriptVarsForState(vars) {
@@ -413,9 +481,41 @@ export function useWorkspaceStore() {
     async function hydrate() {
       try {
         const persisted = await loadAppState();
+        let normalized = normalizeStore(persisted);
+
+        if (normalized?.appSettings?.clearOAuthSessionOnStart) {
+          normalized = clearOAuthSessionsInStore(normalized);
+
+          const collectionPairs = [];
+          for (const workspace of normalized.workspaces || []) {
+            for (const collection of workspace?.collections || []) {
+              if (workspace?.name && collection?.name) {
+                collectionPairs.push({ workspaceName: workspace.name, collectionName: collection.name });
+              }
+            }
+          }
+
+          await Promise.all(collectionPairs.map(async ({ workspaceName, collectionName }) => {
+            try {
+              const config = await getCollectionConfig(workspaceName, collectionName);
+              if (!config || typeof config !== "object") return;
+              const nextConfig = {
+                ...config,
+                defaultAuth: clearOAuthTokensFromAuth(config.defaultAuth),
+              };
+              await saveCollectionConfig(workspaceName, collectionName, nextConfig);
+            } catch {
+            }
+          }));
+        }
+
+        normalized = {
+          ...normalized,
+          sidebarTab: "requests",
+        };
 
         if (!cancelled) {
-          setStore(normalizeStore(persisted));
+          setStore(normalized);
         }
       } catch {
         if (!cancelled) {
@@ -489,6 +589,27 @@ export function useWorkspaceStore() {
       window.clearTimeout(saveTimerRef.current);
     };
   }, [isHydrated, store]);
+
+  useEffect(() => {
+    function handleAppSettingsUpdated(event) {
+      const nextSettings = event?.detail;
+      if (!nextSettings || typeof nextSettings !== "object") {
+        return;
+      }
+      setStore((current) => ({
+        ...current,
+        appSettings: {
+          ...(current?.appSettings || {}),
+          ...nextSettings,
+        },
+      }));
+    }
+
+    window.addEventListener("kivo-app-settings-updated", handleAppSettingsUpdated);
+    return () => {
+      window.removeEventListener("kivo-app-settings-updated", handleAppSettingsUpdated);
+    };
+  }, []);
 
   useEffect(() => () => {
     wsConnectionsRef.current.forEach((socket) => {
@@ -2521,8 +2642,64 @@ export function useWorkspaceStore() {
         auth: scriptedRequest?.auth?.type === "inherit" ? resolvedFolderAuth : scriptedRequest.auth
       };
 
+      let requestForSend = effectiveRequest;
+      const effectiveOAuth = requestForSend?.auth?.type === "oauth2" ? requestForSend.auth.oauth2 : null;
+      if (shouldAutoRefreshOAuth(effectiveOAuth)) {
+        const refreshRequestId = `oauth-refresh-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+        try {
+          const refreshed = await exchangeOAuthToken({
+            workspaceName: activeWorkspaceName,
+            collectionName: activeCollectionName,
+            requestId: refreshRequestId,
+            oauth: {
+              ...effectiveOAuth,
+              grantType: "refresh_token",
+            },
+          });
+
+          const refreshedAuth = {
+            ...requestForSend.auth,
+            oauth2: {
+              ...requestForSend.auth.oauth2,
+              accessToken: refreshed.accessToken || requestForSend.auth.oauth2.accessToken,
+              refreshToken: refreshed.refreshToken || requestForSend.auth.oauth2.refreshToken,
+              tokenType: refreshed.tokenType || requestForSend.auth.oauth2.tokenType || "Bearer",
+              expiresAt: refreshed.expiresAt || requestForSend.auth.oauth2.expiresAt,
+              lastStatus: "token-ready",
+              lastError: "",
+              lastWarning: "",
+            },
+          };
+
+          requestForSend = {
+            ...requestForSend,
+            auth: refreshedAuth,
+          };
+
+          if (scriptedRequest?.auth?.type === "oauth2") {
+            updateStore((current) => updateRequestByIdentity(current, activeWorkspaceName, activeCollectionName, activeRequestName, {
+              auth: refreshedAuth,
+            }));
+          }
+        } catch (refreshError) {
+          const refreshMessage = refreshError?.toString?.() || "OAuth token refresh failed before request.";
+          if (scriptedRequest?.auth?.type === "oauth2") {
+            updateStore((current) => updateRequestByIdentity(current, activeWorkspaceName, activeCollectionName, activeRequestName, {
+              auth: {
+                ...scriptedRequest.auth,
+                oauth2: {
+                  ...scriptedRequest.auth.oauth2,
+                  lastStatus: "token-error",
+                  lastError: refreshMessage,
+                },
+              },
+            }));
+          }
+        }
+      }
+
       const requestPayload = buildRequestPayload(
-        effectiveRequest,
+        requestForSend,
         activeWorkspaceName,
         activeCollectionName
       );

@@ -107,6 +107,9 @@ pub struct RequestPayload {
     pub use_cookie_jar: Option<bool>,
 
     #[serde(default)]
+    pub timeout_ms: Option<u64>,
+
+    #[serde(default)]
     pub auth_payload: Option<AuthPayload>,
 }
 
@@ -138,6 +141,24 @@ pub struct OAuthTokenExchangePayload {
     #[serde(default)]
     pub request_id: String,
     pub oauth: OAuthPayload,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct OAuthCallbackWaitPayload {
+    pub callback_url: String,
+    #[serde(default)]
+    pub expected_state: String,
+    #[serde(default)]
+    pub timeout_ms: Option<u64>,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct OAuthCallbackWaitResult {
+    pub authorization_code: String,
+    pub received_state: String,
+    pub callback_url: String,
 }
 
 #[derive(Debug, Serialize)]
