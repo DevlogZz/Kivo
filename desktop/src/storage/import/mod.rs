@@ -30,6 +30,7 @@ fn empty_request(name: String, method: String, url: String) -> RequestRecord {
         follow_redirects: true,
         max_redirects: 5,
         timeout_ms: 0,
+        use_cookie_jar: true,
         folder_path: String::new(),
         script_pre_request: String::new(),
         script_after_response: String::new(),

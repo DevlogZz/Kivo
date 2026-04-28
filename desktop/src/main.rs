@@ -4,8 +4,9 @@ mod http;
 mod storage;
 
 use http::client::{
-    cancel_http_request, cancel_oauth_exchange, oauth_exchange_token, send_grpc_request,
-    send_http_request,
+    cancel_http_request, cancel_oauth_exchange, clear_cookie_jar, delete_cookie_jar_entry,
+    get_cookie_jar, oauth_exchange_token, send_grpc_request, send_http_request,
+    upsert_cookie_jar_entry,
 };
 use storage::{
     export_collection_file, export_request_file,
@@ -26,6 +27,10 @@ fn main() {
             send_http_request,
             send_grpc_request,
             cancel_http_request,
+            get_cookie_jar,
+            delete_cookie_jar_entry,
+            clear_cookie_jar,
+            upsert_cookie_jar_entry,
             oauth_exchange_token,
             cancel_oauth_exchange,
             load_app_state,

@@ -2,13 +2,28 @@ import { useEffect, useMemo, useState } from "react";
 import { open } from "@tauri-apps/plugin-dialog";
 import { getVersion } from "@tauri-apps/api/app";
 import { openUrl } from "@tauri-apps/plugin-opener";
-import { BookOpen, ExternalLink, FileText, FolderOpen, Github, HardDrive, Heart, RefreshCw, Settings2, Siren, Star } from "lucide-react";
+import { BookOpen, Cookie, ExternalLink, FileText, FolderOpen, Github, HardDrive, Heart, RefreshCw, Settings2, Siren, Star, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button.jsx";
 import { Card } from "@/components/ui/card.jsx";
 import { Input } from "@/components/ui/input.jsx";
-import { switchStoragePath, validateStoragePath } from "@/lib/http-client.js";
+import { clearCookieJar, deleteCookieJarEntry, getCookieJar, switchStoragePath, upsertCookieJarEntry, validateStoragePath } from "@/lib/http-client.js";
+
+const EMPTY_COOKIE_DRAFT = {
+  id: "",
+  name: "",
+  value: "",
+  domain: "",
+  path: "/",
+  expiresAt: "",
+  sameSite: "",
+  secure: false,
+  httpOnly: false,
+  hostOnly: true,
+  workspaceName: "",
+  collectionName: "",
+};
 
 function normalizePath(path) {
   return String(path ?? "").trim().replace(/[\\/]+$/, "").toLowerCase();
@@ -35,6 +50,11 @@ export function AppSettingsPage({ storagePath, onStoragePathChanged }) {
   const [pathError, setPathError] = useState("");
   const [appVersion, setAppVersion] = useState("...");
   const [updaterStatus, setUpdaterStatus] = useState("idle");
+  const [cookieEntries, setCookieEntries] = useState([]);
+  const [cookieFilter, setCookieFilter] = useState("");
+  const [isCookieLoading, setIsCookieLoading] = useState(false);
+  const [cookieDraft, setCookieDraft] = useState(EMPTY_COOKIE_DRAFT);
+  const [isSavingCookie, setIsSavingCookie] = useState(false);
 
   useEffect(() => {
     setPathInput(storagePath ?? "");
@@ -51,6 +71,34 @@ export function AppSettingsPage({ storagePath, onStoragePathChanged }) {
     window.dispatchEvent(new CustomEvent("updater-status-request"));
 
     return () => window.removeEventListener("updater-status-change", handleStatusChange);
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadCookies() {
+      setIsCookieLoading(true);
+      try {
+        const list = await getCookieJar(null, null);
+        if (!cancelled) {
+          setCookieEntries(Array.isArray(list) ? list : []);
+        }
+      } catch {
+        if (!cancelled) {
+          setCookieEntries([]);
+          toast.error("Unable to load cookie jar.");
+        }
+      } finally {
+        if (!cancelled) {
+          setIsCookieLoading(false);
+        }
+      }
+    }
+
+    loadCookies();
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   const isSamePath = useMemo(
@@ -181,6 +229,119 @@ export function AppSettingsPage({ storagePath, onStoragePathChanged }) {
     return `https://github.com/DevlogZz/Kivo/issues/new?${params.toString()}`;
   }, [appVersion]);
 
+  const filteredCookies = useMemo(() => {
+    const query = cookieFilter.trim().toLowerCase();
+    if (!query) {
+      return cookieEntries;
+    }
+    return cookieEntries.filter((entry) => {
+      const name = String(entry?.name ?? "").toLowerCase();
+      const domain = String(entry?.domain ?? "").toLowerCase();
+      const path = String(entry?.path ?? "").toLowerCase();
+      const sameSite = String(entry?.sameSite ?? "").toLowerCase();
+      const workspace = String(entry?.workspaceName ?? "").toLowerCase();
+      const collection = String(entry?.collectionName ?? "").toLowerCase();
+      return name.includes(query)
+        || domain.includes(query)
+        || path.includes(query)
+        || sameSite.includes(query)
+        || workspace.includes(query)
+        || collection.includes(query);
+    });
+  }, [cookieEntries, cookieFilter]);
+
+  function resetCookieDraft() {
+    setCookieDraft(EMPTY_COOKIE_DRAFT);
+  }
+
+  function handleEditCookie(entry) {
+    setCookieDraft({
+      id: String(entry?.id ?? ""),
+      name: String(entry?.name ?? ""),
+      value: String(entry?.value ?? ""),
+      domain: String(entry?.domain ?? ""),
+      path: String(entry?.path ?? "/") || "/",
+      expiresAt: String(entry?.expiresAt ?? ""),
+      sameSite: String(entry?.sameSite ?? ""),
+      secure: Boolean(entry?.secure),
+      httpOnly: Boolean(entry?.httpOnly),
+      hostOnly: entry?.hostOnly ?? true,
+      workspaceName: String(entry?.workspaceName ?? ""),
+      collectionName: String(entry?.collectionName ?? ""),
+    });
+  }
+
+  async function handleSaveCookie() {
+    if (!cookieDraft.name.trim() || !cookieDraft.domain.trim()) {
+      toast.error("Cookie name and domain are required.");
+      return;
+    }
+
+    setIsSavingCookie(true);
+    try {
+      const saved = await upsertCookieJarEntry({
+        id: cookieDraft.id || null,
+        name: cookieDraft.name.trim(),
+        value: cookieDraft.value,
+        domain: cookieDraft.domain.trim(),
+        path: cookieDraft.path.trim() || "/",
+        expiresAt: cookieDraft.expiresAt.trim() ? cookieDraft.expiresAt.trim() : null,
+        sameSite: cookieDraft.sameSite.trim(),
+        secure: Boolean(cookieDraft.secure),
+        httpOnly: Boolean(cookieDraft.httpOnly),
+        hostOnly: Boolean(cookieDraft.hostOnly),
+        workspaceName: cookieDraft.workspaceName.trim(),
+        collectionName: cookieDraft.collectionName.trim(),
+      });
+
+      setCookieEntries((prev) => {
+        const next = prev.filter((entry) => entry.id !== saved.id);
+        return [...next, saved].sort((a, b) => `${a.domain}${a.path}${a.name}`.localeCompare(`${b.domain}${b.path}${b.name}`));
+      });
+      resetCookieDraft();
+      toast.success("Cookie saved.");
+    } catch (error) {
+      toast.error(String(error ?? "Failed to save cookie."));
+    } finally {
+      setIsSavingCookie(false);
+    }
+  }
+
+  async function reloadCookies() {
+    setIsCookieLoading(true);
+    try {
+      const list = await getCookieJar(null, null);
+      setCookieEntries(Array.isArray(list) ? list : []);
+    } catch {
+      toast.error("Unable to refresh cookie jar.");
+    } finally {
+      setIsCookieLoading(false);
+    }
+  }
+
+  async function handleDeleteCookie(id) {
+    try {
+      const removed = await deleteCookieJarEntry(id);
+      if (removed) {
+        setCookieEntries((prev) => prev.filter((entry) => entry.id !== id));
+      }
+    } catch {
+      toast.error("Failed to delete cookie.");
+    }
+  }
+
+  async function handleClearCookies() {
+    try {
+      const removed = await clearCookieJar(null, null);
+      if (removed > 0) {
+        setCookieEntries([]);
+      }
+      toast.success("Cookie jar cleared.");
+    } catch {
+      toast.error("Failed to clear cookie jar.");
+    }
+  }
+
   return (
     <div className="thin-scrollbar flex h-full min-h-0 flex-col overflow-y-auto overflow-x-hidden p-6 lg:p-7">
       <div className="mb-5 flex items-center gap-3">
@@ -277,6 +438,159 @@ export function AppSettingsPage({ storagePath, onStoragePathChanged }) {
               <Button type="button" className="h-9 px-5" onClick={handleApplyPath} disabled={isSubmitting || !pathInput.trim()}>
                 {isSubmitting ? "Applying..." : "Apply Path"}
               </Button>
+            </div>
+          </div>
+        </Card>
+
+        <Card className="border border-border/35 bg-gradient-to-b from-background/70 to-background/45 p-5 shadow-[0_8px_20px_hsl(var(--background)/0.2)]">
+          <div className="mb-4 flex items-center justify-between gap-2 text-foreground">
+            <div className="flex items-center gap-2">
+              <Cookie className="h-4 w-4 text-primary" />
+              <h3 className="text-[14px] font-semibold">Cookie Jar</h3>
+            </div>
+            <div className="text-[11px] text-muted-foreground">{cookieEntries.length} stored</div>
+          </div>
+
+          <div className="grid gap-2.5 text-[12px]">
+            <div className="grid gap-2 rounded-lg border border-border/25 bg-accent/10 p-2.5">
+              <div className="text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+                {cookieDraft.id ? "Edit Cookie" : "Add Cookie"}
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                <Input
+                  value={cookieDraft.name}
+                  onChange={(event) => setCookieDraft((prev) => ({ ...prev, name: event.target.value }))}
+                  placeholder="Name (e.g. jwt)"
+                  className="h-8 border-border/35 bg-background/30 text-[12px]"
+                />
+                <Input
+                  value={cookieDraft.value}
+                  onChange={(event) => setCookieDraft((prev) => ({ ...prev, value: event.target.value }))}
+                  placeholder="Value"
+                  className="h-8 border-border/35 bg-background/30 text-[12px]"
+                />
+                <Input
+                  value={cookieDraft.domain}
+                  onChange={(event) => setCookieDraft((prev) => ({ ...prev, domain: event.target.value }))}
+                  placeholder="Domain (example.com)"
+                  className="h-8 border-border/35 bg-background/30 text-[12px]"
+                />
+                <Input
+                  value={cookieDraft.path}
+                  onChange={(event) => setCookieDraft((prev) => ({ ...prev, path: event.target.value }))}
+                  placeholder="Path"
+                  className="h-8 border-border/35 bg-background/30 text-[12px]"
+                />
+                <Input
+                  value={cookieDraft.workspaceName}
+                  onChange={(event) => setCookieDraft((prev) => ({ ...prev, workspaceName: event.target.value }))}
+                  placeholder="Workspace scope (optional)"
+                  className="h-8 border-border/35 bg-background/30 text-[12px]"
+                />
+                <Input
+                  value={cookieDraft.collectionName}
+                  onChange={(event) => setCookieDraft((prev) => ({ ...prev, collectionName: event.target.value }))}
+                  placeholder="Collection scope (optional)"
+                  className="h-8 border-border/35 bg-background/30 text-[12px]"
+                />
+              </div>
+
+              <div className="grid grid-cols-[1fr_auto_auto_auto] items-center gap-2">
+                <Input
+                  value={cookieDraft.expiresAt}
+                  onChange={(event) => setCookieDraft((prev) => ({ ...prev, expiresAt: event.target.value }))}
+                  placeholder="Expires At (RFC3339 or HTTP date, optional)"
+                  className="h-8 border-border/35 bg-background/30 text-[12px]"
+                />
+                <Input
+                  value={cookieDraft.sameSite}
+                  onChange={(event) => setCookieDraft((prev) => ({ ...prev, sameSite: event.target.value }))}
+                  placeholder="SameSite"
+                  className="h-8 w-[110px] border-border/35 bg-background/30 text-[12px]"
+                />
+                <label className="inline-flex items-center gap-1 text-[11px] text-muted-foreground">
+                  <input type="checkbox" className="accent-primary" checked={cookieDraft.secure} onChange={(event) => setCookieDraft((prev) => ({ ...prev, secure: event.target.checked }))} />
+                  Secure
+                </label>
+                <label className="inline-flex items-center gap-1 text-[11px] text-muted-foreground">
+                  <input type="checkbox" className="accent-primary" checked={cookieDraft.httpOnly} onChange={(event) => setCookieDraft((prev) => ({ ...prev, httpOnly: event.target.checked }))} />
+                  HttpOnly
+                </label>
+              </div>
+
+              <div className="flex items-center justify-between">
+                <label className="inline-flex items-center gap-1 text-[11px] text-muted-foreground">
+                  <input type="checkbox" className="accent-primary" checked={cookieDraft.hostOnly} onChange={(event) => setCookieDraft((prev) => ({ ...prev, hostOnly: event.target.checked }))} />
+                  Host-only domain
+                </label>
+                <div className="flex items-center gap-2">
+                  <Button type="button" variant="secondary" size="sm" className="h-8 border border-border/40 bg-accent/40" onClick={resetCookieDraft}>
+                    Reset
+                  </Button>
+                  <Button type="button" size="sm" className="h-8" onClick={handleSaveCookie} disabled={isSavingCookie}>
+                    {isSavingCookie ? "Saving..." : cookieDraft.id ? "Update Cookie" : "Save Cookie"}
+                  </Button>
+                </div>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2">
+              <Input
+                value={cookieFilter}
+                onChange={(event) => setCookieFilter(event.target.value)}
+                placeholder="Filter by name/domain/path"
+                className="h-9 border-border/35 bg-background/35 text-[12px]"
+              />
+              <Button type="button" variant="secondary" size="sm" className="h-9 border border-border/40 bg-accent/40" onClick={reloadCookies}>
+                Refresh
+              </Button>
+              <Button type="button" variant="secondary" size="sm" className="h-9 border border-border/40 bg-accent/40" onClick={handleClearCookies}>
+                Clear All
+              </Button>
+            </div>
+
+            <div className="max-h-[280px] thin-scrollbar overflow-auto rounded-lg border border-border/25 bg-accent/10">
+              {isCookieLoading ? (
+                <div className="px-3 py-3 text-muted-foreground">Loading cookies...</div>
+              ) : filteredCookies.length === 0 ? (
+                <div className="px-3 py-3 text-muted-foreground">No cookies found.</div>
+              ) : (
+                filteredCookies.map((entry) => (
+                  <div key={entry.id} className="grid grid-cols-[minmax(0,1fr)_150px] items-center gap-2 border-b border-border/15 px-3 py-2 last:border-b-0">
+                    <div className="min-w-0">
+                      <div className="truncate text-[12px] font-medium text-foreground">{entry.name}</div>
+                      <div className="truncate text-[11px] text-muted-foreground">{entry.domain}{entry.path}</div>
+                      <div className="truncate text-[10px] text-muted-foreground/90">
+                        {entry.secure ? "Secure" : "Insecure"} · {entry.httpOnly ? "HttpOnly" : "JS-readable"}
+                        {entry.sameSite ? ` · SameSite=${entry.sameSite}` : ""}
+                        {entry.expiresAt ? ` · Exp=${entry.expiresAt}` : " · Session"}
+                        {entry.workspaceName ? ` · WS=${entry.workspaceName}` : ""}
+                        {entry.collectionName ? ` · Col=${entry.collectionName}` : ""}
+                      </div>
+                    </div>
+                    <div className="flex items-center justify-end gap-2">
+                      <Button
+                        type="button"
+                        variant="secondary"
+                        size="sm"
+                        className="h-7 border border-border/40 bg-accent/40 px-2 text-[11px]"
+                        onClick={() => handleEditCookie(entry)}
+                      >
+                        Edit
+                      </Button>
+                      <button
+                        type="button"
+                        onClick={() => handleDeleteCookie(entry.id)}
+                        className="inline-flex items-center justify-center gap-1 text-[11px] text-muted-foreground transition-colors hover:text-red-400"
+                        title="Delete cookie"
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                        Delete
+                      </button>
+                    </div>
+                  </div>
+                ))
+              )}
             </div>
           </div>
         </Card>

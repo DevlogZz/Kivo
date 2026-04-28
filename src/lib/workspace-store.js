@@ -178,6 +178,7 @@ export function createRequest(name = "New Request", mode = REQUEST_MODES.HTTP) {
     followRedirects: true,
     maxRedirects: 5,
     timeoutMs: 0,
+    useCookieJar: true,
     webSocketKeepAliveIntervalMs: Number.isFinite(template.webSocketKeepAliveIntervalMs)
       ? Number(template.webSocketKeepAliveIntervalMs)
       : 0,
@@ -367,6 +368,7 @@ export function normalizeRequestRecord(request) {
     followRedirects: request?.followRedirects ?? true,
     maxRedirects: Number.isFinite(request?.maxRedirects) ? Number(request.maxRedirects) : 5,
     timeoutMs: Number.isFinite(request?.timeoutMs) ? Number(request.timeoutMs) : 0,
+    useCookieJar: request?.useCookieJar ?? true,
     webSocketKeepAliveIntervalMs: Number.isFinite(request?.webSocketKeepAliveIntervalMs)
       ? Number(request.webSocketKeepAliveIntervalMs)
       : 0,

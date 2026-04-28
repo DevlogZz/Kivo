@@ -104,6 +104,9 @@ pub struct RequestPayload {
     pub disable_user_agent: Option<bool>,
 
     #[serde(default)]
+    pub use_cookie_jar: Option<bool>,
+
+    #[serde(default)]
     pub auth_payload: Option<AuthPayload>,
 }
 
@@ -155,6 +158,61 @@ pub struct ResponsePayload {
     pub status: u16,
     pub status_text: String,
     pub headers: HashMap<String, String>,
+    pub cookies: Vec<String>,
     pub body: String,
     pub duration_ms: u128,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CookieJarEntry {
+    pub id: String,
+    pub name: String,
+    pub value: String,
+    pub domain: String,
+    pub path: String,
+    #[serde(default)]
+    pub expires_at: Option<String>,
+    #[serde(default)]
+    pub secure: bool,
+    #[serde(default)]
+    pub http_only: bool,
+    #[serde(default)]
+    pub same_site: String,
+    #[serde(default)]
+    pub host_only: bool,
+    #[serde(default)]
+    pub workspace_name: String,
+    #[serde(default)]
+    pub collection_name: String,
+    #[serde(default)]
+    pub created_at: String,
+    #[serde(default)]
+    pub last_accessed_at: String,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct UpsertCookieJarEntryPayload {
+    #[serde(default)]
+    pub id: Option<String>,
+    pub name: String,
+    pub value: String,
+    pub domain: String,
+    #[serde(default)]
+    pub path: String,
+    #[serde(default)]
+    pub expires_at: Option<String>,
+    #[serde(default)]
+    pub secure: bool,
+    #[serde(default)]
+    pub http_only: bool,
+    #[serde(default)]
+    pub same_site: String,
+    #[serde(default)]
+    pub host_only: bool,
+    #[serde(default)]
+    pub workspace_name: String,
+    #[serde(default)]
+    pub collection_name: String,
 }

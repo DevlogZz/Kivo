@@ -317,6 +317,7 @@ export function buildRequestPayload(request, workspaceName, collectionName) {
   const disableUserAgent = Array.isArray(request?.headers)
     ? request.headers.some((row) => String(row?.key || "").trim().toLowerCase() === "user-agent" && row?.enabled === false)
     : false;
+  const useCookieJar = request?.useCookieJar ?? true;
 
   return {
     method,
@@ -329,6 +330,7 @@ export function buildRequestPayload(request, workspaceName, collectionName) {
     authType: auth.type ?? "none",
     inheritHeaders: request?.inheritHeaders ?? true,
     disableUserAgent,
+    useCookieJar,
     authPayload: auth.type === "inherit" ? null : {
       apiKeyIn: auth.apiKeyIn ?? "header",
       apiKeyName: auth.apiKeyName ?? "",

@@ -2544,7 +2544,7 @@ export function useWorkspaceStore() {
         duration: `${result.durationMs} ms`,
         size: `${bodySize} B`,
         headers: result.headers,
-        cookies: parseCookies(result.headers),
+        cookies: Array.isArray(result.cookies) ? result.cookies : parseCookies(result.headers),
         body: formattedBody,
         rawBody,
         isJson: responseIsJson,

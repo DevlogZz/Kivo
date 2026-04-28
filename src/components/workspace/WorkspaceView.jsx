@@ -45,6 +45,8 @@ export function WorkspaceView({
         isSending={isSending}
         sendStartedAt={sendStartedAt}
         onCancelSend={onCancelSend}
+        workspaceName={workspaceName}
+        collectionName={collectionName}
         activeTab={request.activeResponseTab ?? "Body"}
         onTabChange={(tab) => onUpdateActiveRequest((r) => ({ ...r, activeResponseTab: tab }))}
         bodyView={request.responseBodyView ?? "Raw"}

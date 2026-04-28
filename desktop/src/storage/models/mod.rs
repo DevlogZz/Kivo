@@ -215,6 +215,8 @@ pub struct RequestRecord {
     pub max_redirects: u32,
     #[serde(default)]
     pub timeout_ms: u64,
+    #[serde(default = "default_true")]
+    pub use_cookie_jar: bool,
     #[serde(default, skip_serializing_if = "String::is_empty")]
     pub folder_path: String,
     #[serde(default, skip_serializing_if = "String::is_empty")]

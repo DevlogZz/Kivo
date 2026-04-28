@@ -8,11 +8,12 @@ use std::time::{Duration, Instant};
 use base64::engine::general_purpose::STANDARD as BASE64_STANDARD;
 use base64::Engine;
 use bytes::Buf;
+use chrono::{DateTime, Duration as ChronoDuration, Utc};
 use prost::Message;
 use prost_reflect::{DescriptorPool, DynamicMessage, MethodDescriptor, ReflectMessage};
-use reqwest::header::{HeaderMap, HeaderName, HeaderValue, ACCEPT, AUTHORIZATION, CONTENT_TYPE, USER_AGENT};
+use reqwest::header::{HeaderMap, HeaderName, HeaderValue, ACCEPT, AUTHORIZATION, CONTENT_TYPE, COOKIE, SET_COOKIE, USER_AGENT};
 use serde_json::Value;
-use tauri::AppHandle;
+use tauri::{AppHandle, Manager};
 use tokio::sync::watch;
 use tokio::time::timeout;
 use tonic::codec::{Codec, DecodeBuf, Decoder, EncodeBuf, Encoder};
@@ -20,12 +21,13 @@ use tonic::transport::Endpoint;
 use tonic::{Request, Status};
 
 use super::models::{
-    GrpcRequestPayload, OAuthTokenExchangePayload, OAuthTokenExchangeResult, RequestPayload,
-    ResponsePayload,
+    CookieJarEntry, GrpcRequestPayload, OAuthTokenExchangePayload, OAuthTokenExchangeResult,
+    RequestPayload, ResponsePayload, UpsertCookieJarEntryPayload,
 };
 use crate::storage::{get_collection_dir, get_storage_root, load_collection_config_from_path, load_env_vars};
 
 const DEFAULT_USER_AGENT: &str = concat!("kivo/", env!("CARGO_PKG_VERSION"));
+const COOKIE_STORE_FILE_NAME: &str = "cookies.json";
 
 #[derive(Clone)]
 struct DynamicCodec {
@@ -37,6 +39,170 @@ impl DynamicCodec {
     fn new(input: prost_reflect::MessageDescriptor, output: prost_reflect::MessageDescriptor) -> Self {
         Self { input, output }
     }
+}
+
+#[tauri::command]
+pub fn get_cookie_jar(
+    app: AppHandle,
+    workspace_name: Option<String>,
+    collection_name: Option<String>,
+) -> Result<Vec<CookieJarEntry>, String> {
+    let now = Utc::now();
+    let mut entries = load_cookie_store(&app)?;
+    entries.retain(|entry| !cookie_is_expired(entry, now));
+
+    let ws = workspace_name.unwrap_or_default().trim().to_string();
+    let col = collection_name.unwrap_or_default().trim().to_string();
+
+    let filtered = entries
+        .into_iter()
+        .filter(|entry| ws.is_empty() || entry.workspace_name == ws)
+        .filter(|entry| col.is_empty() || entry.collection_name == col)
+        .collect::<Vec<_>>();
+
+    Ok(filtered)
+}
+
+#[tauri::command]
+pub fn delete_cookie_jar_entry(app: AppHandle, id: String) -> Result<bool, String> {
+    let trimmed = id.trim();
+    if trimmed.is_empty() {
+        return Ok(false);
+    }
+
+    let mut entries = load_cookie_store(&app)?;
+    let before = entries.len();
+    entries.retain(|entry| entry.id != trimmed);
+    let removed = entries.len() != before;
+    if removed {
+        save_cookie_store(&app, &entries)?;
+    }
+    Ok(removed)
+}
+
+fn build_cookie_id(workspace_name: &str, collection_name: &str, domain: &str, path: &str, name: &str) -> String {
+    format!(
+        "{}|{}|{}|{}|{}",
+        workspace_name.trim().to_ascii_lowercase(),
+        collection_name.trim().to_ascii_lowercase(),
+        domain.trim_start_matches('.').to_ascii_lowercase(),
+        if path.trim().is_empty() {
+            "/".to_string()
+        } else if path.trim().starts_with('/') {
+            path.trim().to_string()
+        } else {
+            format!("/{}", path.trim())
+        },
+        name.trim().to_ascii_lowercase(),
+    )
+}
+
+#[tauri::command]
+pub fn upsert_cookie_jar_entry(
+    app: AppHandle,
+    payload: UpsertCookieJarEntryPayload,
+) -> Result<CookieJarEntry, String> {
+    let name = payload.name.trim();
+    let domain = payload.domain.trim().trim_start_matches('.').to_ascii_lowercase();
+    if name.is_empty() {
+        return Err("Cookie name is required.".to_string());
+    }
+    if domain.is_empty() {
+        return Err("Cookie domain is required.".to_string());
+    }
+
+    let path = if payload.path.trim().is_empty() {
+        "/".to_string()
+    } else if payload.path.trim().starts_with('/') {
+        payload.path.trim().to_string()
+    } else {
+        format!("/{}", payload.path.trim())
+    };
+
+    let same_site = payload.same_site.trim().to_string();
+    if !same_site.is_empty() {
+        let valid = ["lax", "strict", "none"];
+        if !valid.contains(&same_site.to_ascii_lowercase().as_str()) {
+            return Err("SameSite must be Lax, Strict, None, or empty.".to_string());
+        }
+    }
+
+    let now = Utc::now();
+    let ws = payload.workspace_name.trim().to_string();
+    let col = payload.collection_name.trim().to_string();
+    let previous_id = payload.id.unwrap_or_default();
+    let computed_id = build_cookie_id(&ws, &col, &domain, &path, name);
+
+    let mut store = load_cookie_store(&app)?;
+    store.retain(|entry| !cookie_is_expired(entry, now));
+
+    let previous = store
+        .iter()
+        .find(|entry| entry.id == computed_id || (!previous_id.trim().is_empty() && entry.id == previous_id));
+    let entry = CookieJarEntry {
+        id: computed_id.clone(),
+        name: name.to_string(),
+        value: payload.value,
+        domain,
+        path,
+        expires_at: payload.expires_at,
+        secure: payload.secure,
+        http_only: payload.http_only,
+        same_site,
+        host_only: payload.host_only,
+        workspace_name: ws,
+        collection_name: col,
+        created_at: previous
+            .map(|existing| existing.created_at.clone())
+            .filter(|existing| !existing.trim().is_empty())
+            .unwrap_or_else(|| now.to_rfc3339()),
+        last_accessed_at: now.to_rfc3339(),
+    };
+
+    store.retain(|existing| {
+        if existing.id == entry.id {
+            return false;
+        }
+        if !previous_id.trim().is_empty() && existing.id == previous_id {
+            return false;
+        }
+        true
+    });
+    if !cookie_is_expired(&entry, now) {
+        store.push(entry.clone());
+    }
+    save_cookie_store(&app, &store)?;
+
+    Ok(entry)
+}
+
+#[tauri::command]
+pub fn clear_cookie_jar(
+    app: AppHandle,
+    workspace_name: Option<String>,
+    collection_name: Option<String>,
+) -> Result<u32, String> {
+    let ws = workspace_name.unwrap_or_default().trim().to_string();
+    let col = collection_name.unwrap_or_default().trim().to_string();
+
+    let mut entries = load_cookie_store(&app)?;
+    let before = entries.len();
+
+    entries.retain(|entry| {
+        if !ws.is_empty() && entry.workspace_name != ws {
+            return true;
+        }
+        if !col.is_empty() && entry.collection_name != col {
+            return true;
+        }
+        false
+    });
+
+    let removed = (before.saturating_sub(entries.len())) as u32;
+    if removed > 0 {
+        save_cookie_store(&app, &entries)?;
+    }
+    Ok(removed)
 }
 
 struct DynamicEncoder {
@@ -325,6 +491,272 @@ fn build_headers(headers: &HashMap<String, String>, disable_user_agent: bool) ->
     }
 
     Ok(header_map)
+}
+
+fn cookie_store_path(app: &AppHandle) -> Result<PathBuf, String> {
+    let app_data_dir = app
+        .path()
+        .app_data_dir()
+        .map_err(|e| format!("Failed to resolve app data directory: {e}"))?;
+    if !app_data_dir.exists() {
+        fs::create_dir_all(&app_data_dir)
+            .map_err(|e| format!("Failed to create app data directory: {e}"))?;
+    }
+    Ok(app_data_dir.join(COOKIE_STORE_FILE_NAME))
+}
+
+fn load_cookie_store(app: &AppHandle) -> Result<Vec<CookieJarEntry>, String> {
+    let path = cookie_store_path(app)?;
+    if !path.exists() {
+        return Ok(vec![]);
+    }
+
+    let raw = fs::read_to_string(&path)
+        .map_err(|e| format!("Failed to read cookie store: {e}"))?;
+    if raw.trim().is_empty() {
+        return Ok(vec![]);
+    }
+
+    serde_json::from_str::<Vec<CookieJarEntry>>(&raw)
+        .map_err(|e| format!("Failed to parse cookie store: {e}"))
+}
+
+fn save_cookie_store(app: &AppHandle, entries: &[CookieJarEntry]) -> Result<(), String> {
+    let path = cookie_store_path(app)?;
+    let serialized = serde_json::to_string_pretty(entries)
+        .map_err(|e| format!("Failed to serialize cookie store: {e}"))?;
+    fs::write(&path, serialized)
+        .map_err(|e| format!("Failed to write cookie store: {e}"))
+}
+
+fn parse_cookie_datetime(value: &str) -> Option<DateTime<Utc>> {
+    DateTime::parse_from_rfc2822(value.trim())
+        .ok()
+        .map(|dt| dt.with_timezone(&Utc))
+        .or_else(|| {
+            DateTime::parse_from_rfc3339(value.trim())
+                .ok()
+                .map(|dt| dt.with_timezone(&Utc))
+        })
+}
+
+fn cookie_is_expired(cookie: &CookieJarEntry, now: DateTime<Utc>) -> bool {
+    cookie
+        .expires_at
+        .as_deref()
+        .and_then(parse_cookie_datetime)
+        .map(|dt| dt <= now)
+        .unwrap_or(false)
+}
+
+fn default_cookie_path(request_path: &str) -> String {
+    if !request_path.starts_with('/') || request_path == "/" {
+        return "/".to_string();
+    }
+
+    match request_path.rfind('/') {
+        Some(0) | None => "/".to_string(),
+        Some(index) => request_path[..index].to_string(),
+    }
+}
+
+fn cookie_domain_matches(host: &str, domain: &str, host_only: bool) -> bool {
+    let host_l = host.to_ascii_lowercase();
+    let domain_l = domain.trim_start_matches('.').to_ascii_lowercase();
+
+    if host_only {
+        return host_l == domain_l;
+    }
+
+    host_l == domain_l || host_l.ends_with(&format!(".{domain_l}"))
+}
+
+fn cookie_path_matches(request_path: &str, cookie_path: &str) -> bool {
+    let req = if request_path.is_empty() { "/" } else { request_path };
+    let cp = if cookie_path.is_empty() { "/" } else { cookie_path };
+    req.starts_with(cp)
+}
+
+fn parse_set_cookie(
+    raw: &str,
+    request_url: &reqwest::Url,
+    workspace_name: &str,
+    collection_name: &str,
+) -> Option<CookieJarEntry> {
+    let mut parts = raw.split(';').map(str::trim).filter(|part| !part.is_empty());
+    let first = parts.next()?;
+    let (name, value) = first.split_once('=')?;
+    let name = name.trim();
+    if name.is_empty() {
+        return None;
+    }
+
+    let request_host = request_url.host_str()?.to_ascii_lowercase();
+    let mut domain = request_host.clone();
+    let mut path = default_cookie_path(request_url.path());
+    let mut secure = false;
+    let mut http_only = false;
+    let mut same_site = String::new();
+    let mut host_only = true;
+    let mut expires_at: Option<String> = None;
+    let now = Utc::now();
+
+    for attr in parts {
+        let (raw_key, raw_val) = attr
+            .split_once('=')
+            .map(|(k, v)| (k.trim(), Some(v.trim())))
+            .unwrap_or((attr, None));
+        let key = raw_key.to_ascii_lowercase();
+
+        match key.as_str() {
+            "domain" => {
+                if let Some(v) = raw_val {
+                    let normalized = v.trim_start_matches('.').to_ascii_lowercase();
+                    if !normalized.is_empty() {
+                        domain = normalized;
+                        host_only = false;
+                    }
+                }
+            }
+            "path" => {
+                if let Some(v) = raw_val {
+                    let candidate = v.trim();
+                    if !candidate.is_empty() {
+                        path = if candidate.starts_with('/') {
+                            candidate.to_string()
+                        } else {
+                            format!("/{candidate}")
+                        };
+                    }
+                }
+            }
+            "secure" => secure = true,
+            "httponly" => http_only = true,
+            "samesite" => {
+                if let Some(v) = raw_val {
+                    same_site = v.to_string();
+                }
+            }
+            "max-age" => {
+                if let Some(v) = raw_val.and_then(|v| i64::from_str(v).ok()) {
+                    if v <= 0 {
+                        expires_at = Some((now - ChronoDuration::seconds(1)).to_rfc3339());
+                    } else {
+                        expires_at = Some((now + ChronoDuration::seconds(v)).to_rfc3339());
+                    }
+                }
+            }
+            "expires" => {
+                if let Some(v) = raw_val {
+                    if let Some(dt) = parse_cookie_datetime(v) {
+                        expires_at = Some(dt.to_rfc3339());
+                    }
+                }
+            }
+            _ => {}
+        }
+    }
+
+    let id = build_cookie_id(workspace_name, collection_name, &domain, &path, name);
+
+    Some(CookieJarEntry {
+        id,
+        name: name.to_string(),
+        value: value.to_string(),
+        domain,
+        path,
+        expires_at,
+        secure,
+        http_only,
+        same_site,
+        host_only,
+        workspace_name: workspace_name.trim().to_string(),
+        collection_name: collection_name.trim().to_string(),
+        created_at: now.to_rfc3339(),
+        last_accessed_at: now.to_rfc3339(),
+    })
+}
+
+fn merge_set_cookie_headers(
+    app: &AppHandle,
+    workspace_name: &str,
+    collection_name: &str,
+    request_url: &reqwest::Url,
+    set_cookie_values: &[String],
+) -> Result<(), String> {
+    if set_cookie_values.is_empty() {
+        return Ok(());
+    }
+
+    let now = Utc::now();
+    let mut store = load_cookie_store(app)?;
+    store.retain(|entry| !cookie_is_expired(entry, now));
+
+    for raw in set_cookie_values {
+        if let Some(parsed) = parse_set_cookie(raw, request_url, workspace_name, collection_name) {
+            store.retain(|entry| entry.id != parsed.id);
+            if !cookie_is_expired(&parsed, now) {
+                store.push(parsed);
+            }
+        }
+    }
+
+    save_cookie_store(app, &store)
+}
+
+fn build_cookie_header_from_store(
+    app: &AppHandle,
+    workspace_name: &str,
+    collection_name: &str,
+    request_url: &reqwest::Url,
+) -> Result<Option<String>, String> {
+    let now = Utc::now();
+    let mut store = load_cookie_store(app)?;
+    let request_host = request_url
+        .host_str()
+        .ok_or_else(|| "Request host is missing".to_string())?
+        .to_ascii_lowercase();
+    let request_path = if request_url.path().is_empty() {
+        "/"
+    } else {
+        request_url.path()
+    };
+    let is_https = request_url.scheme().eq_ignore_ascii_case("https");
+
+    let ws = workspace_name.trim();
+    let col = collection_name.trim();
+
+    store.retain(|entry| !cookie_is_expired(entry, now));
+
+    let mut header_parts = Vec::new();
+    for cookie in &mut store {
+        if !ws.is_empty() && cookie.workspace_name != ws {
+            continue;
+        }
+        if !col.is_empty() && cookie.collection_name != col {
+            continue;
+        }
+        if cookie.secure && !is_https {
+            continue;
+        }
+        if !cookie_domain_matches(&request_host, &cookie.domain, cookie.host_only) {
+            continue;
+        }
+        if !cookie_path_matches(request_path, &cookie.path) {
+            continue;
+        }
+
+        cookie.last_accessed_at = now.to_rfc3339();
+        header_parts.push(format!("{}={}", cookie.name, cookie.value));
+    }
+
+    save_cookie_store(app, &store)?;
+
+    if header_parts.is_empty() {
+        Ok(None)
+    } else {
+        Ok(Some(header_parts.join("; ")))
+    }
 }
 
 fn get_env_context(app: &AppHandle, workspace_name: &str, collection_name: &str) -> HashMap<String, String> {
@@ -624,6 +1056,7 @@ pub async fn send_grpc_request(
         status: status_code,
         status_text,
         headers,
+        cookies: vec![],
         body,
         duration_ms: started_at.elapsed().as_millis(),
     })
@@ -1008,9 +1441,26 @@ pub async fn send_http_request(
     let method = reqwest::Method::from_bytes(method_str.as_bytes())
         .map_err(|_| format!("Unsupported HTTP method: {}", payload.method))?;
 
+    let request_url = reqwest::Url::parse(&url)
+        .map_err(|_| format!("Invalid URL: {url}"))?;
     let mut request = client
         .request(method.clone(), &url)
         .headers(build_headers(&merged_headers, payload.disable_user_agent.unwrap_or(false))?);
+
+    let use_cookie_jar = payload.use_cookie_jar.unwrap_or(true);
+    let has_cookie_header = merged_headers
+        .keys()
+        .any(|key| key.trim().eq_ignore_ascii_case("cookie"));
+    if use_cookie_jar && !has_cookie_header {
+        if let Some(cookie_header) = build_cookie_header_from_store(
+            &app,
+            &payload.workspace_name,
+            &payload.collection_name,
+            &request_url,
+        )? {
+            request = request.header(COOKIE, cookie_header);
+        }
+    }
 
     if let Some(path) = resolved_body_file_path {
         if !path.trim().is_empty() {
@@ -1029,6 +1479,21 @@ pub async fn send_http_request(
 
     let status = response.status();
     let status_text = status.canonical_reason().unwrap_or("Unknown").to_string();
+    let set_cookie_values = response
+        .headers()
+        .get_all(SET_COOKIE)
+        .iter()
+        .filter_map(|value| value.to_str().ok().map(|text| text.to_string()))
+        .collect::<Vec<_>>();
+    if use_cookie_jar {
+        let _ = merge_set_cookie_headers(
+            &app,
+            &payload.workspace_name,
+            &payload.collection_name,
+            &request_url,
+            &set_cookie_values,
+        );
+    }
     let headers = response
         .headers()
         .iter()
@@ -1045,6 +1510,7 @@ pub async fn send_http_request(
         status: status.as_u16(),
         status_text,
         headers,
+        cookies: set_cookie_values,
         body,
         duration_ms,
     })

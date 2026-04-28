@@ -791,6 +791,19 @@ function RequestSettingsPanel({ state, onChange }) {
               />
             </div>
 
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <div className="text-[12px] font-medium text-foreground">Use Cookie Jar</div>
+                <p className="text-[12px] text-muted-foreground">Automatically send stored cookies and capture Set-Cookie from responses.</p>
+              </div>
+              <input
+                type="checkbox"
+                className="mt-1 h-4 w-4 accent-primary"
+                checked={state.useCookieJar ?? true}
+                onChange={(event) => onChange("useCookieJar", event.target.checked)}
+              />
+            </div>
+
             <div className="grid gap-2">
               <label className="text-[10px] uppercase tracking-[0.18em]">Max Redirects</label>
               <Input

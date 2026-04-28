@@ -32,6 +32,7 @@ function sanitizeRequestForSave(request) {
     followRedirects: request?.followRedirects ?? true,
     maxRedirects: Number.isFinite(request?.maxRedirects) ? Number(request.maxRedirects) : 5,
     timeoutMs: Number.isFinite(request?.timeoutMs) ? Number(request.timeoutMs) : 0,
+    useCookieJar: request?.useCookieJar ?? true,
     folderPath: String(request?.folderPath ?? ""),
     scriptPreRequest: String(request?.scriptPreRequest ?? ""),
     scriptAfterResponse: String(request?.scriptAfterResponse ?? ""),
@@ -91,6 +92,28 @@ function sanitizeRequestForSave(request) {
 
 export function cancelHttpRequest(requestId) {
   return invoke("cancel_http_request", { requestId });
+}
+
+export function getCookieJar(workspaceName, collectionName) {
+  return invoke("get_cookie_jar", {
+    workspaceName: workspaceName || null,
+    collectionName: collectionName || null,
+  });
+}
+
+export function deleteCookieJarEntry(id) {
+  return invoke("delete_cookie_jar_entry", { id });
+}
+
+export function clearCookieJar(workspaceName, collectionName) {
+  return invoke("clear_cookie_jar", {
+    workspaceName: workspaceName || null,
+    collectionName: collectionName || null,
+  });
+}
+
+export function upsertCookieJarEntry(payload) {
+  return invoke("upsert_cookie_jar_entry", { payload });
 }
 
 export function exchangeOAuthToken(payload) {
