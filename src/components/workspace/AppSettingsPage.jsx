@@ -1,8 +1,9 @@
 import { useEffect, useMemo, useState } from "react";
+import { createPortal } from "react-dom";
 import { open } from "@tauri-apps/plugin-dialog";
 import { getVersion } from "@tauri-apps/api/app";
 import { openUrl } from "@tauri-apps/plugin-opener";
-import { BookOpen, Cookie, ExternalLink, FileText, FolderOpen, Github, HardDrive, Heart, RefreshCw, Settings2, Siren, Star, Trash2 } from "lucide-react";
+import { BookOpen, Cookie, ExternalLink, FileText, FolderOpen, Github, HardDrive, Heart, Plus, RefreshCw, Settings2, Siren, Star, Trash2, X } from "lucide-react";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button.jsx";
@@ -24,6 +25,8 @@ const EMPTY_COOKIE_DRAFT = {
   workspaceName: "",
   collectionName: "",
 };
+
+const SETTINGS_TABS = ["Storage", "Cookie Jar", "Updates", "Resources"];
 
 function normalizePath(path) {
   return String(path ?? "").trim().replace(/[\\/]+$/, "").toLowerCase();
@@ -54,7 +57,9 @@ export function AppSettingsPage({ storagePath, onStoragePathChanged }) {
   const [cookieFilter, setCookieFilter] = useState("");
   const [isCookieLoading, setIsCookieLoading] = useState(false);
   const [cookieDraft, setCookieDraft] = useState(EMPTY_COOKIE_DRAFT);
+  const [isCookieEditorOpen, setIsCookieEditorOpen] = useState(false);
   const [isSavingCookie, setIsSavingCookie] = useState(false);
+  const [activeSettingsTab, setActiveSettingsTab] = useState("Storage");
 
   useEffect(() => {
     setPathInput(storagePath ?? "");
@@ -269,6 +274,16 @@ export function AppSettingsPage({ storagePath, onStoragePathChanged }) {
       workspaceName: String(entry?.workspaceName ?? ""),
       collectionName: String(entry?.collectionName ?? ""),
     });
+    setIsCookieEditorOpen(true);
+  }
+
+  function openAddCookieModal() {
+    resetCookieDraft();
+    setIsCookieEditorOpen(true);
+  }
+
+  function closeCookieEditor() {
+    setIsCookieEditorOpen(false);
   }
 
   async function handleSaveCookie() {
@@ -298,6 +313,7 @@ export function AppSettingsPage({ storagePath, onStoragePathChanged }) {
         const next = prev.filter((entry) => entry.id !== saved.id);
         return [...next, saved].sort((a, b) => `${a.domain}${a.path}${a.name}`.localeCompare(`${b.domain}${b.path}${b.name}`));
       });
+      setIsCookieEditorOpen(false);
       resetCookieDraft();
       toast.success("Cookie saved.");
     } catch (error) {
@@ -355,8 +371,22 @@ export function AppSettingsPage({ storagePath, onStoragePathChanged }) {
         </div>
       </div>
 
-      <div className="flex w-full flex-col gap-4 lg:w-1/2">
-        <Card className="border border-border/35 bg-gradient-to-b from-background/75 to-background/45 p-5 shadow-[0_10px_24px_hsl(var(--background)/0.28)]">
+      <div className="mb-4 flex flex-wrap items-center gap-2 border-b border-border/20 pb-3">
+        {SETTINGS_TABS.map((tab) => (
+          <button
+            key={tab}
+            type="button"
+            onClick={() => setActiveSettingsTab(tab)}
+            className={`h-8 px-3 text-[12px] transition-colors ${activeSettingsTab === tab ? "border border-border/45 bg-accent/45 text-foreground" : "text-muted-foreground hover:text-foreground"}`}
+          >
+            {tab}
+          </button>
+        ))}
+      </div>
+
+      <div className="flex w-full flex-col gap-4 lg:w-2/3">
+        {activeSettingsTab === "Storage" ? (
+          <Card className="border border-border/35 bg-gradient-to-b from-background/75 to-background/45 p-5 shadow-[0_10px_24px_hsl(var(--background)/0.28)]">
           <div className="mb-4 flex items-start justify-between gap-3">
             <div className="flex items-center gap-2 text-foreground">
               <HardDrive className="h-4 w-4 text-primary" />
@@ -440,9 +470,11 @@ export function AppSettingsPage({ storagePath, onStoragePathChanged }) {
               </Button>
             </div>
           </div>
-        </Card>
+          </Card>
+        ) : null}
 
-        <Card className="border border-border/35 bg-gradient-to-b from-background/70 to-background/45 p-5 shadow-[0_8px_20px_hsl(var(--background)/0.2)]">
+        {activeSettingsTab === "Cookie Jar" ? (
+          <Card className="border border-border/35 bg-gradient-to-b from-background/70 to-background/45 p-5 shadow-[0_8px_20px_hsl(var(--background)/0.2)]">
           <div className="mb-4 flex items-center justify-between gap-2 text-foreground">
             <div className="flex items-center gap-2">
               <Cookie className="h-4 w-4 text-primary" />
@@ -452,88 +484,6 @@ export function AppSettingsPage({ storagePath, onStoragePathChanged }) {
           </div>
 
           <div className="grid gap-2.5 text-[12px]">
-            <div className="grid gap-2 rounded-lg border border-border/25 bg-accent/10 p-2.5">
-              <div className="text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
-                {cookieDraft.id ? "Edit Cookie" : "Add Cookie"}
-              </div>
-              <div className="grid grid-cols-2 gap-2">
-                <Input
-                  value={cookieDraft.name}
-                  onChange={(event) => setCookieDraft((prev) => ({ ...prev, name: event.target.value }))}
-                  placeholder="Name (e.g. jwt)"
-                  className="h-8 border-border/35 bg-background/30 text-[12px]"
-                />
-                <Input
-                  value={cookieDraft.value}
-                  onChange={(event) => setCookieDraft((prev) => ({ ...prev, value: event.target.value }))}
-                  placeholder="Value"
-                  className="h-8 border-border/35 bg-background/30 text-[12px]"
-                />
-                <Input
-                  value={cookieDraft.domain}
-                  onChange={(event) => setCookieDraft((prev) => ({ ...prev, domain: event.target.value }))}
-                  placeholder="Domain (example.com)"
-                  className="h-8 border-border/35 bg-background/30 text-[12px]"
-                />
-                <Input
-                  value={cookieDraft.path}
-                  onChange={(event) => setCookieDraft((prev) => ({ ...prev, path: event.target.value }))}
-                  placeholder="Path"
-                  className="h-8 border-border/35 bg-background/30 text-[12px]"
-                />
-                <Input
-                  value={cookieDraft.workspaceName}
-                  onChange={(event) => setCookieDraft((prev) => ({ ...prev, workspaceName: event.target.value }))}
-                  placeholder="Workspace scope (optional)"
-                  className="h-8 border-border/35 bg-background/30 text-[12px]"
-                />
-                <Input
-                  value={cookieDraft.collectionName}
-                  onChange={(event) => setCookieDraft((prev) => ({ ...prev, collectionName: event.target.value }))}
-                  placeholder="Collection scope (optional)"
-                  className="h-8 border-border/35 bg-background/30 text-[12px]"
-                />
-              </div>
-
-              <div className="grid grid-cols-[1fr_auto_auto_auto] items-center gap-2">
-                <Input
-                  value={cookieDraft.expiresAt}
-                  onChange={(event) => setCookieDraft((prev) => ({ ...prev, expiresAt: event.target.value }))}
-                  placeholder="Expires At (RFC3339 or HTTP date, optional)"
-                  className="h-8 border-border/35 bg-background/30 text-[12px]"
-                />
-                <Input
-                  value={cookieDraft.sameSite}
-                  onChange={(event) => setCookieDraft((prev) => ({ ...prev, sameSite: event.target.value }))}
-                  placeholder="SameSite"
-                  className="h-8 w-[110px] border-border/35 bg-background/30 text-[12px]"
-                />
-                <label className="inline-flex items-center gap-1 text-[11px] text-muted-foreground">
-                  <input type="checkbox" className="accent-primary" checked={cookieDraft.secure} onChange={(event) => setCookieDraft((prev) => ({ ...prev, secure: event.target.checked }))} />
-                  Secure
-                </label>
-                <label className="inline-flex items-center gap-1 text-[11px] text-muted-foreground">
-                  <input type="checkbox" className="accent-primary" checked={cookieDraft.httpOnly} onChange={(event) => setCookieDraft((prev) => ({ ...prev, httpOnly: event.target.checked }))} />
-                  HttpOnly
-                </label>
-              </div>
-
-              <div className="flex items-center justify-between">
-                <label className="inline-flex items-center gap-1 text-[11px] text-muted-foreground">
-                  <input type="checkbox" className="accent-primary" checked={cookieDraft.hostOnly} onChange={(event) => setCookieDraft((prev) => ({ ...prev, hostOnly: event.target.checked }))} />
-                  Host-only domain
-                </label>
-                <div className="flex items-center gap-2">
-                  <Button type="button" variant="secondary" size="sm" className="h-8 border border-border/40 bg-accent/40" onClick={resetCookieDraft}>
-                    Reset
-                  </Button>
-                  <Button type="button" size="sm" className="h-8" onClick={handleSaveCookie} disabled={isSavingCookie}>
-                    {isSavingCookie ? "Saving..." : cookieDraft.id ? "Update Cookie" : "Save Cookie"}
-                  </Button>
-                </div>
-              </div>
-            </div>
-
             <div className="flex items-center gap-2">
               <Input
                 value={cookieFilter}
@@ -547,6 +497,10 @@ export function AppSettingsPage({ storagePath, onStoragePathChanged }) {
               <Button type="button" variant="secondary" size="sm" className="h-9 border border-border/40 bg-accent/40" onClick={handleClearCookies}>
                 Clear All
               </Button>
+              <Button type="button" size="sm" className="h-9" onClick={openAddCookieModal}>
+                <Plus className="mr-1 h-3.5 w-3.5" />
+                Add Cookie
+              </Button>
             </div>
 
             <div className="max-h-[280px] thin-scrollbar overflow-auto rounded-lg border border-border/25 bg-accent/10">
@@ -556,10 +510,11 @@ export function AppSettingsPage({ storagePath, onStoragePathChanged }) {
                 <div className="px-3 py-3 text-muted-foreground">No cookies found.</div>
               ) : (
                 filteredCookies.map((entry) => (
-                  <div key={entry.id} className="grid grid-cols-[minmax(0,1fr)_150px] items-center gap-2 border-b border-border/15 px-3 py-2 last:border-b-0">
+                  <div key={entry.id} className="grid grid-cols-[180px_minmax(0,1fr)_150px] items-center gap-2 border-b border-border/15 px-3 py-2 last:border-b-0">
+                    <div className="truncate text-[11px] text-muted-foreground">{entry.domain || "-"}</div>
                     <div className="min-w-0">
                       <div className="truncate text-[12px] font-medium text-foreground">{entry.name}</div>
-                      <div className="truncate text-[11px] text-muted-foreground">{entry.domain}{entry.path}</div>
+                      <div className="truncate text-[11px] text-muted-foreground">{entry.path}</div>
                       <div className="truncate text-[10px] text-muted-foreground/90">
                         {entry.secure ? "Secure" : "Insecure"} · {entry.httpOnly ? "HttpOnly" : "JS-readable"}
                         {entry.sameSite ? ` · SameSite=${entry.sameSite}` : ""}
@@ -593,9 +548,11 @@ export function AppSettingsPage({ storagePath, onStoragePathChanged }) {
               )}
             </div>
           </div>
-        </Card>
+          </Card>
+        ) : null}
 
-        <Card className="border border-border/35 bg-gradient-to-b from-background/70 to-background/45 p-5 shadow-[0_8px_20px_hsl(var(--background)/0.2)]">
+        {activeSettingsTab === "Updates" ? (
+          <Card className="border border-border/35 bg-gradient-to-b from-background/70 to-background/45 p-5 shadow-[0_8px_20px_hsl(var(--background)/0.2)]">
           <div className="mb-4 flex items-center justify-between gap-2 text-foreground">
             <div className="flex items-center gap-2">
               <RefreshCw className="h-4 w-4 text-primary" />
@@ -634,9 +591,11 @@ export function AppSettingsPage({ storagePath, onStoragePathChanged }) {
             </div>
           </div>
 
-        </Card>
+          </Card>
+        ) : null}
 
-        <Card className="border border-border/35 bg-gradient-to-b from-background/70 to-background/45 p-5 shadow-[0_8px_20px_hsl(var(--background)/0.2)]">
+        {activeSettingsTab === "Resources" ? (
+          <Card className="border border-border/35 bg-gradient-to-b from-background/70 to-background/45 p-5 shadow-[0_8px_20px_hsl(var(--background)/0.2)]">
           <div className="mb-4 flex items-center gap-2 text-foreground">
             <BookOpen className="h-4 w-4 text-primary" />
             <h3 className="text-[14px] font-semibold">Resources & Support</h3>
@@ -654,7 +613,7 @@ export function AppSettingsPage({ storagePath, onStoragePathChanged }) {
 
             <button
               type="button"
-              onClick={() => handleOpenExternal("https://github.com/DevlogZz/Kivo/blob/main/LICENSE.md", "license")}
+              onClick={() => handleOpenExternal("https://github.com/DevlogZz/Kivo/blob/main/LICENSE", "license")}
               className="flex items-center justify-between rounded-lg border border-border/35 bg-accent/15 px-3 py-2.5 text-left transition-colors hover:bg-accent/30"
             >
               <span className="flex items-center gap-2 text-foreground"><FileText className="h-3.5 w-3.5 text-primary" />View License</span>
@@ -688,8 +647,102 @@ export function AppSettingsPage({ storagePath, onStoragePathChanged }) {
               <ExternalLink className="h-3.5 w-3.5 text-muted-foreground" />
             </button>
           </div>
-        </Card>
+          </Card>
+        ) : null}
       </div>
+
+      {isCookieEditorOpen ? createPortal(
+        <div className="fixed inset-0 z-[330] flex items-center justify-center bg-black/70 p-4" onMouseDown={(event) => event.target === event.currentTarget && closeCookieEditor()}>
+          <Card className="w-full max-w-4xl border border-border/35 bg-background p-5 shadow-2xl">
+            <div className="mb-4 flex items-center justify-between">
+              <h3 className="text-lg font-semibold text-foreground">{cookieDraft.id ? "Edit Cookie" : "Add Cookie"}</h3>
+              <button type="button" onClick={closeCookieEditor} className="text-muted-foreground transition-colors hover:text-foreground">
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            <div className="grid gap-3 text-[12px]">
+              <div className="grid grid-cols-2 gap-3">
+                <Input
+                  value={cookieDraft.name}
+                  onChange={(event) => setCookieDraft((prev) => ({ ...prev, name: event.target.value }))}
+                  placeholder="Name (e.g. jwt)"
+                  className="h-10 border-border/35 bg-background/30 text-[12px]"
+                />
+                <Input
+                  value={cookieDraft.value}
+                  onChange={(event) => setCookieDraft((prev) => ({ ...prev, value: event.target.value }))}
+                  placeholder="Value"
+                  className="h-10 border-border/35 bg-background/30 text-[12px]"
+                />
+                <Input
+                  value={cookieDraft.domain}
+                  onChange={(event) => setCookieDraft((prev) => ({ ...prev, domain: event.target.value }))}
+                  placeholder="Domain (example.com)"
+                  className="h-10 border-border/35 bg-background/30 text-[12px]"
+                />
+                <Input
+                  value={cookieDraft.path}
+                  onChange={(event) => setCookieDraft((prev) => ({ ...prev, path: event.target.value }))}
+                  placeholder="Path"
+                  className="h-10 border-border/35 bg-background/30 text-[12px]"
+                />
+                <Input
+                  value={cookieDraft.workspaceName}
+                  onChange={(event) => setCookieDraft((prev) => ({ ...prev, workspaceName: event.target.value }))}
+                  placeholder="Workspace scope (optional)"
+                  className="h-10 border-border/35 bg-background/30 text-[12px]"
+                />
+                <Input
+                  value={cookieDraft.collectionName}
+                  onChange={(event) => setCookieDraft((prev) => ({ ...prev, collectionName: event.target.value }))}
+                  placeholder="Collection scope (optional)"
+                  className="h-10 border-border/35 bg-background/30 text-[12px]"
+                />
+              </div>
+
+              <div className="grid grid-cols-[1fr_150px_auto_auto] items-center gap-3">
+                <Input
+                  value={cookieDraft.expiresAt}
+                  onChange={(event) => setCookieDraft((prev) => ({ ...prev, expiresAt: event.target.value }))}
+                  placeholder="Expires At (RFC3339 or HTTP date, optional)"
+                  className="h-10 border-border/35 bg-background/30 text-[12px]"
+                />
+                <Input
+                  value={cookieDraft.sameSite}
+                  onChange={(event) => setCookieDraft((prev) => ({ ...prev, sameSite: event.target.value }))}
+                  placeholder="SameSite"
+                  className="h-10 border-border/35 bg-background/30 text-[12px]"
+                />
+                <label className="inline-flex items-center gap-1 text-[12px] text-muted-foreground">
+                  <input type="checkbox" className="accent-primary" checked={cookieDraft.secure} onChange={(event) => setCookieDraft((prev) => ({ ...prev, secure: event.target.checked }))} />
+                  Secure
+                </label>
+                <label className="inline-flex items-center gap-1 text-[12px] text-muted-foreground">
+                  <input type="checkbox" className="accent-primary" checked={cookieDraft.httpOnly} onChange={(event) => setCookieDraft((prev) => ({ ...prev, httpOnly: event.target.checked }))} />
+                  HttpOnly
+                </label>
+              </div>
+
+              <div className="flex items-center justify-between pt-2">
+                <label className="inline-flex items-center gap-1 text-[12px] text-muted-foreground">
+                  <input type="checkbox" className="accent-primary" checked={cookieDraft.hostOnly} onChange={(event) => setCookieDraft((prev) => ({ ...prev, hostOnly: event.target.checked }))} />
+                  Host-only domain
+                </label>
+                <div className="flex items-center gap-2">
+                  <Button type="button" variant="secondary" size="sm" className="h-9 border border-border/40 bg-accent/40" onClick={resetCookieDraft}>
+                    Reset
+                  </Button>
+                  <Button type="button" size="sm" className="h-9" onClick={handleSaveCookie} disabled={isSavingCookie}>
+                    {isSavingCookie ? "Saving..." : cookieDraft.id ? "Update Cookie" : "Save Cookie"}
+                  </Button>
+                </div>
+              </div>
+            </div>
+          </Card>
+        </div>,
+        document.body
+      ) : null}
     </div>
   );
 }
