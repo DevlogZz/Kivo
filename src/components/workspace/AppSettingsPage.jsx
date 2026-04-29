@@ -3,7 +3,7 @@ import { createPortal } from "react-dom";
 import { open } from "@tauri-apps/plugin-dialog";
 import { getVersion } from "@tauri-apps/api/app";
 import { openUrl } from "@tauri-apps/plugin-opener";
-import { BookOpen, Cookie, ExternalLink, FileText, FolderOpen, Github, HardDrive, Heart, Keyboard, Plus, RefreshCw, Settings2, ShieldCheck, Siren, Star, Trash2, X } from "lucide-react";
+import { BookOpen, Cookie, ExternalLink, FileText, FolderOpen, Github, HardDrive, Heart, Keyboard, Lightbulb, Plus, RefreshCw, Settings2, ShieldCheck, Siren, Star, Trash2, X } from "lucide-react";
 
 import { Button } from "@/components/ui/button.jsx";
 import { Card } from "@/components/ui/card.jsx";
@@ -345,6 +345,30 @@ export function AppSettingsPage({ storagePath, onStoragePathChanged, initialTab 
     return `https://github.com/DevlogZz/Kivo/issues/new?${params.toString()}`;
   }, [appVersion]);
 
+  const featureRequestUrl = useMemo(() => {
+    const body = [
+      "## Feature Summary",
+      "Describe the feature you'd like to see.",
+      "",
+      "## Problem / Use Case",
+      "What problem would this solve for you?",
+      "",
+      "## Proposed Solution",
+      "How should this feature work?",
+      "",
+      "## Additional Context",
+      "Add mockups, examples, or notes.",
+    ].join("\n");
+
+    const params = new URLSearchParams({
+      title: "[FeatureRequest]",
+      labels: "enhancement",
+      body,
+    });
+
+    return `https://github.com/DevlogZz/Kivo/issues/new?${params.toString()}`;
+  }, []);
+
   const filteredCookies = useMemo(() => {
     const query = cookieFilter.trim().toLowerCase();
     if (!query) {
@@ -568,31 +592,33 @@ export function AppSettingsPage({ storagePath, onStoragePathChanged, initialTab 
   }
 
   return (
-    <div className="thin-scrollbar flex h-full min-h-0 flex-col overflow-y-auto overflow-x-hidden bg-[hsl(var(--sidebar))]/98 p-6 lg:p-7 [&_button]:!rounded-none [&_input]:!rounded-none [&_button]:!bg-transparent [&_input]:!bg-transparent">
-      <div className="mb-5 flex items-center gap-3">
-        <div className="flex h-10 w-10 items-center justify-center border border-primary/25 bg-primary/12 text-primary shadow-sm shadow-primary/10">
+    <div className="thin-scrollbar flex h-full min-h-0 flex-col overflow-y-auto overflow-x-hidden bg-[hsl(var(--sidebar))]/98 bg-[radial-gradient(circle_at_top_right,hsl(var(--primary)/0.08),transparent_38%)] p-6 lg:p-7 [&_button]:!rounded-none [&_input]:!rounded-none [&_input]:!bg-transparent">
+      <div className="mb-6 flex items-start gap-4">
+        <div className="flex items-center gap-3">
+        <div className="flex h-11 w-11 items-center justify-center border border-primary/35 bg-primary/12 text-primary shadow-sm shadow-primary/10">
           <Settings2 className="h-4.5 w-4.5" />
         </div>
         <div>
-          <h2 className="text-xl font-semibold tracking-tight text-foreground">App Settings</h2>
-          <p className="text-[11px] text-muted-foreground/60 mt-0.5 font-medium">Author: dexter-xD, Now part of Devlogz</p>
+          <h2 className="text-2xl font-semibold tracking-tight text-foreground">App Settings</h2>
+          <p className="mt-0.5 text-[12px] text-muted-foreground/75">Manage app preferences</p>
+        </div>
         </div>
       </div>
 
-      <div className="mb-4 flex flex-wrap items-center gap-2 border-b border-border/20 pb-3">
+      <div className="mb-4 flex flex-wrap items-center gap-2 border-b border-border/25 pb-3">
         {SETTINGS_TABS.map((tab) => (
           <button
             key={tab}
             type="button"
             onClick={() => setActiveSettingsTab(tab)}
-            className={`h-8 px-3 text-[12px] transition-colors ${activeSettingsTab === tab ? "border border-border/45 bg-[hsl(var(--sidebar))]/98 text-foreground" : "border border-border/25 bg-[hsl(var(--sidebar))]/98 text-muted-foreground hover:text-foreground"}`}
+            className={`h-9 border px-3.5 text-[12px] transition-colors ${activeSettingsTab === tab ? "border-primary/45 bg-primary/12 font-medium text-foreground" : "border-border/30 bg-transparent text-muted-foreground hover:border-border/45 hover:text-foreground"}`}
           >
             {tab}
           </button>
         ))}
       </div>
 
-      <div className="flex w-full flex-col gap-4 lg:w-2/3">
+      <div className="flex w-full max-w-5xl flex-col gap-4">
         {activeSettingsTab === "Storage" ? (
           <>
           <Card className="rounded-none border border-border/35 bg-[hsl(var(--sidebar))]/98 p-5 shadow-[0_10px_24px_hsl(var(--background)/0.28)]">
@@ -674,7 +700,7 @@ export function AppSettingsPage({ storagePath, onStoragePathChanged, initialTab 
               <div className="text-[11px] text-muted-foreground min-w-0">
                 Current: <span className="font-mono">{storagePath || "-"}</span>
               </div>
-              <Button type="button" className="h-9 px-5" onClick={handleApplyPath} disabled={isSubmitting || !pathInput.trim()}>
+              <Button type="button" className="h-9 border border-primary/55 bg-primary px-5 text-primary-foreground hover:bg-primary/90" onClick={handleApplyPath} disabled={isSubmitting || !pathInput.trim()}>
                 {isSubmitting ? "Applying..." : "Apply Path"}
               </Button>
             </div>
@@ -1068,6 +1094,15 @@ export function AppSettingsPage({ storagePath, onStoragePathChanged, initialTab 
               className="flex items-center justify-between border border-border/35 bg-transparent px-3 py-2.5 text-left transition-colors hover:bg-background/20"
             >
               <span className="flex items-center gap-2 text-foreground"><Siren className="h-3.5 w-3.5 text-orange-400" />Report Issue</span>
+              <ExternalLink className="h-3.5 w-3.5 text-muted-foreground" />
+            </button>
+
+            <button
+              type="button"
+              onClick={() => handleOpenExternal(featureRequestUrl, "feature request form")}
+              className="flex items-center justify-between border border-border/35 bg-transparent px-3 py-2.5 text-left transition-colors hover:bg-background/20"
+            >
+              <span className="flex items-center gap-2 text-foreground"><Lightbulb className="h-3.5 w-3.5 text-cyan-400" />Request a Feature</span>
               <ExternalLink className="h-3.5 w-3.5 text-muted-foreground" />
             </button>
           </div>
