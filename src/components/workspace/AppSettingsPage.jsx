@@ -3,12 +3,13 @@ import { createPortal } from "react-dom";
 import { open } from "@tauri-apps/plugin-dialog";
 import { getVersion } from "@tauri-apps/api/app";
 import { openUrl } from "@tauri-apps/plugin-opener";
-import { BookOpen, Cookie, ExternalLink, FileText, FolderOpen, Github, HardDrive, Heart, Plus, RefreshCw, Settings2, ShieldCheck, Siren, Star, Trash2, X } from "lucide-react";
+import { BookOpen, Cookie, ExternalLink, FileText, FolderOpen, Github, HardDrive, Heart, Keyboard, Plus, RefreshCw, Settings2, ShieldCheck, Siren, Star, Trash2, X } from "lucide-react";
 
 import { Button } from "@/components/ui/button.jsx";
 import { Card } from "@/components/ui/card.jsx";
 import { Input } from "@/components/ui/input.jsx";
 import { clearCookieJar, deleteCookieJarEntry, getAppSettings, getCookieJar, setAppSettings, switchStoragePath, upsertCookieJarEntry, validateStoragePath } from "@/lib/http-client.js";
+import { createDefaultKeybindings, keyboardEventToShortcut, KEYBINDING_ACTIONS, normalizeKeybindingMap, shortcutToDisplay } from "@/lib/keybindings.js";
 
 const EMPTY_COOKIE_DRAFT = {
   id: "",
@@ -25,7 +26,7 @@ const EMPTY_COOKIE_DRAFT = {
   collectionName: "",
 };
 
-const SETTINGS_TABS = ["Storage", "Security", "Proxy", "Cookie Jar", "Updates", "Resources"];
+const SETTINGS_TABS = ["Storage", "Security", "Keybindings", "Proxy", "Cookie Jar", "Updates", "Resources"];
 
 const DEFAULT_APP_SETTINGS = {
   clearOAuthSessionOnStart: false,
@@ -43,6 +44,7 @@ const DEFAULT_APP_SETTINGS = {
   proxyHttp: "",
   proxyHttps: "",
   noProxy: "",
+  keybindings: createDefaultKeybindings(),
 };
 
 function normalizeAppSettingsInput(settings) {
@@ -65,6 +67,7 @@ function normalizeAppSettingsInput(settings) {
     proxyHttp: String(source.proxyHttp ?? DEFAULT_APP_SETTINGS.proxyHttp),
     proxyHttps: String(source.proxyHttps ?? DEFAULT_APP_SETTINGS.proxyHttps),
     noProxy: String(source.noProxy ?? DEFAULT_APP_SETTINGS.noProxy),
+    keybindings: normalizeKeybindingMap(source.keybindings ?? DEFAULT_APP_SETTINGS.keybindings),
   };
 }
 
@@ -102,6 +105,9 @@ export function AppSettingsPage({ storagePath, onStoragePathChanged }) {
   const [activeSettingsTab, setActiveSettingsTab] = useState("Storage");
   const [appSettings, setSettingsState] = useState(DEFAULT_APP_SETTINGS);
   const [isSavingSettings, setIsSavingSettings] = useState(false);
+  const [editingShortcutActionId, setEditingShortcutActionId] = useState("");
+  const [shortcutDraft, setShortcutDraft] = useState("");
+  const [shortcutError, setShortcutError] = useState("");
 
   useEffect(() => {
     setPathInput(storagePath ?? "");
@@ -354,6 +360,79 @@ export function AppSettingsPage({ storagePath, onStoragePathChanged }) {
     });
   }, [cookieEntries, cookieFilter]);
 
+  const keybindingSections = useMemo(() => {
+    return KEYBINDING_ACTIONS.reduce((acc, action) => {
+      const section = action.section || "General";
+      if (!acc[section]) {
+        acc[section] = [];
+      }
+      acc[section].push(action);
+      return acc;
+    }, {});
+  }, []);
+
+  const editingShortcutAction = useMemo(
+    () => KEYBINDING_ACTIONS.find((item) => item.id === editingShortcutActionId) || null,
+    [editingShortcutActionId]
+  );
+
+  function openShortcutEditor(actionId) {
+    setEditingShortcutActionId(actionId);
+    setShortcutDraft(appSettings.keybindings?.[actionId] || "");
+    setShortcutError("");
+  }
+
+  function closeShortcutEditor() {
+    setEditingShortcutActionId("");
+    setShortcutDraft("");
+    setShortcutError("");
+  }
+
+  async function saveShortcutForAction(actionId, shortcut) {
+    const nextMap = normalizeKeybindingMap({
+      ...appSettings.keybindings,
+      [actionId]: shortcut,
+    });
+    await updateSettingsPatch({ keybindings: nextMap });
+  }
+
+  async function handleResetSingleShortcut(actionId) {
+    const defaults = createDefaultKeybindings();
+    await saveShortcutForAction(actionId, defaults[actionId] || "");
+  }
+
+  async function handleResetAllShortcuts() {
+    await updateSettingsPatch({ keybindings: createDefaultKeybindings() });
+  }
+
+  async function handleShortcutEditorKeyDown(event) {
+    event.preventDefault();
+    event.stopPropagation();
+
+    if (event.key === "Escape") {
+      closeShortcutEditor();
+      return;
+    }
+
+    if (event.key === "Enter") {
+      if (!editingShortcutActionId || !shortcutDraft) {
+        setShortcutError("Press a key combination first.");
+        return;
+      }
+      await saveShortcutForAction(editingShortcutActionId, shortcutDraft);
+      closeShortcutEditor();
+      return;
+    }
+
+    const captured = keyboardEventToShortcut(event);
+    if (!captured) {
+      return;
+    }
+
+    setShortcutDraft(captured);
+    setShortcutError("");
+  }
+
   function resetCookieDraft() {
     setCookieDraft(EMPTY_COOKIE_DRAFT);
   }
@@ -562,6 +641,63 @@ export function AppSettingsPage({ storagePath, onStoragePathChanged }) {
               </Button>
             </div>
           </div>
+          </Card>
+        </>
+      ) : null}
+
+      {activeSettingsTab === "Keybindings" ? (
+        <>
+          <Card className="border border-border/35 bg-gradient-to-b from-background/70 to-background/45 p-5 shadow-[0_8px_20px_hsl(var(--background)/0.2)]">
+            <div className="mb-4 flex items-center justify-between gap-2 text-foreground">
+              <div className="flex items-center gap-2">
+                <Keyboard className="h-4 w-4 text-primary" />
+                <h3 className="text-[14px] font-semibold">Keyboard Shortcuts</h3>
+              </div>
+              <Button
+                type="button"
+                variant="secondary"
+                size="sm"
+                className="h-8 border border-border/40 bg-accent/40"
+                onClick={handleResetAllShortcuts}
+              >
+                Reset all
+              </Button>
+            </div>
+
+            <div className="space-y-4 text-[12px]">
+              {Object.entries(keybindingSections).map(([sectionName, items]) => (
+                <div key={sectionName} className="rounded-lg border border-border/25 bg-accent/10 p-3">
+                  <div className="mb-2 text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+                    {sectionName}
+                  </div>
+                  <div className="grid gap-2">
+                    {items.map((item) => (
+                      <div key={item.id} className="flex items-center justify-between gap-2">
+                        <div className="text-foreground">{item.label}</div>
+                        <div className="flex items-center gap-1.5">
+                          <button
+                            type="button"
+                            onClick={() => openShortcutEditor(item.id)}
+                            className="h-8 min-w-[160px] border border-border/40 bg-background/35 px-2.5 text-center font-mono text-[11px] text-foreground transition-colors hover:border-border/60"
+                            title="Edit shortcut"
+                          >
+                            {shortcutToDisplay(appSettings.keybindings?.[item.id] || "")}
+                          </button>
+                          <button
+                            type="button"
+                            className="h-8 border border-border/40 bg-background/20 px-2 text-[11px] text-muted-foreground transition-colors hover:text-foreground"
+                            onClick={() => handleResetSingleShortcut(item.id)}
+                            title="Reset shortcut"
+                          >
+                            Reset
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </div>
           </Card>
         </>
       ) : null}
@@ -989,6 +1125,37 @@ export function AppSettingsPage({ storagePath, onStoragePathChanged }) {
                 </div>
               </div>
             </div>
+          </Card>
+        </div>,
+        document.body
+      ) : null}
+
+      {editingShortcutAction ? createPortal(
+        <div
+          className="fixed inset-0 z-[340] flex items-center justify-center bg-black/70 p-4"
+          onMouseDown={(event) => event.target === event.currentTarget && closeShortcutEditor()}
+        >
+          <Card className="w-full max-w-2xl border border-border/35 bg-background p-5 shadow-2xl">
+            <div className="mb-4 flex items-center justify-between">
+              <h3 className="text-lg font-semibold text-foreground">Edit Shortcut</h3>
+              <button type="button" onClick={closeShortcutEditor} className="text-muted-foreground transition-colors hover:text-foreground">
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+            <div className="mb-2 text-[12px] text-muted-foreground">{editingShortcutAction.label}</div>
+            <div className="text-[12px] text-muted-foreground">Press desired key combination and then press ENTER.</div>
+            <button
+              type="button"
+              className="mt-3 h-11 w-full border border-border/40 bg-background/30 px-3 text-center font-mono text-[13px] text-foreground"
+              onKeyDown={handleShortcutEditorKeyDown}
+              onClick={(event) => event.currentTarget.focus()}
+              autoFocus
+            >
+              {shortcutToDisplay(shortcutDraft)}
+            </button>
+            {shortcutError ? (
+              <div className="mt-2 text-[12px] text-red-400">{shortcutError}</div>
+            ) : null}
           </Card>
         </div>,
         document.body

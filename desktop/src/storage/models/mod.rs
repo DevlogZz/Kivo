@@ -102,6 +102,8 @@ pub struct AppSettings {
     pub proxy_https: String,
     #[serde(default)]
     pub no_proxy: String,
+    #[serde(default)]
+    pub keybindings: HashMap<String, String>,
 }
 
 impl Default for AppSettings {
@@ -122,6 +124,7 @@ impl Default for AppSettings {
             proxy_http: String::new(),
             proxy_https: String::new(),
             no_proxy: String::new(),
+            keybindings: HashMap::new(),
         }
     }
 }

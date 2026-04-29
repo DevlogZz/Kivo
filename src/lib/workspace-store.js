@@ -1,4 +1,5 @@
 import { createDefaultAuthState, normalizeAuthState } from "@/lib/oauth.js";
+import { createDefaultKeybindings } from "@/lib/keybindings.js";
 
 export const REQUEST_MODES = {
   HTTP: "http",
@@ -37,6 +38,7 @@ export function createDefaultAppSettings() {
     proxyHttp: "",
     proxyHttps: "",
     noProxy: "",
+    keybindings: createDefaultKeybindings(),
   };
 }
 

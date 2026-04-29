@@ -1,6 +1,6 @@
 /* @refresh reset */
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { openUrl } from "@tauri-apps/plugin-opener";
 
 import { Sidebar } from "@/components/workspace/Sidebar.jsx";
@@ -17,6 +17,7 @@ import { useTheme } from "@/hooks/use-theme.js";
 import { useWorkspaceStore } from "@/hooks/use-workspace-store.js";
 import { useEnv } from "@/hooks/use-env.js";
 import { getResolvedStoragePath } from "@/lib/http-client.js";
+import { doesEventMatchShortcut, isEditableEventTarget, KEYBINDING_ACTIONS, normalizeKeybindingMap } from "@/lib/keybindings.js";
 import { SIDEBAR_COLLAPSED_WIDTH } from "@/lib/workspace-utils.js";
 import { Toaster } from "sonner";
 import {
@@ -69,6 +70,7 @@ export default function App() {
     activeWebSocketState,
     SIDEBAR_MIN_WIDTH,
     SIDEBAR_REOPEN_WIDTH,
+    updateStore,
     handleSidebarTabChange,
     handleRequestFieldChange,
     createWorkspaceRecord,
@@ -113,6 +115,19 @@ export default function App() {
     }
   }, [store?.storagePath]);
   const storagePath = resolvedPath;
+  const zoomLevelRef = useRef(1);
+  const keybindingMap = useMemo(
+    () => normalizeKeybindingMap(store?.appSettings?.keybindings),
+    [store?.appSettings?.keybindings]
+  );
+
+  const applyZoom = useCallback((value) => {
+    const MIN_ZOOM = 0.6;
+    const MAX_ZOOM = 2;
+    const next = Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, Number(value.toFixed(2))));
+    zoomLevelRef.current = next;
+    document.documentElement.style.zoom = String(next);
+  }, []);
 
   useEffect(() => {
     if (/Macintosh/.test(navigator.userAgent)) {
@@ -121,49 +136,104 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    const MIN_ZOOM = 0.6;
-    const MAX_ZOOM = 2;
-    const STEP = 0.1;
-    let zoomLevel = 1;
+    const ZOOM_STEP = 0.1;
 
-    const applyZoom = (value) => {
-      const next = Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, Number(value.toFixed(2))));
-      zoomLevel = next;
-      document.documentElement.style.zoom = String(next);
-    };
-
-    function handleZoomShortcut(event) {
-      if (!event.ctrlKey && !event.metaKey) return;
-
-      const key = String(event.key || "").toLowerCase();
-      const isZoomIn = key === "+" || key === "=";
-      const isZoomOut = key === "-" || key === "_";
-      const isReset = key === "0";
-
-      if (!isZoomIn && !isZoomOut && !isReset) {
+    function selectTabByOffset(offset) {
+      if (!activeWorkspace || !activeCollection || !activeRequest || requestTabs.length < 2) {
         return;
       }
-
-      event.preventDefault();
-
-      if (isReset) {
-        applyZoom(1);
-        return;
-      }
-
-      if (isZoomIn) {
-        applyZoom(zoomLevel + STEP);
-        return;
-      }
-
-      applyZoom(zoomLevel - STEP);
+      const currentIndex = requestTabs.findIndex((item) => item.name === activeRequest.name);
+      if (currentIndex < 0) return;
+      const nextIndex = (currentIndex + offset + requestTabs.length) % requestTabs.length;
+      const nextTab = requestTabs[nextIndex];
+      if (!nextTab) return;
+      selectRequest(activeWorkspace.name, activeCollection.name, nextTab.name);
     }
 
-    window.addEventListener("keydown", handleZoomShortcut);
+    function runShortcutAction(actionId) {
+      switch (actionId) {
+        case "app.openSettings":
+          openAppSettings();
+          break;
+        case "request.send":
+          if (activeRequest) {
+            handleSend();
+          }
+          break;
+        case "request.cancel":
+          if (isSending) {
+            cancelSend();
+          }
+          break;
+        case "request.new":
+          if (activeWorkspace) {
+            createRequestRecord(activeWorkspace.name, activeCollection?.name ?? "");
+          }
+          break;
+        case "tab.close":
+          if (activeRequest) {
+            closeRequestTab(activeRequest.name);
+          }
+          break;
+        case "tab.next":
+          selectTabByOffset(1);
+          break;
+        case "tab.previous":
+          selectTabByOffset(-1);
+          break;
+        case "sidebar.toggle":
+          updateStore((current) => ({
+            ...current,
+            sidebarCollapsed: !current.sidebarCollapsed,
+            sidebarWidth: Math.max(current.sidebarWidth, SIDEBAR_REOPEN_WIDTH),
+          }));
+          break;
+        case "view.zoomIn":
+          applyZoom(zoomLevelRef.current + ZOOM_STEP);
+          break;
+        case "view.zoomOut":
+          applyZoom(zoomLevelRef.current - ZOOM_STEP);
+          break;
+        case "view.zoomReset":
+          applyZoom(1);
+          break;
+        default:
+          break;
+      }
+    }
+
+    function handleGlobalKeydown(event) {
+      for (const action of KEYBINDING_ACTIONS) {
+        const shortcut = keybindingMap[action.id];
+        if (!shortcut) continue;
+        if (!doesEventMatchShortcut(event, shortcut)) continue;
+        if (isEditableEventTarget(event.target) && !action.allowInInput) return;
+        event.preventDefault();
+        runShortcutAction(action.id);
+        return;
+      }
+    }
+
+    window.addEventListener("keydown", handleGlobalKeydown);
     return () => {
-      window.removeEventListener("keydown", handleZoomShortcut);
+      window.removeEventListener("keydown", handleGlobalKeydown);
     };
-  }, []);
+  }, [
+    activeCollection,
+    activeRequest,
+    activeWorkspace,
+    applyZoom,
+    cancelSend,
+    closeRequestTab,
+    createRequestRecord,
+    handleSend,
+    isSending,
+    keybindingMap,
+    requestTabs,
+    selectRequest,
+    updateStore,
+    SIDEBAR_REOPEN_WIDTH,
+  ]);
 
   const { vars: envVars, refresh: refreshEnvVars } = useEnv(activeWorkspace?.name, activeCollection?.name);
 
