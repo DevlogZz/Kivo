@@ -120,6 +120,51 @@ export default function App() {
     }
   }, []);
 
+  useEffect(() => {
+    const MIN_ZOOM = 0.6;
+    const MAX_ZOOM = 2;
+    const STEP = 0.1;
+    let zoomLevel = 1;
+
+    const applyZoom = (value) => {
+      const next = Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, Number(value.toFixed(2))));
+      zoomLevel = next;
+      document.documentElement.style.zoom = String(next);
+    };
+
+    function handleZoomShortcut(event) {
+      if (!event.ctrlKey && !event.metaKey) return;
+
+      const key = String(event.key || "").toLowerCase();
+      const isZoomIn = key === "+" || key === "=";
+      const isZoomOut = key === "-" || key === "_";
+      const isReset = key === "0";
+
+      if (!isZoomIn && !isZoomOut && !isReset) {
+        return;
+      }
+
+      event.preventDefault();
+
+      if (isReset) {
+        applyZoom(1);
+        return;
+      }
+
+      if (isZoomIn) {
+        applyZoom(zoomLevel + STEP);
+        return;
+      }
+
+      applyZoom(zoomLevel - STEP);
+    }
+
+    window.addEventListener("keydown", handleZoomShortcut);
+    return () => {
+      window.removeEventListener("keydown", handleZoomShortcut);
+    };
+  }, []);
+
   const { vars: envVars, refresh: refreshEnvVars } = useEnv(activeWorkspace?.name, activeCollection?.name);
 
   function handleSelectRequest(workspaceName, collectionName, requestName) {
