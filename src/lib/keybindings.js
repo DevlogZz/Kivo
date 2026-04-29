@@ -2,9 +2,18 @@ const IS_MAC = typeof navigator !== "undefined" && /Mac|iPhone|iPad|iPod/i.test(
 
 export const KEYBINDING_ACTIONS = [
   { id: "app.openSettings", label: "Show App Preferences", section: "General", defaultShortcut: "Mod+,", allowInInput: true },
+  { id: "app.openKeybindings", label: "Show Keybindings", section: "General", defaultShortcut: "Mod+Shift+K", allowInInput: true },
+  { id: "app.openCollectionSettings", label: "Show Collection Settings", section: "General", defaultShortcut: "Mod+Shift+," },
+  { id: "view.toggleTheme", label: "Toggle Theme", section: "General", defaultShortcut: "Mod+Shift+L", allowInInput: true },
+  { id: "collection.duplicate", label: "Duplicate Collection", section: "Collection", defaultShortcut: "Mod+Shift+D" },
+  { id: "collection.delete", label: "Delete Collection", section: "Collection", defaultShortcut: "Mod+Shift+Delete" },
   { id: "request.send", label: "Send Request", section: "Request", defaultShortcut: "Mod+Enter", allowInInput: true },
   { id: "request.cancel", label: "Cancel Send", section: "Request", defaultShortcut: "Mod+Shift+Enter", allowInInput: true },
   { id: "request.new", label: "Create HTTP Request", section: "Request", defaultShortcut: "Mod+N" },
+  { id: "request.duplicate", label: "Duplicate Request", section: "Request", defaultShortcut: "Mod+D" },
+  { id: "request.copy", label: "Copy Request", section: "Request", defaultShortcut: "Mod+Shift+C" },
+  { id: "request.paste", label: "Paste Request", section: "Request", defaultShortcut: "Mod+Shift+V" },
+  { id: "request.delete", label: "Delete Request", section: "Request", defaultShortcut: "Mod+Delete" },
   { id: "tab.close", label: "Close Request Tab", section: "Tabs", defaultShortcut: "Mod+W" },
   { id: "tab.next", label: "Next Request Tab", section: "Tabs", defaultShortcut: "Mod+Tab" },
   { id: "tab.previous", label: "Previous Request Tab", section: "Tabs", defaultShortcut: "Mod+Shift+Tab" },

@@ -52,6 +52,7 @@ export default function App() {
   const [showWorkspaceModal, setShowWorkspaceModal] = useState(false);
 
   const [settingsConfig, setSettingsConfig] = useState({ tab: "Overview", envTab: "workspace" });
+  const [appSettingsTab, setAppSettingsTab] = useState("Storage");
 
   const [forcedView, setForcedView] = useState(null);
 
@@ -116,6 +117,7 @@ export default function App() {
   }, [store?.storagePath]);
   const storagePath = resolvedPath;
   const zoomLevelRef = useRef(1);
+  const requestClipboardRef = useRef(null);
   const keybindingMap = useMemo(
     () => normalizeKeybindingMap(store?.appSettings?.keybindings),
     [store?.appSettings?.keybindings]
@@ -155,6 +157,27 @@ export default function App() {
         case "app.openSettings":
           openAppSettings();
           break;
+        case "app.openKeybindings":
+          openAppSettings("Keybindings");
+          break;
+        case "app.openCollectionSettings":
+          if (activeWorkspace && activeCollection) {
+            openCollectionSettings("Overview");
+          }
+          break;
+        case "view.toggleTheme":
+          toggleTheme();
+          break;
+        case "collection.duplicate":
+          if (activeWorkspace && activeCollection) {
+            duplicateCollectionRecord(activeWorkspace.name, activeCollection.name);
+          }
+          break;
+        case "collection.delete":
+          if (activeWorkspace && activeCollection) {
+            deleteCollectionRecord(activeWorkspace.name, activeCollection.name);
+          }
+          break;
         case "request.send":
           if (activeRequest) {
             handleSend();
@@ -168,6 +191,26 @@ export default function App() {
         case "request.new":
           if (activeWorkspace) {
             createRequestRecord(activeWorkspace.name, activeCollection?.name ?? "");
+          }
+          break;
+        case "request.duplicate":
+          if (activeWorkspace && activeCollection && activeRequest) {
+            duplicateRequestRecord(activeWorkspace.name, activeCollection.name, activeRequest.name);
+          }
+          break;
+        case "request.copy":
+          if (activeRequest) {
+            requestClipboardRef.current = JSON.parse(JSON.stringify(activeRequest));
+          }
+          break;
+        case "request.paste":
+          if (activeWorkspace && activeCollection && requestClipboardRef.current) {
+            pasteRequestRecord(activeWorkspace.name, activeCollection.name, requestClipboardRef.current);
+          }
+          break;
+        case "request.delete":
+          if (activeWorkspace && activeCollection && activeRequest) {
+            deleteRequestRecord(activeWorkspace.name, activeCollection.name, activeRequest.name);
           }
           break;
         case "tab.close":
@@ -226,11 +269,17 @@ export default function App() {
     cancelSend,
     closeRequestTab,
     createRequestRecord,
+    deleteRequestRecord,
+    deleteCollectionRecord,
+    duplicateCollectionRecord,
+    duplicateRequestRecord,
     handleSend,
     isSending,
     keybindingMap,
+    pasteRequestRecord,
     requestTabs,
     selectRequest,
+    toggleTheme,
     updateStore,
     SIDEBAR_REOPEN_WIDTH,
   ]);
@@ -251,7 +300,8 @@ export default function App() {
 
   }
 
-  function openAppSettings() {
+  function openAppSettings(tab = "Storage") {
+    setAppSettingsTab(tab);
     handleSidebarTabChange("settings");
     setForcedView("appSettings");
   }
@@ -367,6 +417,7 @@ export default function App() {
         <main className="flex min-w-0 flex-1 flex-col overflow-hidden">
           {showAppSettings ? (
             <AppSettingsPage
+              initialTab={appSettingsTab}
               storagePath={storagePath}
               onStoragePathChanged={(nextPath) => {
                 setResolvedPath(nextPath);
