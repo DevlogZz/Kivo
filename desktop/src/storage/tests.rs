@@ -5,8 +5,9 @@ use tempfile::TempDir;
 
 use super::{
     build_export_value, fs_get_env_vars, fs_load_workspaces, fs_save_collection_config,
-    fs_save_env_vars, fs_save_workspaces, load_collection_config_from_path,
-    parse_collection_content, parse_env_file_ordered, sanitize_name,
+    fs_save_env_vars, fs_save_workspaces, kivo_collection_export_value,
+    load_collection_config_from_path, parse_collection_content, parse_env_file_ordered,
+    sanitize_name, serialize_export_value,
     write_env_file, AuthRecord, CollectionConfig, CollectionRecord, CollectionScripts, EnvVar,
     ExportEnvOptions, KeyValueRow, OAuthConfig, RequestRecord, RequestTextOrJson, ResponseMeta,
     SavedResponse, WorkspaceRecord,
@@ -248,6 +249,108 @@ mod protocol_and_import_export_tests {
         assert_eq!(super::super::export::normalize_export_format("swagger"), "swagger2.0");
         assert_eq!(super::super::export::normalize_export_format("yaml"), "bruno");
         assert_eq!(super::super::export::normalize_export_format("postman"), "postman");
+    }
+
+    #[test]
+    fn export_then_import_roundtrip_works_for_all_supported_formats() {
+        let mut http_req = make_request("List users");
+        http_req.request_mode = "http".to_string();
+        http_req.method = "GET".to_string();
+        http_req.url = "https://api.example.com/users?limit=10".to_string();
+
+        let mut graphql_req = make_request("Health query");
+        graphql_req.request_mode = "graphql".to_string();
+        graphql_req.method = "POST".to_string();
+        graphql_req.body_type = "graphql".to_string();
+        graphql_req.url = "https://api.example.com/graphql".to_string();
+        graphql_req.body = RequestTextOrJson::Text("query { health }".to_string());
+
+        let requests = vec![http_req, graphql_req];
+        let options = ExportEnvOptions::default();
+
+        for format in ["postman", "openapi3.0", "swagger2.0", "bruno"] {
+            let export = build_export_value(format, "Roundtrip Suite", &requests, &options).unwrap();
+            let content = serialize_export_value(format, &export).unwrap();
+            let imported = parse_collection_content(&content).unwrap();
+
+            assert!(
+                imported.collection.requests.len() >= 2,
+                "expected at least 2 requests for format {format}"
+            );
+
+            let methods: Vec<&str> = imported
+                .collection
+                .requests
+                .iter()
+                .map(|request| request.method.as_str())
+                .collect();
+
+            assert!(methods.contains(&"GET"), "expected GET method after {format} roundtrip");
+            assert!(methods.contains(&"POST"), "expected POST method after {format} roundtrip");
+        }
+    }
+
+    #[test]
+    fn non_kivo_exports_reject_when_only_unsupported_modes_exist() {
+        let mut grpc_req = make_request("gRPC only");
+        grpc_req.request_mode = "grpc".to_string();
+        grpc_req.method = "POST".to_string();
+        grpc_req.grpc_method_path = "/book.BookService/GetBook".to_string();
+
+        let options = ExportEnvOptions::default();
+        let result = build_export_value("postman", "Unsupported", &[grpc_req], &options);
+
+        assert!(result.is_err());
+        let message = result.err().unwrap();
+        assert!(message.contains("No exportable requests found"));
+    }
+
+    #[test]
+    fn kivo_collection_export_import_roundtrip_keeps_all_protocol_modes() {
+        let mut http_req = make_request("HTTP request");
+        http_req.request_mode = "http".to_string();
+
+        let mut graphql_req = make_request("GraphQL request");
+        graphql_req.request_mode = "graphql".to_string();
+
+        let mut grpc_req = make_request("gRPC request");
+        grpc_req.request_mode = "grpc".to_string();
+        grpc_req.grpc_method_path = "/book.BookService/GetBook".to_string();
+
+        let mut ws_req = make_request("WebSocket request");
+        ws_req.request_mode = "websocket".to_string();
+
+        let mut sse_req = make_request("SSE request");
+        sse_req.request_mode = "sse".to_string();
+
+        let mut socketio_req = make_request("Socket.IO request");
+        socketio_req.request_mode = "socketio".to_string();
+
+        let collection = col(
+            "Protocols",
+            vec![http_req, graphql_req, grpc_req, ws_req, sse_req, socketio_req],
+        );
+
+        let value = kivo_collection_export_value(&collection);
+        let content = serialize_export_value("kivo", &value).unwrap();
+        let imported = parse_collection_content(&content).unwrap();
+
+        assert_eq!(imported.detected_format, "kivo");
+        assert_eq!(imported.collection.requests.len(), 6);
+
+        let imported_modes: Vec<&str> = imported
+            .collection
+            .requests
+            .iter()
+            .map(|request| request.request_mode.as_str())
+            .collect();
+
+        assert!(imported_modes.contains(&"http"));
+        assert!(imported_modes.contains(&"graphql"));
+        assert!(imported_modes.contains(&"grpc"));
+        assert!(imported_modes.contains(&"websocket"));
+        assert!(imported_modes.contains(&"sse"));
+        assert!(imported_modes.contains(&"socketio"));
     }
 }
 
