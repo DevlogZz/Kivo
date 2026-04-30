@@ -1064,27 +1064,47 @@ function ScriptsPanel({ state, onChange }) {
   );
 }
 
-function buildResponseErrorTrace(response, fallbackTitle = "Request failed") {
+function buildGrpcErrorTrace(response, fallbackTitle = "gRPC request failed") {
   const status = Number(response?.status || 0);
   const badge = String(response?.badge || response?.statusText || "").trim();
   const savedAt = String(response?.savedAt || "").trim();
   const method = String(response?.meta?.method || "").trim();
   const url = String(response?.meta?.url || "").trim();
-  const headers = response?.headers && typeof response.headers === "object" ? response.headers : {};
   const body = String(response?.rawBody || response?.body || "").trim();
 
-  const lines = [
-    `Error: ${fallbackTitle || "Request failed"}`,
-    status ? `Status: ${status}${badge ? ` (${badge})` : ""}` : (badge ? `Status: ${badge}` : "Status: Unknown"),
-    method || url ? `Request: ${[method || "?", url || "-"].join(" ")}` : "Request: -",
-    savedAt ? `Time: ${savedAt}` : "Time: -",
-    "",
-    "Headers:",
-    Object.keys(headers).length ? JSON.stringify(headers, null, 2) : "(none)",
-    "",
-    "Body:",
-    body || "(empty)"
-  ];
+  const bodyLines = body
+    .split(/\r?\n/)
+    .map((line) => line.trimEnd())
+    .filter(Boolean);
+
+  const firstBodyLine = bodyLines[0] || "";
+  const normalizedFirstLine = firstBodyLine.replace(/^error:\s*/i, "").trim();
+  const titleLine = String(fallbackTitle || "").trim();
+  const errorLine = normalizedFirstLine || titleLine || "gRPC request failed";
+  const stackLines = bodyLines.filter((line) => /^\s*at\s+/.test(line));
+
+  const lines = [`Error: ${errorLine}`];
+
+  if (method || url) {
+    lines.push(`    at grpc.request (${method || "unknown-method"} ${url || "-"})`);
+  }
+
+  if (status || badge || savedAt) {
+    const statusPart = status
+      ? `${status}${badge ? ` ${badge}` : ""}`
+      : (badge || "Unknown status");
+    const timePart = savedAt ? ` | ${savedAt}` : "";
+    lines.push(`    at grpc.response (${statusPart}${timePart})`);
+  }
+
+  if (stackLines.length > 0) {
+    lines.push(...stackLines.map((line) => `    ${line.trim()}`));
+  } else if (body) {
+    const compactCause = bodyLines.join(" | ");
+    if (compactCause && compactCause.toLowerCase() !== errorLine.toLowerCase()) {
+      lines.push(`    at cause (${compactCause})`);
+    }
+  }
 
   return lines.join("\n");
 }
@@ -1813,6 +1833,9 @@ export function RequestPane({
   const [sendErrorTitle, setSendErrorTitle] = useState("");
   const [sendErrorTrace, setSendErrorTrace] = useState("");
   const seenErrorKeyRef = useRef("");
+  const grpcSendSequenceRef = useRef(0);
+  const grpcHandledErrorSequenceRef = useRef(0);
+  const wasGrpcSendingRef = useRef(false);
   const grpcMethodRecoveryRef = useRef({ requestKey: "", shouldRecover: false, attempted: false });
   const activeWsState = wsState ?? {
     connected: false,
@@ -1902,6 +1925,15 @@ export function RequestPane({
       attempted: false
     };
   }, [collectionName, isGrpcRequest, state.grpcMethodPath, state.grpcProtoFilePath, state.name, workspaceName]);
+
+  useEffect(() => {
+    const isGrpcSending = isGrpcRequest && isSending;
+    if (!wasGrpcSendingRef.current && isGrpcSending) {
+      grpcSendSequenceRef.current += 1;
+      seenErrorKeyRef.current = "";
+    }
+    wasGrpcSendingRef.current = isGrpcSending;
+  }, [isGrpcRequest, isSending]);
 
   useEffect(() => {
     const timer = setTimeout(() => setDebouncedState(state), 500);
@@ -2039,6 +2071,20 @@ export function RequestPane({
   }, [grpcAllKnownProtoPaths, grpcDirectProtoFiles, isGrpcRequest, onChange, state.grpcProtoFilePath]);
 
   useEffect(() => {
+    if (!isGrpcRequest) {
+      setShowSendErrorModal(false);
+      return;
+    }
+
+    const hasGrpcSendInSession = grpcSendSequenceRef.current > 0;
+    if (!hasGrpcSendInSession) {
+      return;
+    }
+
+    if (grpcHandledErrorSequenceRef.current === grpcSendSequenceRef.current) {
+      return;
+    }
+
     const status = Number(response?.status || 0);
     const savedAt = String(response?.savedAt || "");
     const bodyText = String(response?.rawBody || response?.body || "").trim();
@@ -2053,11 +2099,22 @@ export function RequestPane({
     const key = `${savedAt}-${status}-${bodyText.slice(0, 80)}`;
     if (seenErrorKeyRef.current === key) return;
     seenErrorKeyRef.current = key;
+    grpcHandledErrorSequenceRef.current = grpcSendSequenceRef.current;
     const firstLine = bodyText.split(/\r?\n/)[0] || response?.statusText || "Request failed";
     setSendErrorTitle(firstLine);
-    setSendErrorTrace(buildResponseErrorTrace(response, firstLine));
+    setSendErrorTrace(buildGrpcErrorTrace(response, firstLine));
     setShowSendErrorModal(true);
-  }, [response?.status, response?.savedAt, response?.rawBody, response?.body, response?.statusText, response?.badge, response?.headers, response?.meta]);
+  }, [
+    isGrpcRequest,
+    response?.status,
+    response?.savedAt,
+    response?.rawBody,
+    response?.body,
+    response?.statusText,
+    response?.badge,
+    response?.headers,
+    response?.meta
+  ]);
 
   useEffect(() => {
     if (!isGrpcRequest) return;
@@ -2746,7 +2803,7 @@ export function RequestPane({
       />
 
       <SendErrorModal
-        open={showSendErrorModal}
+        open={isGrpcRequest && showSendErrorModal}
         title={sendErrorTitle}
         stackTrace={sendErrorTrace}
         onClose={() => setShowSendErrorModal(false)}
