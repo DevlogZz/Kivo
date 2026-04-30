@@ -46,6 +46,94 @@ function normalizeFolderPath(path) {
     .join("/");
 }
 
+function toErrorText(error) {
+  if (typeof error === "string") return error;
+  if (typeof error?.message === "string" && error.message.trim()) return error.message;
+  if (typeof error?.toString === "function") return error.toString();
+  return "";
+}
+
+function buildFriendlyRequestErrorMessage(error, fallbackMessage = "Request failed") {
+  const raw = String(toErrorText(error) || "").trim();
+  const normalized = raw.replace(/^error:\s*/i, "").trim();
+  const lower = normalized.toLowerCase();
+
+  if (!normalized) {
+    return `Error: ${fallbackMessage}`;
+  }
+
+  if (
+    lower.includes("connection refused")
+    || lower.includes("actively refused")
+    || lower.includes("tcp connect error")
+    || lower.includes("failed to connect")
+    || lower.includes("couldn't connect")
+    || lower.includes("could not connect")
+  ) {
+    return "Error: Couldn't connect to server";
+  }
+
+  if (
+    lower.includes("timed out")
+    || lower.includes("timeout")
+    || lower.includes("deadline has elapsed")
+  ) {
+    return "Error: Request timed out";
+  }
+
+  if (
+    lower.includes("failed to lookup address")
+    || lower.includes("could not resolve host")
+    || lower.includes("no such host")
+    || lower.includes("name or service not known")
+    || lower.includes("dns")
+  ) {
+    return "Error: Couldn't resolve host";
+  }
+
+  if (
+    lower.includes("certificate")
+    || lower.includes("tls")
+    || lower.includes("ssl")
+    || lower.includes("x509")
+  ) {
+    return "Error: TLS/SSL certificate error";
+  }
+
+  if (lower.includes("proxy") || lower.includes("tunnel")) {
+    return "Error: Proxy connection failed";
+  }
+
+  if (lower.includes("invalid url") || lower.includes("relative url without a base")) {
+    return "Error: Invalid request URL";
+  }
+
+  if (
+    lower.includes("network is unreachable")
+    || lower.includes("connection reset")
+    || lower.includes("broken pipe")
+  ) {
+    return "Error: Network connection failed";
+  }
+
+  const causedByIndex = lower.indexOf("caused by:");
+  const detailSource = causedByIndex >= 0
+    ? normalized.slice(causedByIndex + "caused by:".length).trim()
+    : normalized;
+  const detail = detailSource
+    .split(/\r?\n/)[0]
+    .replace(/\s*\|\s*/g, " ")
+    .replace(/\s*->\s*/g, " -> ")
+    .replace(/\(os error\s+\d+\)/ig, "")
+    .trim();
+
+  if (!detail) {
+    return `Error: ${fallbackMessage}`;
+  }
+
+  return `Error: ${detail}`;
+}
+
 function clearOAuthTokensFromAuth(auth) {
   if (!auth || typeof auth !== "object") return auth;
   if (auth.type !== "oauth2" || !auth.oauth2 || typeof auth.oauth2 !== "object") {
@@ -2457,7 +2545,7 @@ export function useWorkspaceStore() {
           return;
         }
 
-        const message = error?.toString?.() || "gRPC request failed";
+        const message = buildFriendlyRequestErrorMessage(error, "gRPC request failed");
         const savedAt = formatSavedAt();
         updateStore((current) => updateRequestWithLocalResponse(current, activeRequest.name, {
           status: 500,
@@ -2764,7 +2852,7 @@ export function useWorkspaceStore() {
         return;
       }
 
-      const message = error?.toString?.() || "Request failed";
+      const message = buildFriendlyRequestErrorMessage(error, "Request failed");
 
       const savedAt = formatSavedAt();
       const savedResponse = {
