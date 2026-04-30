@@ -311,6 +311,7 @@ pub struct RequestRecord {
     pub active_response_tab: String,
     #[serde(default)]
     pub response_body_view: String,
+    #[serde(default)]
     pub last_response: Option<SavedResponse>,
 }
 

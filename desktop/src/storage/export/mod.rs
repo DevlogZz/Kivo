@@ -2,6 +2,7 @@ use crate::storage::models::{
     CollectionRecord, FolderSettingsRecord, KeyValueRow, OAuthParamRow, RequestRecord,
     RequestTextOrJson,
 };
+use serde_json::{Map, Value};
 use std::collections::BTreeMap;
 
 fn contains_template_var(value: &str) -> bool {
@@ -169,6 +170,350 @@ pub fn sanitize_request_for_export(request: &RequestRecord) -> RequestRecord {
     sanitized
 }
 
+fn insert_non_empty_string(map: &mut Map<String, Value>, key: &str, value: &str) {
+    if !value.trim().is_empty() {
+        map.insert(key.to_string(), Value::String(value.to_string()));
+    }
+}
+
+fn key_value_rows_to_compact(rows: &[KeyValueRow]) -> Vec<Value> {
+    rows.iter()
+        .filter(|row| !row.key.trim().is_empty() || !row.value.trim().is_empty())
+        .map(|row| {
+            let mut item = Map::new();
+            item.insert("key".to_string(), Value::String(row.key.clone()));
+            item.insert("value".to_string(), Value::String(row.value.clone()));
+            item.insert("enabled".to_string(), Value::Bool(row.enabled));
+            Value::Object(item)
+        })
+        .collect()
+}
+
+fn oauth_to_compact(oauth: &crate::storage::models::OAuthConfig) -> Option<Value> {
+    let mut map = Map::new();
+
+    insert_non_empty_string(&mut map, "grantType", &oauth.grant_type);
+    insert_non_empty_string(&mut map, "authUrl", &oauth.auth_url);
+    insert_non_empty_string(&mut map, "tokenUrl", &oauth.token_url);
+    insert_non_empty_string(&mut map, "callbackUrl", &oauth.callback_url);
+    insert_non_empty_string(&mut map, "clientId", &oauth.client_id);
+    insert_non_empty_string(&mut map, "clientSecret", &oauth.client_secret);
+    insert_non_empty_string(&mut map, "scope", &oauth.scope);
+    insert_non_empty_string(&mut map, "audience", &oauth.audience);
+    insert_non_empty_string(&mut map, "resource", &oauth.resource);
+    insert_non_empty_string(&mut map, "authorizationCode", &oauth.authorization_code);
+    insert_non_empty_string(&mut map, "accessToken", &oauth.access_token);
+    insert_non_empty_string(&mut map, "refreshToken", &oauth.refresh_token);
+    insert_non_empty_string(&mut map, "tokenType", &oauth.token_type);
+    insert_non_empty_string(&mut map, "expiresAt", &oauth.expires_at);
+    insert_non_empty_string(&mut map, "username", &oauth.username);
+    insert_non_empty_string(&mut map, "password", &oauth.password);
+    if !oauth.use_pkce {
+        map.insert("usePkce".to_string(), Value::Bool(false));
+    }
+    insert_non_empty_string(&mut map, "codeVerifier", &oauth.code_verifier);
+    insert_non_empty_string(&mut map, "state", &oauth.state);
+    insert_non_empty_string(&mut map, "clientAuthMethod", &oauth.client_auth_method);
+
+    let extra = oauth
+        .extra_token_params
+        .iter()
+        .filter(|row| !row.key.trim().is_empty() || !row.value.trim().is_empty())
+        .map(|row| {
+            let mut item = Map::new();
+            item.insert("key".to_string(), Value::String(row.key.clone()));
+            item.insert("value".to_string(), Value::String(row.value.clone()));
+            item.insert("enabled".to_string(), Value::Bool(row.enabled));
+            Value::Object(item)
+        })
+        .collect::<Vec<_>>();
+    if !extra.is_empty() {
+        map.insert("extraTokenParams".to_string(), Value::Array(extra));
+    }
+
+    insert_non_empty_string(&mut map, "lastError", &oauth.last_error);
+    insert_non_empty_string(&mut map, "lastWarning", &oauth.last_warning);
+    insert_non_empty_string(&mut map, "lastStatus", &oauth.last_status);
+
+    if map.is_empty() {
+        None
+    } else {
+        Some(Value::Object(map))
+    }
+}
+
+fn auth_to_compact(auth: &crate::storage::models::AuthRecord) -> Option<Value> {
+    let auth_type = auth.auth_type.trim().to_lowercase();
+    if auth_type.is_empty() || auth_type == "none" {
+        return None;
+    }
+
+    let mut map = Map::new();
+    map.insert("type".to_string(), Value::String(auth.auth_type.clone()));
+    insert_non_empty_string(&mut map, "token", &auth.token);
+    insert_non_empty_string(&mut map, "username", &auth.username);
+    insert_non_empty_string(&mut map, "password", &auth.password);
+    insert_non_empty_string(&mut map, "apiKeyName", &auth.api_key_name);
+    insert_non_empty_string(&mut map, "apiKeyValue", &auth.api_key_value);
+    if !auth.api_key_in.trim().is_empty() && auth.api_key_in != "header" {
+        map.insert("apiKeyIn".to_string(), Value::String(auth.api_key_in.clone()));
+    }
+    if let Some(oauth) = oauth_to_compact(&auth.oauth2) {
+        map.insert("oauth2".to_string(), oauth);
+    }
+    Some(Value::Object(map))
+}
+
+fn request_text_or_json_to_compact(value: &RequestTextOrJson) -> Option<Value> {
+    match value {
+        RequestTextOrJson::Text(text) => {
+            if text.trim().is_empty() {
+                None
+            } else {
+                Some(Value::String(text.clone()))
+            }
+        }
+        RequestTextOrJson::Json(json) => {
+            if json.is_null() {
+                None
+            } else {
+                Some(json.clone())
+            }
+        }
+    }
+}
+
+fn graphql_variables_to_compact(value: &RequestTextOrJson) -> Option<Value> {
+    match value {
+        RequestTextOrJson::Text(text) => {
+            let trimmed = text.trim();
+            if trimmed.is_empty() || trimmed == "{}" {
+                None
+            } else {
+                Some(Value::String(text.clone()))
+            }
+        }
+        RequestTextOrJson::Json(json) => match json {
+            Value::Object(map) if map.is_empty() => None,
+            Value::Null => None,
+            _ => Some(json.clone()),
+        },
+    }
+}
+
+fn compact_request_name(request: &RequestRecord) -> String {
+    let name = request.name.trim();
+    if !name.is_empty() {
+        return request.name.clone();
+    }
+
+    let method = if request.method.trim().is_empty() {
+        "GET"
+    } else {
+        request.method.trim()
+    };
+    let target = if request.url.trim().is_empty() {
+        "/"
+    } else {
+        request.url.trim()
+    };
+    format!("{} {}", method, target)
+}
+
+fn request_to_compact_kivo_value(request: &RequestRecord) -> Value {
+    let mut map = Map::new();
+    map.insert("name".to_string(), Value::String(compact_request_name(request)));
+    insert_non_empty_string(&mut map, "requestMode", &request.request_mode);
+    insert_non_empty_string(&mut map, "method", &request.method);
+    insert_non_empty_string(&mut map, "url", &request.url);
+
+    let query_params = key_value_rows_to_compact(&request.query_params);
+    if !query_params.is_empty() {
+        map.insert("queryParams".to_string(), Value::Array(query_params));
+    }
+    let headers = key_value_rows_to_compact(&request.headers);
+    if !headers.is_empty() {
+        map.insert("headers".to_string(), Value::Array(headers));
+    }
+
+    if let Some(auth) = auth_to_compact(&request.auth) {
+        map.insert("auth".to_string(), auth);
+    }
+
+    if !request.body_type.trim().is_empty() && request.body_type != "none" {
+        map.insert("bodyType".to_string(), Value::String(request.body_type.clone()));
+    }
+    if let Some(body) = request_text_or_json_to_compact(&request.body) {
+        map.insert("body".to_string(), body);
+    }
+
+    let body_rows = key_value_rows_to_compact(&request.body_rows);
+    if !body_rows.is_empty() {
+        map.insert("bodyRows".to_string(), Value::Array(body_rows));
+    }
+    insert_non_empty_string(&mut map, "bodyFilePath", &request.body_file_path);
+
+    if let Some(graphql_variables) = graphql_variables_to_compact(&request.graphql_variables) {
+        map.insert("graphqlVariables".to_string(), graphql_variables);
+    }
+
+    insert_non_empty_string(&mut map, "grpcProtoFilePath", &request.grpc_proto_file_path);
+    insert_non_empty_string(&mut map, "grpcMethodPath", &request.grpc_method_path);
+    if !request.grpc_streaming_mode.trim().is_empty() && request.grpc_streaming_mode != "bidi" {
+        map.insert(
+            "grpcStreamingMode".to_string(),
+            Value::String(request.grpc_streaming_mode.clone()),
+        );
+    }
+    if !request.grpc_direct_proto_files.is_empty() {
+        map.insert(
+            "grpcDirectProtoFiles".to_string(),
+            Value::Array(
+                request
+                    .grpc_direct_proto_files
+                    .iter()
+                    .map(|path| Value::String(path.clone()))
+                    .collect(),
+            ),
+        );
+    }
+    if !request.grpc_proto_directories.is_empty() {
+        map.insert(
+            "grpcProtoDirectories".to_string(),
+            Value::Array(
+                request
+                    .grpc_proto_directories
+                    .iter()
+                    .map(|entry| {
+                        let mut item = Map::new();
+                        insert_non_empty_string(&mut item, "path", &entry.path);
+                        if !entry.files.is_empty() {
+                            item.insert(
+                                "files".to_string(),
+                                Value::Array(
+                                    entry
+                                        .files
+                                        .iter()
+                                        .map(|file| Value::String(file.clone()))
+                                        .collect(),
+                                ),
+                            );
+                        }
+                        Value::Object(item)
+                    })
+                    .collect(),
+            ),
+        );
+    }
+
+    insert_non_empty_string(&mut map, "docs", &request.docs);
+    if !request.tags.is_empty() {
+        map.insert(
+            "tags".to_string(),
+            Value::Array(request.tags.iter().map(|tag| Value::String(tag.clone())).collect()),
+        );
+    }
+    if !request.url_encoding {
+        map.insert("urlEncoding".to_string(), Value::Bool(false));
+    }
+    if !request.follow_redirects {
+        map.insert("followRedirects".to_string(), Value::Bool(false));
+    }
+    if request.max_redirects != 5 {
+        map.insert(
+            "maxRedirects".to_string(),
+            Value::Number(serde_json::Number::from(request.max_redirects)),
+        );
+    }
+    if request.timeout_ms > 0 {
+        map.insert(
+            "timeoutMs".to_string(),
+            Value::Number(serde_json::Number::from(request.timeout_ms)),
+        );
+    }
+    if !request.use_cookie_jar {
+        map.insert("useCookieJar".to_string(), Value::Bool(false));
+    }
+    insert_non_empty_string(&mut map, "folderPath", &request.folder_path);
+
+    insert_non_empty_string(&mut map, "scriptPreRequest", &request.script_pre_request);
+    insert_non_empty_string(&mut map, "scriptAfterResponse", &request.script_after_response);
+
+    Value::Object(map)
+}
+
+pub fn kivo_request_export_value(request: &RequestRecord) -> Value {
+    serde_json::json!({
+        "kivo": "1.0",
+        "type": "request",
+        "request": request_to_compact_kivo_value(request),
+    })
+}
+
+pub fn kivo_collection_export_value(collection: &CollectionRecord) -> Value {
+    let mut collection_map = Map::new();
+    let collection_name = if collection.name.trim().is_empty() {
+        "Kivo Collection".to_string()
+    } else {
+        collection.name.clone()
+    };
+    collection_map.insert("name".to_string(), Value::String(collection_name));
+
+    if !collection.folders.is_empty() {
+        collection_map.insert(
+            "folders".to_string(),
+            Value::Array(
+                collection
+                    .folders
+                    .iter()
+                    .map(|folder| Value::String(folder.clone()))
+                    .collect(),
+            ),
+        );
+    }
+
+    if !collection.folder_settings.is_empty() {
+        collection_map.insert(
+            "folderSettings".to_string(),
+            Value::Array(
+                collection
+                    .folder_settings
+                    .iter()
+                    .map(|setting| {
+                        let mut item = Map::new();
+                        insert_non_empty_string(&mut item, "path", &setting.path);
+                        let headers = key_value_rows_to_compact(&setting.default_headers);
+                        if !headers.is_empty() {
+                            item.insert("defaultHeaders".to_string(), Value::Array(headers));
+                        }
+                        if let Some(auth) = auth_to_compact(&setting.default_auth) {
+                            item.insert("defaultAuth".to_string(), auth);
+                        }
+                        Value::Object(item)
+                    })
+                    .collect(),
+            ),
+        );
+    }
+
+    collection_map.insert(
+        "requests".to_string(),
+        Value::Array(
+            collection
+                .requests
+                .iter()
+                .map(request_to_compact_kivo_value)
+                .collect(),
+        ),
+    );
+
+    serde_json::json!({
+        "kivo": "1.0",
+        "type": "collection",
+        "collection": collection_map,
+    })
+}
+
 pub fn prepare_request_for_export(request: &RequestRecord) -> Result<RequestRecord, String> {
     if !is_exportable_request_mode(&request.request_mode) {
         return Err(
@@ -178,6 +523,10 @@ pub fn prepare_request_for_export(request: &RequestRecord) -> Result<RequestReco
     }
 
     Ok(sanitize_request_for_export(request))
+}
+
+pub fn prepare_kivo_request_for_export(request: &RequestRecord) -> RequestRecord {
+    sanitize_request_for_export(request)
 }
 
 pub fn prepare_requests_for_export(requests: &[RequestRecord]) -> Vec<RequestRecord> {
@@ -565,21 +914,13 @@ pub fn build_export_value(
     match normalized.as_str() {
         "kivo" => {
             if export_requests.len() == 1 {
-                Ok(serde_json::json!({
-                    "kivo": "1.0",
-                    "type": "request",
-                    "request": export_requests[0],
-                }))
+                Ok(kivo_request_export_value(&export_requests[0]))
             } else {
-                Ok(serde_json::json!({
-                    "kivo": "1.0",
-                    "type": "collection",
-                    "collection": {
-                        "name": name,
-                        "folders": [],
-                        "folderSettings": [],
-                        "requests": export_requests,
-                    }
+                Ok(kivo_collection_export_value(&CollectionRecord {
+                    name: name.to_string(),
+                    folders: vec![],
+                    folder_settings: vec![],
+                    requests: export_requests,
                 }))
             }
         }
