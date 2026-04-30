@@ -218,7 +218,7 @@ function ImportExportModal({ open: isOpen, mode, scope, targetName, defaultFileN
             {mode === "import" ? (
               <p className="mt-1 text-[11px] text-muted-foreground">{SUPPORTED_IMPORT_FORMATS_LABEL}</p>
             ) : null}
-            {mode === "export" && scope === "collection" && collectionExportNotice ? (
+            {mode === "export" && scope === "collection" && format !== "kivo" && collectionExportNotice ? (
               <p className="mt-1 text-[11px] text-amber-300">{collectionExportNotice}</p>
             ) : null}
           </div>

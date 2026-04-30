@@ -239,7 +239,11 @@ pub fn prepare_collection_for_kivo_export(collection: &CollectionRecord) -> Coll
             next
         })
         .collect();
-    sanitized.requests = prepare_requests_for_export(&collection.requests);
+    sanitized.requests = collection
+        .requests
+        .iter()
+        .map(sanitize_request_for_export)
+        .collect();
     sanitized
 }
 
