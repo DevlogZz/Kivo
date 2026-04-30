@@ -96,7 +96,45 @@ const CURL_IMPORT_TARGETS = [
   { value: REQUEST_MODES.GRAPHQL, label: "GraphQL" }
 ];
 
-function ImportExportModal({ open: isOpen, mode, scope, targetName, defaultFileName, onClose, onConfirm }) {
+const COLLECTION_EXPORT_EXCLUDED_MODE_META = [
+  { value: REQUEST_MODES.GRPC, label: "gRPC" },
+  { value: REQUEST_MODES.WEBSOCKET, label: "WebSocket" },
+  { value: REQUEST_MODES.SOCKET_IO, label: "Socket.IO" },
+  { value: REQUEST_MODES.SSE, label: "Event Stream" }
+];
+
+function buildCollectionExportExclusionNotice(collection) {
+  if (!collection || !Array.isArray(collection.requests) || collection.requests.length === 0) {
+    return "";
+  }
+
+  const countsByMode = new Map();
+  for (const request of collection.requests) {
+    const mode = String(request?.requestMode || "").trim().toLowerCase();
+    if (!mode) continue;
+    countsByMode.set(mode, (countsByMode.get(mode) || 0) + 1);
+  }
+
+  const modeParts = COLLECTION_EXPORT_EXCLUDED_MODE_META
+    .map((item) => {
+      const count = countsByMode.get(item.value);
+      if (!count) return null;
+      return count > 1 ? `${item.label} (${count})` : item.label;
+    })
+    .filter(Boolean);
+
+  if (modeParts.length === 0) {
+    return "";
+  }
+
+  const totalExcluded = COLLECTION_EXPORT_EXCLUDED_MODE_META
+    .reduce((sum, item) => sum + (countsByMode.get(item.value) || 0), 0);
+
+  const requestWord = totalExcluded === 1 ? "request" : "requests";
+  return `This collection contains unsupported request types: ${modeParts.join(", ")}. ${totalExcluded} ${requestWord} will be excluded from export.`;
+}
+
+function ImportExportModal({ open: isOpen, mode, scope, targetName, defaultFileName, collectionExportNotice, onClose, onConfirm }) {
   const [filePath, setFilePath] = useState("");
   const [format, setFormat] = useState("postman");
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -179,6 +217,9 @@ function ImportExportModal({ open: isOpen, mode, scope, targetName, defaultFileN
             <p className="text-[12px] text-muted-foreground">{targetName || `Selected ${scopeLabel.toLowerCase()}`}</p>
             {mode === "import" ? (
               <p className="mt-1 text-[11px] text-muted-foreground">{SUPPORTED_IMPORT_FORMATS_LABEL}</p>
+            ) : null}
+            {mode === "export" && scope === "collection" && collectionExportNotice ? (
+              <p className="mt-1 text-[11px] text-amber-300">{collectionExportNotice}</p>
             ) : null}
           </div>
           <Button variant="ghost" size="icon" className="h-8 w-8" onClick={onClose}><X className="h-4 w-4" /></Button>
@@ -1145,6 +1186,17 @@ export function RequestsView({
 
   const activeWorkspace = useMemo(() => workspaces.find(w => w.name === activeWorkspaceName), [workspaces, activeWorkspaceName]);
   const effectiveWorkspaceName = activeWorkspace?.name ?? "";
+  const collectionExportNotice = useMemo(() => {
+    if (importExportState?.mode !== "export" || importExportState?.scope !== "collection") {
+      return "";
+    }
+
+    const collection = workspaces
+      .find((workspace) => workspace.name === importExportState.workspaceName)
+      ?.collections?.find((item) => item.name === importExportState.collectionName);
+
+    return buildCollectionExportExclusionNotice(collection);
+  }, [importExportState, workspaces]);
 
   useEffect(() => {
     function handleRequestRename(event) {
@@ -2253,6 +2305,7 @@ export function RequestsView({
         open={Boolean(importExportState)}
         mode={importExportState?.mode}
         scope={importExportState?.scope}
+        collectionExportNotice={collectionExportNotice}
         targetName={importExportState?.scope === "request"
           ? importExportState?.requestName
           : importExportState?.collectionName}
