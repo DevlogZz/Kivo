@@ -507,21 +507,23 @@ export function importRequestFile(filePath) {
   return invoke("import_request_file", { filePath });
 }
 
-export function exportCollectionFile(filePath, format, name, collection) {
+export function exportCollectionFile(filePath, format, name, collection, options = null) {
   return invoke("export_collection_file", {
     filePath,
     format,
     name,
     collection,
+    options,
   });
 }
 
-export function exportRequestFile(filePath, format, name, request) {
+export function exportRequestFile(filePath, format, name, request, options = null) {
   return invoke("export_request_file", {
     filePath,
     format,
     name,
     request,
+    options,
   });
 }
 

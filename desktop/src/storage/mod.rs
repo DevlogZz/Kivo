@@ -29,6 +29,7 @@ pub use import::parse_collection_content;
 
 pub use export::{
     build_export_value, kivo_collection_export_value, normalize_export_format,
+    ExportEnvOptions,
     prepare_collection_for_kivo_export, prepare_kivo_request_for_export,
     prepare_request_for_export, serialize_export_value,
 };
@@ -42,12 +43,42 @@ pub use io::{
 #[cfg(test)]
 pub use io::{parse_env_file_ordered, sanitize_name, write_env_file};
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct GrpcMethodOption {
     pub value: String,
     pub label: String,
     pub streaming_mode: String,
+}
+
+#[derive(Debug, Clone, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ExportFileOptionsPayload {
+    #[serde(default = "models::default_true")]
+    pub exclude_env_contained_fields: bool,
+    #[serde(default)]
+    pub replace_env_vars_with_values: bool,
+    #[serde(default)]
+    pub env_vars: std::collections::HashMap<String, String>,
+}
+
+impl Default for ExportFileOptionsPayload {
+    fn default() -> Self {
+        Self {
+            exclude_env_contained_fields: true,
+            replace_env_vars_with_values: false,
+            env_vars: std::collections::HashMap::new(),
+        }
+    }
+}
+
+fn to_export_env_options(payload: Option<ExportFileOptionsPayload>) -> ExportEnvOptions {
+    let payload = payload.unwrap_or_default();
+    ExportEnvOptions {
+        exclude_env_contained_fields: payload.exclude_env_contained_fields,
+        replace_env_vars_with_values: payload.replace_env_vars_with_values,
+        env_vars: payload.env_vars,
+    }
 }
 
 #[tauri::command]
@@ -527,9 +558,11 @@ pub fn export_collection_file(
     format: String,
     name: String,
     collection: CollectionRecord,
+    options: Option<ExportFileOptionsPayload>,
 ) -> Result<(), String> {
+    let export_options = to_export_env_options(options);
     let value = if normalize_export_format(&format) == "kivo" {
-        let prepared_collection = prepare_collection_for_kivo_export(&collection);
+        let prepared_collection = prepare_collection_for_kivo_export(&collection, &export_options);
         if prepared_collection.requests.is_empty() {
             return Err(
                 "No exportable requests found. Export supports only HTTP and GraphQL requests."
@@ -538,7 +571,7 @@ pub fn export_collection_file(
         }
         kivo_collection_export_value(&prepared_collection)
     } else {
-        build_export_value(&format, &name, &collection.requests)?
+        build_export_value(&format, &name, &collection.requests, &export_options)?
     };
     let content = serialize_export_value(&format, &value)?;
     fs::write(&file_path, content).map_err(|e| format!("Failed to write export file: {e}"))
@@ -550,13 +583,15 @@ pub fn export_request_file(
     format: String,
     name: String,
     request: RequestRecord,
+    options: Option<ExportFileOptionsPayload>,
 ) -> Result<(), String> {
+    let export_options = to_export_env_options(options);
     let prepared_request = if normalize_export_format(&format) == "kivo" {
-        prepare_kivo_request_for_export(&request)
+        prepare_kivo_request_for_export(&request, &export_options)
     } else {
-        prepare_request_for_export(&request)?
+        prepare_request_for_export(&request, &export_options)?
     };
-    let value = build_export_value(&format, &name, &[prepared_request])?;
+    let value = build_export_value(&format, &name, &[prepared_request], &export_options)?;
     let content = serialize_export_value(&format, &value)?;
     fs::write(&file_path, content).map_err(|e| format!("Failed to write export file: {e}"))
 }

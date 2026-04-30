@@ -139,6 +139,7 @@ function ImportExportModal({ open: isOpen, mode, scope, targetName, defaultFileN
   const [format, setFormat] = useState("postman");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isFormatMenuOpen, setIsFormatMenuOpen] = useState(false);
+  const [exportEnvMode, setExportEnvMode] = useState("exclude");
   const formatMenuRef = useRef(null);
 
   useEffect(() => {
@@ -147,7 +148,15 @@ function ImportExportModal({ open: isOpen, mode, scope, targetName, defaultFileN
     setFormat("postman");
     setIsSubmitting(false);
     setIsFormatMenuOpen(false);
+    setExportEnvMode("exclude");
   }, [isOpen]);
+
+  useEffect(() => {
+    if (mode !== "export") return;
+    if (format !== "kivo" && exportEnvMode === "preserve") {
+      setExportEnvMode("exclude");
+    }
+  }, [mode, format, exportEnvMode]);
 
   useEffect(() => {
     if (!isFormatMenuOpen) return;
@@ -201,7 +210,12 @@ function ImportExportModal({ open: isOpen, mode, scope, targetName, defaultFileN
     if (!filePath.trim()) return;
     setIsSubmitting(true);
     try {
-      await onConfirm({ filePath, format });
+      await onConfirm({
+        filePath,
+        format,
+        excludeEnvContainedFields: exportEnvMode === "exclude",
+        replaceEnvVarsWithValues: exportEnvMode === "replace",
+      });
       onClose();
     } finally {
       setIsSubmitting(false);
@@ -258,6 +272,47 @@ function ImportExportModal({ open: isOpen, mode, scope, targetName, defaultFileN
                   ))}
                 </div>
               )}
+            </div>
+
+            <div className="mt-2 grid gap-2 border border-border/35 bg-background/30 p-3">
+              <label className="flex items-center gap-2 text-[12px] text-foreground">
+                <input
+                  type="checkbox"
+                  checked={exportEnvMode === "exclude"}
+                  onChange={(event) => {
+                    if (event.target.checked) {
+                      setExportEnvMode("exclude");
+                    }
+                  }}
+                />
+                Exclude env contained fields
+              </label>
+              <label className="flex items-center gap-2 text-[12px] text-foreground">
+                <input
+                  type="checkbox"
+                  checked={exportEnvMode === "replace"}
+                  onChange={(event) => {
+                    if (event.target.checked) {
+                      setExportEnvMode("replace");
+                    }
+                  }}
+                />
+                Replace env vars with values
+              </label>
+              {format === "kivo" ? (
+                <label className="flex items-center gap-2 text-[12px] text-foreground">
+                  <input
+                    type="checkbox"
+                    checked={exportEnvMode === "preserve"}
+                    onChange={(event) => {
+                      if (event.target.checked) {
+                        setExportEnvMode("preserve");
+                      }
+                    }}
+                  />
+                  {"Export with env variables as-is (e.g. https://{{base_url}}/todo)"}
+                </label>
+              ) : null}
             </div>
           </div>
         ) : null}
@@ -1550,7 +1605,13 @@ export function RequestsView({
         .find((w) => w.name === workspaceName)
         ?.collections?.find((c) => c.name === collectionName);
       if (!collection) return;
-      await exportCollectionFile(payload.filePath, payload.format, collection.name, collection);
+      const envVars = await getEnvVars(workspaceName, collectionName);
+      const exportOptions = {
+        excludeEnvContainedFields: payload.excludeEnvContainedFields ?? true,
+        replaceEnvVarsWithValues: payload.replaceEnvVarsWithValues ?? false,
+        envVars: envVars?.merged || {},
+      };
+      await exportCollectionFile(payload.filePath, payload.format, collection.name, collection, exportOptions);
       setFeedbackMessage(`Exported collection (${payload.format}).`);
       setTimeout(() => setFeedbackMessage(""), 2200);
       return;
@@ -1559,7 +1620,13 @@ export function RequestsView({
     if (mode === "export" && scope === "request") {
       const request = getRequestRecord(workspaces, workspaceName, collectionName, requestName);
       if (!request) return;
-      await exportRequestFile(payload.filePath, payload.format, request.name, request);
+      const envVars = await getEnvVars(workspaceName, collectionName);
+      const exportOptions = {
+        excludeEnvContainedFields: payload.excludeEnvContainedFields ?? true,
+        replaceEnvVarsWithValues: payload.replaceEnvVarsWithValues ?? false,
+        envVars: envVars?.merged || {},
+      };
+      await exportRequestFile(payload.filePath, payload.format, request.name, request, exportOptions);
       setFeedbackMessage(`Exported request (${payload.format}).`);
       setTimeout(() => setFeedbackMessage(""), 2200);
     }

@@ -8,8 +8,8 @@ use super::{
     fs_save_env_vars, fs_save_workspaces, load_collection_config_from_path,
     parse_collection_content, parse_env_file_ordered, sanitize_name,
     write_env_file, AuthRecord, CollectionConfig, CollectionRecord, CollectionScripts, EnvVar,
-    KeyValueRow, OAuthConfig, RequestRecord, RequestTextOrJson, ResponseMeta, SavedResponse,
-    WorkspaceRecord,
+    ExportEnvOptions, KeyValueRow, OAuthConfig, RequestRecord, RequestTextOrJson, ResponseMeta,
+    SavedResponse, WorkspaceRecord,
 };
 
 fn make_request(name: &str) -> RequestRecord {
@@ -227,17 +227,18 @@ mod protocol_and_import_export_tests {
         graphql_req.body = RequestTextOrJson::Text("query { health }".to_string());
 
         let requests = vec![http_req, graphql_req];
+        let options = ExportEnvOptions::default();
 
-        let postman = build_export_value("postman", "Export Test", &requests).unwrap();
+        let postman = build_export_value("postman", "Export Test", &requests, &options).unwrap();
         assert!(postman.get("item").is_some());
 
-        let openapi = build_export_value("openapi3.0", "Export Test", &requests).unwrap();
+        let openapi = build_export_value("openapi3.0", "Export Test", &requests, &options).unwrap();
         assert_eq!(openapi.get("openapi").and_then(|v| v.as_str()), Some("3.0.0"));
 
-        let swagger = build_export_value("swagger2.0", "Export Test", &requests).unwrap();
+        let swagger = build_export_value("swagger2.0", "Export Test", &requests, &options).unwrap();
         assert_eq!(swagger.get("swagger").and_then(|v| v.as_str()), Some("2.0"));
 
-        let bruno = build_export_value("bruno", "Export Test", &requests).unwrap();
+        let bruno = build_export_value("bruno", "Export Test", &requests, &options).unwrap();
         assert_eq!(bruno.get("opencollection").and_then(|v| v.as_str()), Some("1.0.0"));
     }
 
