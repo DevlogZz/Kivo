@@ -23,16 +23,14 @@ function renderHighlighted(text, envVars) {
     parts.push(
       <span
         key={`v-${match.index}`}
-        className={cn(
-          "rounded-sm font-semibold",
-          isResolved
-            ? "text-emerald-400"
-            : "text-amber-400"
-        )}
+        className={cn("rounded-sm font-semibold")}
         style={{
+          color: isResolved
+            ? "hsl(var(--env-resolved))"
+            : "hsl(var(--env-unresolved))",
           boxShadow: isResolved
-            ? "0 0 0 2px rgba(52,211,153,0.10), inset 0 0 0 12px rgba(52,211,153,0.10)"
-            : "0 0 0 2px rgba(251,191,36,0.10), inset 0 0 0 12px rgba(251,191,36,0.10)"
+            ? "0 0 0 2px hsl(var(--env-resolved) / 0.20), inset 0 0 0 12px hsl(var(--env-resolved) / 0.14)"
+            : "0 0 0 2px hsl(var(--env-unresolved) / 0.22), inset 0 0 0 12px hsl(var(--env-unresolved) / 0.15)"
         }}
       >
         {match[0]}
@@ -62,6 +60,7 @@ export function EnvHighlightInput({
 }) {
   const inputRef = useRef(null);
   const dropdownRef = useRef(null);
+  const optionRefs = useRef([]);
   const isPassword = type === "password";
 
   const hasVars = useMemo(() => value?.includes("{{") && value?.includes("}}"), [value]);
@@ -185,6 +184,14 @@ export function EnvHighlightInput({
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
+  useEffect(() => {
+    if (!showSuggestions) return;
+    const activeOption = optionRefs.current[selectedIdx];
+    if (activeOption) {
+      activeOption.scrollIntoView({ block: "nearest" });
+    }
+  }, [selectedIdx, showSuggestions]);
+
   const finalInputClass = cn(
     "flex h-10 w-full border border-border/40 bg-transparent px-2.5 py-2 text-[13px] font-mono outline-none transition-colors",
     "focus-visible:border-primary/50 focus-visible:ring-1 focus-visible:ring-primary/20",
@@ -241,6 +248,9 @@ export function EnvHighlightInput({
           {filteredKeys.map((key, idx) => (
             <button
               key={key}
+              ref={(el) => {
+                optionRefs.current[idx] = el;
+              }}
               type="button"
               onMouseDown={(e) => {
                 e.preventDefault();
@@ -249,16 +259,36 @@ export function EnvHighlightInput({
               className={cn(
                 "grid w-full grid-cols-[10px_minmax(0,1fr)_minmax(0,140px)] items-center gap-3 border-b border-border/10 px-3 py-2.5 text-left font-mono text-[12px] transition-colors last:border-0",
                 idx === selectedIdx
-                  ? "bg-secondary/30 text-foreground"
+                  ? "text-foreground"
                   : "text-muted-foreground hover:bg-secondary/20 hover:text-foreground"
               )}
+              style={idx === selectedIdx
+                ? {
+                  backgroundColor: "hsl(var(--env-suggestion-active-bg))",
+                  color: "hsl(var(--env-suggestion-active-text))",
+                  boxShadow: "inset 2px 0 0 hsl(var(--env-suggestion-active-border))"
+                }
+                : undefined}
             >
-              <div className={cn(
-                "h-2 w-2 rounded-full shrink-0 shadow-sm",
-                (envVars?.merged && key in envVars.merged) ? "bg-emerald-500 shadow-emerald-500/20" : "bg-amber-500 shadow-amber-500/20"
-              )} />
+              <div
+                className="h-2 w-2 rounded-full shrink-0"
+                style={
+                  (envVars?.merged && key in envVars.merged)
+                    ? {
+                      backgroundColor: "hsl(var(--env-resolved))",
+                      boxShadow: "0 0 0 2px hsl(var(--env-resolved) / 0.16)",
+                    }
+                    : {
+                      backgroundColor: "hsl(var(--env-unresolved))",
+                      boxShadow: "0 0 0 2px hsl(var(--env-unresolved) / 0.16)",
+                    }
+                }
+              />
               <span className="truncate font-bold">{key}</span>
-              <span className="truncate text-right text-[10px] italic text-muted-foreground/55">
+              <span
+                className="truncate text-right text-[10px] italic"
+                style={{ color: "hsl(var(--env-suggestion-value))" }}
+              >
                 {envVars?.merged?.[key] ?? "undefined"}
               </span>
             </button>

@@ -3,13 +3,14 @@ import { createPortal } from "react-dom";
 import { open } from "@tauri-apps/plugin-dialog";
 import { getVersion } from "@tauri-apps/api/app";
 import { openUrl } from "@tauri-apps/plugin-opener";
-import { BookOpen, Cookie, ExternalLink, FileText, FolderOpen, Github, HardDrive, Heart, Keyboard, Lightbulb, Plus, RefreshCw, Settings2, ShieldCheck, Siren, Star, Trash2, X } from "lucide-react";
+import { BookOpen, Cookie, ExternalLink, FileText, FolderOpen, Github, HardDrive, Heart, Keyboard, Lightbulb, Palette, Plus, RefreshCw, Settings2, ShieldCheck, Siren, Star, Trash2, X } from "lucide-react";
 
 import { Button } from "@/components/ui/button.jsx";
 import { Card } from "@/components/ui/card.jsx";
 import { Input } from "@/components/ui/input.jsx";
 import { clearCookieJar, deleteCookieJarEntry, getAppSettings, getCookieJar, setAppSettings, switchStoragePath, upsertCookieJarEntry, validateStoragePath } from "@/lib/http-client.js";
 import { createDefaultKeybindings, keyboardEventToShortcut, KEYBINDING_ACTIONS, normalizeKeybindingMap, shortcutToDisplay } from "@/lib/keybindings.js";
+import { THEME_OPTIONS } from "@/lib/themes.js";
 
 const EMPTY_COOKIE_DRAFT = {
   id: "",
@@ -26,7 +27,7 @@ const EMPTY_COOKIE_DRAFT = {
   collectionName: "",
 };
 
-const SETTINGS_TABS = ["Storage", "Security", "Keybindings", "Proxy", "Cookie Jar", "Updates", "Resources"];
+const SETTINGS_TABS = ["Storage", "Theme", "Security", "Keybindings", "Proxy", "Cookie Jar", "Updates", "Resources"];
 
 const DEFAULT_APP_SETTINGS = {
   clearOAuthSessionOnStart: false,
@@ -88,7 +89,7 @@ function resolveKivoStoragePath(base) {
   return `${baseWithoutTrailing}${sep}Kivo`;
 }
 
-export function AppSettingsPage({ storagePath, onStoragePathChanged, initialTab = "Storage" }) {
+export function AppSettingsPage({ storagePath, onStoragePathChanged, initialTab = "Storage", theme = "dark", onThemeChange }) {
   const [pathInput, setPathInput] = useState(storagePath ?? "");
   const [mode, setMode] = useState("copy");
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -406,6 +407,9 @@ export function AppSettingsPage({ storagePath, onStoragePathChanged, initialTab 
     [editingShortcutActionId]
   );
 
+  const lightThemes = useMemo(() => THEME_OPTIONS.filter((item) => item.appearance === "light"), []);
+  const darkThemes = useMemo(() => THEME_OPTIONS.filter((item) => item.appearance !== "light"), []);
+
   function findShortcutConflict(actionId, shortcutValue) {
     const normalized = String(shortcutValue || "").trim();
     if (!normalized) return null;
@@ -692,9 +696,9 @@ export function AppSettingsPage({ storagePath, onStoragePathChanged, initialTab 
             </div>
 
             {isSamePath ? (
-              <div className="border border-amber-500/25 bg-amber-500/10 px-2.5 py-2 text-[12px] text-amber-400">Selected path matches current storage path.</div>
+              <div className="border border-[hsl(var(--warning)/0.62)] bg-[hsl(var(--warning)/0.16)] px-2.5 py-2 text-[12px] font-semibold text-[hsl(var(--warning-ink))]">Selected path matches current storage path.</div>
             ) : null}
-            {pathError ? <div className="border border-red-500/25 bg-red-500/10 px-2.5 py-2 text-[12px] text-red-400">{pathError}</div> : null}
+            {pathError ? <div className="border border-[hsl(var(--danger)/0.55)] bg-[hsl(var(--danger)/0.16)] px-2.5 py-2 text-[12px] font-medium text-[hsl(var(--danger))]">{pathError}</div> : null}
 
             <div className="flex items-center justify-between gap-4 border-t border-border/20 pt-3">
               <div className="text-[11px] text-muted-foreground min-w-0">
@@ -764,6 +768,70 @@ export function AppSettingsPage({ storagePath, onStoragePathChanged, initialTab 
             </div>
           </Card>
         </>
+      ) : null}
+
+      {activeSettingsTab === "Theme" ? (
+        <Card className="rounded-none border border-border/35 bg-[hsl(var(--sidebar))]/98 p-5 shadow-[0_8px_20px_hsl(var(--background)/0.2)]">
+          <div className="mb-4 flex items-center justify-between gap-2 text-foreground">
+            <div className="flex items-center gap-2">
+              <Palette className="h-4 w-4 text-primary" />
+              <h3 className="text-[14px] font-semibold">Theme</h3>
+            </div>
+            <div className="text-[10px] text-muted-foreground uppercase tracking-[0.12em]">
+              Applied instantly
+            </div>
+          </div>
+
+          <div className="space-y-4 text-[12px]">
+            <div>
+              <div className="mb-2 text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">Light themes</div>
+              <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+                {lightThemes.map((item) => {
+                  const selected = theme === item.id;
+                  return (
+                    <button
+                      key={item.id}
+                      type="button"
+                      onClick={() => onThemeChange?.(item.id)}
+                      className={`border p-3 text-left transition-colors ${selected ? "border-primary/55 bg-primary/12 text-foreground" : "border-border/35 bg-background/20 text-foreground hover:border-border/50"}`}
+                    >
+                      <div className="mb-2 grid h-8 grid-cols-3 overflow-hidden border border-border/30">
+                        <span style={{ backgroundColor: item.preview?.bg }} />
+                        <span style={{ backgroundColor: item.preview?.card }} />
+                        <span style={{ backgroundColor: item.preview?.accent }} />
+                      </div>
+                      <div className="text-[12px] font-medium">{item.label}</div>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            <div>
+              <div className="mb-2 text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">Dark themes</div>
+              <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+                {darkThemes.map((item) => {
+                  const selected = theme === item.id;
+                  return (
+                    <button
+                      key={item.id}
+                      type="button"
+                      onClick={() => onThemeChange?.(item.id)}
+                      className={`border p-3 text-left transition-colors ${selected ? "border-primary/55 bg-primary/12 text-foreground" : "border-border/35 bg-background/20 text-foreground hover:border-border/50"}`}
+                    >
+                      <div className="mb-2 grid h-8 grid-cols-3 overflow-hidden border border-border/30">
+                        <span style={{ backgroundColor: item.preview?.bg }} />
+                        <span style={{ backgroundColor: item.preview?.card }} />
+                        <span style={{ backgroundColor: item.preview?.accent }} />
+                      </div>
+                      <div className="text-[12px] font-medium">{item.label}</div>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          </div>
+        </Card>
       ) : null}
 
       {activeSettingsTab === "Proxy" ? (

@@ -96,6 +96,37 @@ function getTone(status) {
   return "muted";
 }
 
+function detectResponseLanguage(contentType, bodyText, isJson) {
+  if (isJson) {
+    return "json";
+  }
+
+  const normalizedType = String(contentType || "").toLowerCase();
+  const source = String(bodyText || "").trim();
+
+  if (normalizedType.includes("graphql")) {
+    return "graphql";
+  }
+
+  if (normalizedType.includes("application/xml") || normalizedType.includes("text/xml") || normalizedType.includes("+xml")) {
+    return "xml";
+  }
+
+  if (normalizedType.includes("yaml") || normalizedType.includes("yml")) {
+    return "yaml";
+  }
+
+  if (source.startsWith("<?xml") || (source.startsWith("<") && source.endsWith(">"))) {
+    return "xml";
+  }
+
+  if (source.startsWith("---") || /\n\s*[A-Za-z0-9_-]+\s*:\s*/.test(source)) {
+    return "yaml";
+  }
+
+  return "text";
+}
+
 export function ResponsePane({
   response,
   isSending = false,
@@ -114,6 +145,7 @@ export function ResponsePane({
   const contentType = Object.entries(response.headers).find(([k]) => k.toLowerCase() === 'content-type')?.[1]?.toLowerCase() || "";
   const isHtml = contentType.includes("text/html");
   const isJson = response.isJson;
+  const responseBodyLanguage = detectResponseLanguage(contentType, response.body || response.rawBody, isJson);
 
   let bodyViews = ["Raw"];
   if (isJson) {
@@ -541,7 +573,7 @@ export function ResponsePane({
               <CodeEditor
                 readOnly
                 value={currentView === "JSON" && isJson ? response.body : response.rawBody}
-                language={currentView === "JSON" && isJson ? "json" : "text"}
+                language={currentView === "JSON" && isJson ? "json" : responseBodyLanguage}
                 wrapLines
                 placeholder="Response body will appear here"
               />

@@ -21,8 +21,44 @@ import { doesEventMatchShortcut, isEditableEventTarget, KEYBINDING_ACTIONS, norm
 import { SIDEBAR_COLLAPSED_WIDTH } from "@/lib/workspace-utils.js";
 import { Toaster } from "sonner";
 import {
-  Github, Globe, Layers, Moon, Settings, SquareKanban, Star, Sun,
+  Beaker,
+  Building2,
+  Code2,
+  Flame,
+  FlaskConical,
+  GitBranch,
+  Github,
+  Globe,
+  Layers,
+  MoonStar,
+  Settings,
+  Snowflake,
+  SquareKanban,
+  Star,
+  SunMedium,
+  Sunrise,
+  TerminalSquare,
+  Wheat,
+  Zap,
 } from "lucide-react";
+import { getThemeMeta } from "@/lib/themes.js";
+
+const THEME_ICON_MAP = {
+  sun: SunMedium,
+  flask: FlaskConical,
+  github: Github,
+  sunrise: Sunrise,
+  wheat: Wheat,
+  moon: MoonStar,
+  beaker: Beaker,
+  "git-branch": GitBranch,
+  terminal: TerminalSquare,
+  flame: Flame,
+  snowflake: Snowflake,
+  building: Building2,
+  zap: Zap,
+  code2: Code2,
+};
 
 function EnvChip({ globalCount, collectionCount, onClick }) {
   const total = globalCount + collectionCount;
@@ -48,7 +84,9 @@ function EnvChip({ globalCount, collectionCount, onClick }) {
 }
 
 export default function App() {
-  const { theme, toggleTheme } = useTheme();
+  const { theme, setTheme, toggleTheme, themeAppearance } = useTheme();
+  const activeThemeMeta = getThemeMeta(theme);
+  const ActiveThemeIcon = THEME_ICON_MAP[activeThemeMeta.icon] ?? SunMedium;
   const [showWorkspaceModal, setShowWorkspaceModal] = useState(false);
 
   const [settingsConfig, setSettingsConfig] = useState({ tab: "Overview", envTab: "workspace" });
@@ -347,7 +385,7 @@ export default function App() {
         position="top-right"
         closeButton
         richColors
-        theme={theme === "dark" ? "dark" : "light"}
+        theme={themeAppearance}
         toastOptions={{
           className: "border border-border/50 bg-card/96 text-foreground shadow-xl",
         }}
@@ -419,6 +457,8 @@ export default function App() {
             <AppSettingsPage
               initialTab={appSettingsTab}
               storagePath={storagePath}
+              theme={theme}
+              onThemeChange={setTheme}
               onStoragePathChanged={(nextPath) => {
                 setResolvedPath(nextPath);
                 window.location.reload();
@@ -484,8 +524,14 @@ export default function App() {
                     <span className="text-[11px] font-semibold">{starCount ?? "..."}</span>
                     <Star className="h-[14px] w-[14px] fill-current text-yellow-500/80" />
                   </button>
-                  <Button variant="ghost" size="icon" className="h-9 w-9 rounded-full text-muted-foreground hover:bg-accent/40 hover:text-foreground" onClick={toggleTheme}>
-                    {theme === "dark" ? <Sun className="h-[18px] w-[18px]" /> : <Moon className="h-[18px] w-[18px]" />}
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-9 w-9 rounded-full text-muted-foreground hover:bg-accent/40 hover:text-foreground"
+                    onClick={toggleTheme}
+                    title={`Switch theme (current: ${activeThemeMeta.label})`}
+                  >
+                    <ActiveThemeIcon className="h-[18px] w-[18px]" />
                   </Button>
                   <Button
                     variant="ghost"
@@ -544,8 +590,14 @@ export default function App() {
                     <span className="text-[11px] font-semibold">{starCount ?? "..."}</span>
                     <Star className="h-[14px] w-[14px] fill-current text-yellow-500/80" />
                   </button>
-                  <Button variant="ghost" size="icon" className="h-9 w-9 rounded-full text-muted-foreground hover:bg-accent/40 hover:text-foreground" onClick={toggleTheme}>
-                    {theme === "dark" ? <Sun className="h-[18px] w-[18px]" /> : <Moon className="h-[18px] w-[18px]" />}
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-9 w-9 rounded-full text-muted-foreground hover:bg-accent/40 hover:text-foreground"
+                    onClick={toggleTheme}
+                    title={`Switch theme (current: ${activeThemeMeta.label})`}
+                  >
+                    <ActiveThemeIcon className="h-[18px] w-[18px]" />
                   </Button>
                   <Button
                     variant="ghost"

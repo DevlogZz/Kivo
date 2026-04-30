@@ -1283,7 +1283,7 @@ function SendErrorModal({ open, title, stackTrace, onClose }) {
           </button>
         </div>
 
-        <div className="border border-red-500/40 bg-red-500/[0.08] px-3 py-2 text-[12px] text-red-300">
+        <div className="border border-[hsl(var(--danger)/0.58)] bg-[hsl(var(--danger)/0.16)] px-3 py-2 text-[12px] font-semibold text-[hsl(var(--danger))]">
           {title || "Request failed"}
         </div>
 
@@ -1877,6 +1877,8 @@ export function RequestPane({
   const activeTab = state.activeEditorTab ?? "Params";
   const bodyDisabled = !isRealtimeRequest && !isGrpcRequest && (state.method === "GET" || state.method === "DELETE" || state.bodyType === "none");
   const isJsonBody = state.bodyType === "json";
+  const isXmlBody = state.bodyType === "xml";
+  const isYamlBody = state.bodyType === "yaml";
   const isGraphqlBody = state.bodyType === "graphql";
   const isTableBody = state.bodyType === "form-data" || state.bodyType === "form-urlencoded";
   const isFileBody = state.bodyType === "file";
@@ -2730,7 +2732,7 @@ export function RequestPane({
                 value={state.body}
                 onChange={(value) => (isSocketIoRequest ? handleSocketIoBodyChange(value) : onChange("body", value))}
                 placeholder={isJsonBody ? '{\n  "name": "Kivo"\n}' : "Enter request body..."}
-                language={isJsonBody ? "json" : "text"}
+                language={isJsonBody ? "json" : isXmlBody ? "xml" : isYamlBody ? "yaml" : "text"}
                 disabled={bodyDisabled}
               />
             ) : null}

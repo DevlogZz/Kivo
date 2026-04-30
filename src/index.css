@@ -25,8 +25,15 @@
   --success-foreground: 0 0% 100%;
   --warning: 34 86% 42%;
   --warning-foreground: 24 18% 15%;
+  --warning-ink: 32 52% 24%;
   --danger: 3 68% 48%;
   --danger-foreground: 0 0% 100%;
+  --env-resolved: 151 62% 26%;
+  --env-unresolved: 28 78% 32%;
+  --env-suggestion-active-bg: 210 84% 92%;
+  --env-suggestion-active-text: 216 34% 22%;
+  --env-suggestion-active-border: 212 92% 45%;
+  --env-suggestion-value: 215 16% 42%;
   --sidebar: 36 28% 91%;
   --sidebar-foreground: 24 18% 15%;
   --sidebar-border: 32 20% 79%;
@@ -61,6 +68,17 @@
   --script-comment: 215 10% 46%;
   --script-identifier: 220 15% 24%;
   --script-punctuation: 220 8% 38%;
+  --yaml-key: 214 74% 35%;
+  --yaml-string: 8 66% 39%;
+  --yaml-number: 153 72% 31%;
+  --yaml-boolean: 230 88% 46%;
+  --yaml-punctuation: 220 9% 40%;
+  --yaml-comment: 215 10% 46%;
+  --markup-tag: 7 68% 32%;
+  --markup-attr-name: 2 88% 46%;
+  --markup-attr-value: 230 88% 46%;
+  --markup-punctuation: 7 62% 35%;
+  --markup-comment: 215 10% 46%;
 }
 
 .theme-dark {
@@ -85,11 +103,872 @@
   --success-foreground: 210 40% 98%;
   --warning: 40 72% 58%;
   --warning-foreground: 225 13% 12%;
+  --warning-ink: 40 86% 72%;
   --danger: 356 74% 66%;
   --danger-foreground: 210 40% 98%;
+  --env-resolved: 133 46% 69%;
+  --env-unresolved: 40 88% 70%;
+  --env-suggestion-active-bg: 222 16% 26%;
+  --env-suggestion-active-text: 215 20% 92%;
+  --env-suggestion-active-border: 207 100% 69%;
+  --env-suggestion-value: 216 14% 70%;
   --sidebar: 223 15% 15%;
   --sidebar-foreground: 216 24% 88%;
   --sidebar-border: 223 12% 24%;
+  --tone-get: 207 100% 69%;
+  --tone-post: 120 41% 67%;
+  --tone-put: 35 78% 65%;
+  --tone-patch: 283 55% 70%;
+  --tone-delete: 355 74% 69%;
+  --tone-gql: 286 58% 72%;
+  --tone-grpc: 191 80% 70%;
+  --tone-ws: 35 78% 69%;
+  --tone-sio: 24 88% 70%;
+  --json-key: 210 88% 72%;
+  --json-string: 102 42% 67%;
+  --json-boolean: 286 54% 70%;
+  --json-null: 28 80% 67%;
+  --json-number: 193 70% 67%;
+  --json-punctuation: 216 12% 62%;
+  --graphql-keyword: 286 58% 72%;
+  --graphql-field: 214 78% 77%;
+  --graphql-variable: 191 80% 70%;
+  --graphql-string: 102 42% 67%;
+  --graphql-number: 35 78% 69%;
+  --graphql-directive: 352 74% 71%;
+  --graphql-comment: 218 10% 48%;
+  --graphql-punctuation: 216 12% 66%;
+  --script-keyword: 286 58% 72%;
+  --script-builtin: 192 84% 72%;
+  --script-string: 102 42% 67%;
+  --script-regex: 162 50% 66%;
+  --script-number: 193 70% 67%;
+  --script-comment: 218 11% 62%;
+  --script-identifier: 220 16% 88%;
+  --script-punctuation: 216 12% 62%;
+  --yaml-key: 198 100% 80%;
+  --yaml-string: 17 74% 68%;
+  --yaml-number: 89 34% 69%;
+  --yaml-boolean: 207 60% 59%;
+  --yaml-punctuation: 214 9% 54%;
+  --yaml-comment: 107 29% 47%;
+  --markup-tag: 207 60% 59%;
+  --markup-attr-name: 197 96% 80%;
+  --markup-attr-value: 17 74% 68%;
+  --markup-punctuation: 214 9% 54%;
+  --markup-comment: 107 29% 47%;
+}
+
+.theme-light-monochrome {
+  --background: 210 11% 93%;
+  --foreground: 220 10% 16%;
+  --card: 210 12% 97%;
+  --card-foreground: 220 10% 16%;
+  --popover: 210 12% 96%;
+  --popover-foreground: 220 10% 16%;
+  --primary: 220 9% 34%;
+  --primary-foreground: 210 20% 97%;
+  --secondary: 210 10% 88%;
+  --secondary-foreground: 220 10% 16%;
+  --muted: 210 10% 86%;
+  --muted-foreground: 220 6% 40%;
+  --accent: 210 12% 84%;
+  --accent-foreground: 220 10% 16%;
+  --border: 210 9% 78%;
+  --input: 210 12% 90%;
+  --ring: 220 9% 34%;
+  --success: 162 42% 34%;
+  --success-foreground: 0 0% 100%;
+  --warning: 36 72% 42%;
+  --warning-foreground: 220 10% 16%;
+  --danger: 4 62% 48%;
+  --danger-foreground: 0 0% 100%;
+  --sidebar: 210 13% 91%;
+  --sidebar-foreground: 220 10% 16%;
+  --sidebar-border: 210 9% 78%;
+}
+
+.theme-gruvbox-light {
+  --background: 43 38% 92%;
+  --foreground: 25 28% 18%;
+  --card: 42 35% 95%;
+  --card-foreground: 25 28% 18%;
+  --popover: 42 34% 95%;
+  --popover-foreground: 25 28% 18%;
+  --primary: 24 95% 34%;
+  --primary-foreground: 39 46% 96%;
+  --secondary: 41 26% 86%;
+  --secondary-foreground: 25 28% 18%;
+  --muted: 42 22% 84%;
+  --muted-foreground: 29 18% 38%;
+  --accent: 47 28% 82%;
+  --accent-foreground: 25 28% 18%;
+  --border: 36 20% 72%;
+  --input: 43 25% 88%;
+  --ring: 24 95% 34%;
+  --success: 104 42% 34%;
+  --success-foreground: 0 0% 100%;
+  --warning: 32 86% 42%;
+  --warning-foreground: 25 28% 18%;
+  --danger: 2 68% 45%;
+  --danger-foreground: 0 0% 100%;
+  --sidebar: 42 30% 90%;
+  --sidebar-foreground: 25 28% 18%;
+  --sidebar-border: 36 20% 72%;
+}
+
+.theme-one-light {
+  --background: 220 18% 95%;
+  --foreground: 230 18% 24%;
+  --card: 220 24% 98%;
+  --card-foreground: 230 18% 24%;
+  --popover: 220 24% 97%;
+  --popover-foreground: 230 18% 24%;
+  --primary: 220 83% 56%;
+  --primary-foreground: 210 40% 98%;
+  --secondary: 220 18% 90%;
+  --secondary-foreground: 230 18% 24%;
+  --muted: 220 16% 88%;
+  --muted-foreground: 225 12% 42%;
+  --accent: 220 18% 86%;
+  --accent-foreground: 230 18% 24%;
+  --border: 220 14% 80%;
+  --input: 220 16% 91%;
+  --ring: 220 83% 56%;
+  --success: 158 54% 33%;
+  --success-foreground: 0 0% 100%;
+  --warning: 33 84% 42%;
+  --warning-foreground: 230 18% 24%;
+  --warning-ink: 32 56% 24%;
+  --danger: 356 68% 47%;
+  --danger-foreground: 0 0% 100%;
+  --env-resolved: 152 62% 28%;
+  --env-unresolved: 28 78% 33%;
+  --sidebar: 220 20% 92%;
+  --sidebar-foreground: 230 18% 24%;
+  --sidebar-border: 220 14% 80%;
+}
+
+.theme-vscode-light {
+  --background: 0 0% 100%;
+  --foreground: 0 0% 0%;
+  --card: 0 0% 95%;
+  --card-foreground: 0 0% 0%;
+  --popover: 0 0% 95%;
+  --popover-foreground: 0 0% 0%;
+  --primary: 209 100% 42%;
+  --primary-foreground: 0 0% 100%;
+  --secondary: 0 0% 91%;
+  --secondary-foreground: 0 0% 9%;
+  --muted: 0 0% 95%;
+  --muted-foreground: 0 0% 45%;
+  --accent: 0 0% 87%;
+  --accent-foreground: 0 0% 12%;
+  --border: 0 0% 83%;
+  --input: 0 0% 95%;
+  --ring: 209 100% 42%;
+  --success: 153 85% 31%;
+  --success-foreground: 0 0% 100%;
+  --warning: 31 80% 38%;
+  --warning-foreground: 0 0% 10%;
+  --warning-ink: 31 68% 26%;
+  --danger: 7 83% 43%;
+  --danger-foreground: 0 0% 100%;
+  --env-resolved: 230 88% 46%;
+  --env-unresolved: 2 88% 46%;
+  --env-suggestion-active-bg: 208 100% 90%;
+  --env-suggestion-active-text: 216 26% 18%;
+  --env-suggestion-active-border: 209 100% 42%;
+  --env-suggestion-value: 213 20% 36%;
+  --sidebar: 0 0% 96%;
+  --sidebar-foreground: 0 0% 10%;
+  --sidebar-border: 0 0% 83%;
+  --json-key: 214 92% 34%;
+  --json-string: 5 77% 36%;
+  --json-boolean: 230 88% 46%;
+  --json-null: 230 88% 46%;
+  --json-number: 153 87% 31%;
+  --json-punctuation: 0 0% 20%;
+  --graphql-keyword: 230 88% 46%;
+  --graphql-field: 214 92% 34%;
+  --graphql-variable: 214 92% 34%;
+  --graphql-string: 5 77% 36%;
+  --graphql-number: 153 87% 31%;
+  --graphql-directive: 2 88% 46%;
+  --graphql-comment: 120 100% 25%;
+  --graphql-punctuation: 0 0% 20%;
+  --script-keyword: 230 88% 46%;
+  --script-builtin: 230 88% 46%;
+  --script-string: 5 77% 36%;
+  --script-regex: 338 61% 31%;
+  --script-number: 153 87% 31%;
+  --script-comment: 120 100% 25%;
+  --script-identifier: 0 0% 0%;
+  --script-punctuation: 0 0% 20%;
+  --yaml-key: 214 92% 34%;
+  --yaml-string: 5 77% 36%;
+  --yaml-number: 153 87% 31%;
+  --yaml-boolean: 230 88% 46%;
+  --yaml-punctuation: 0 0% 30%;
+  --yaml-comment: 120 100% 25%;
+  --markup-tag: 7 68% 32%;
+  --markup-attr-name: 2 88% 46%;
+  --markup-attr-value: 230 88% 46%;
+  --markup-punctuation: 7 62% 35%;
+  --markup-comment: 120 100% 25%;
+}
+
+.theme-github-light {
+  --background: 210 20% 98%;
+  --foreground: 214 25% 18%;
+  --card: 0 0% 100%;
+  --card-foreground: 214 25% 18%;
+  --popover: 0 0% 100%;
+  --popover-foreground: 214 25% 18%;
+  --primary: 137 58% 35%;
+  --primary-foreground: 0 0% 100%;
+  --secondary: 210 18% 92%;
+  --secondary-foreground: 214 25% 18%;
+  --muted: 210 16% 90%;
+  --muted-foreground: 214 12% 38%;
+  --accent: 210 18% 88%;
+  --accent-foreground: 214 25% 18%;
+  --border: 214 16% 82%;
+  --input: 210 16% 92%;
+  --ring: 137 58% 35%;
+  --success: 140 55% 33%;
+  --success-foreground: 0 0% 100%;
+  --warning: 34 82% 42%;
+  --warning-foreground: 214 25% 18%;
+  --warning-ink: 32 50% 23%;
+  --danger: 356 72% 47%;
+  --danger-foreground: 0 0% 100%;
+  --env-resolved: 151 60% 27%;
+  --env-unresolved: 28 75% 33%;
+  --sidebar: 210 18% 94%;
+  --sidebar-foreground: 214 25% 18%;
+  --sidebar-border: 214 16% 82%;
+}
+
+.theme-solarized-light {
+  --background: 44 87% 94%;
+  --foreground: 194 25% 25%;
+  --card: 44 70% 96%;
+  --card-foreground: 194 25% 25%;
+  --popover: 44 70% 96%;
+  --popover-foreground: 194 25% 25%;
+  --primary: 175 59% 38%;
+  --primary-foreground: 44 87% 94%;
+  --secondary: 45 54% 88%;
+  --secondary-foreground: 194 25% 25%;
+  --muted: 45 48% 86%;
+  --muted-foreground: 194 16% 42%;
+  --accent: 45 50% 84%;
+  --accent-foreground: 194 25% 25%;
+  --border: 45 33% 74%;
+  --input: 45 42% 90%;
+  --ring: 175 59% 38%;
+  --success: 175 56% 33%;
+  --success-foreground: 0 0% 100%;
+  --warning: 45 86% 38%;
+  --warning-foreground: 194 25% 25%;
+  --warning-ink: 44 62% 22%;
+  --danger: 1 71% 45%;
+  --danger-foreground: 0 0% 100%;
+  --env-resolved: 175 60% 28%;
+  --env-unresolved: 29 70% 31%;
+  --sidebar: 45 56% 91%;
+  --sidebar-foreground: 194 25% 25%;
+  --sidebar-border: 45 33% 74%;
+}
+
+.theme-dark-monochrome {
+  --background: 220 9% 11%;
+  --foreground: 210 12% 86%;
+  --card: 220 9% 15%;
+  --card-foreground: 210 12% 86%;
+  --popover: 220 9% 17%;
+  --popover-foreground: 210 12% 86%;
+  --primary: 215 12% 72%;
+  --primary-foreground: 220 9% 11%;
+  --secondary: 220 9% 21%;
+  --secondary-foreground: 210 12% 86%;
+  --muted: 220 9% 18%;
+  --muted-foreground: 215 8% 60%;
+  --accent: 220 9% 23%;
+  --accent-foreground: 210 12% 86%;
+  --border: 220 9% 25%;
+  --input: 220 9% 20%;
+  --ring: 215 12% 72%;
+  --success: 156 35% 51%;
+  --success-foreground: 220 9% 11%;
+  --warning: 36 58% 62%;
+  --warning-foreground: 220 9% 11%;
+  --danger: 2 63% 67%;
+  --danger-foreground: 220 9% 11%;
+  --sidebar: 220 9% 14%;
+  --sidebar-foreground: 210 12% 86%;
+  --sidebar-border: 220 9% 24%;
+}
+
+.theme-gruber-darker {
+  --background: 0 0% 9%;
+  --foreground: 240 20% 91%;
+  --card: 0 0% 16%;
+  --card-foreground: 240 20% 91%;
+  --popover: 335 7% 25%;
+  --popover-foreground: 240 20% 91%;
+  --primary: 53 100% 60%;
+  --primary-foreground: 0 0% 10%;
+  --secondary: 0 0% 16%;
+  --secondary-foreground: 240 20% 91%;
+  --muted: 335 7% 25%;
+  --muted-foreground: 211 17% 54%;
+  --accent: 211 17% 54%;
+  --accent-foreground: 240 20% 91%;
+  --border: 335 7% 25%;
+  --input: 0 0% 16%;
+  --ring: 53 100% 60%;
+  --success: 93 59% 50%;
+  --success-foreground: 35 16% 10%;
+  --warning: 53 100% 60%;
+  --warning-foreground: 0 0% 10%;
+  --warning-ink: 53 88% 70%;
+  --danger: 357 90% 61%;
+  --danger-foreground: 0 0% 10%;
+  --env-resolved: 93 59% 50%;
+  --env-unresolved: 32 58% 51%;
+  --env-suggestion-active-bg: 335 7% 25%;
+  --env-suggestion-active-text: 240 20% 95%;
+  --env-suggestion-active-border: 53 100% 60%;
+  --env-suggestion-value: 211 17% 62%;
+  --sidebar: 0 0% 10%;
+  --sidebar-foreground: 240 20% 91%;
+  --sidebar-border: 335 7% 25%;
+  --tone-get: 221 36% 69%;
+  --tone-post: 93 59% 50%;
+  --tone-put: 32 58% 51%;
+  --tone-patch: 253 34% 69%;
+  --tone-delete: 357 90% 61%;
+  --tone-gql: 253 34% 69%;
+  --tone-grpc: 159 16% 62%;
+  --tone-ws: 53 100% 60%;
+  --tone-sio: 32 58% 51%;
+  --json-key: 221 36% 69%;
+  --json-string: 93 59% 50%;
+  --json-boolean: 253 34% 69%;
+  --json-null: 32 58% 51%;
+  --json-number: 159 16% 62%;
+  --json-punctuation: 240 20% 91%;
+}
+
+.theme-gruvbox-dark {
+  --background: 0 0% 16%;
+  --foreground: 41 27% 75%;
+  --card: 24 6% 13%;
+  --card-foreground: 41 27% 75%;
+  --popover: 24 7% 18%;
+  --popover-foreground: 41 27% 75%;
+  --primary: 43 89% 58%;
+  --primary-foreground: 34 24% 11%;
+  --secondary: 24 8% 24%;
+  --secondary-foreground: 41 27% 75%;
+  --muted: 24 8% 21%;
+  --muted-foreground: 37 14% 48%;
+  --accent: 24 8% 24%;
+  --accent-foreground: 41 27% 75%;
+  --border: 24 8% 30%;
+  --input: 24 8% 24%;
+  --ring: 43 89% 58%;
+  --success: 63 75% 44%;
+  --success-foreground: 34 24% 11%;
+  --warning: 43 89% 58%;
+  --warning-foreground: 34 24% 11%;
+  --warning-ink: 43 93% 70%;
+  --danger: 2 97% 62%;
+  --danger-foreground: 34 24% 11%;
+  --env-resolved: 63 75% 44%;
+  --env-unresolved: 25 60% 51%;
+  --env-suggestion-active-bg: 24 8% 24%;
+  --env-suggestion-active-text: 41 27% 81%;
+  --env-suggestion-active-border: 43 89% 58%;
+  --env-suggestion-value: 38 18% 66%;
+  --sidebar: 24 6% 13%;
+  --sidebar-foreground: 41 27% 75%;
+  --sidebar-border: 24 8% 28%;
+  --json-key: 20 93% 66%;
+  --json-string: 63 75% 44%;
+  --json-boolean: 267 38% 63%;
+  --json-null: 43 89% 58%;
+  --json-number: 102 65% 45%;
+  --json-punctuation: 41 20% 68%;
+  --graphql-keyword: 2 97% 62%;
+  --graphql-field: 20 93% 66%;
+  --graphql-variable: 25 60% 51%;
+  --graphql-string: 63 75% 44%;
+  --graphql-number: 267 38% 63%;
+  --graphql-directive: 171 31% 52%;
+  --graphql-comment: 37 14% 48%;
+  --graphql-punctuation: 41 20% 68%;
+  --script-keyword: 2 97% 62%;
+  --script-builtin: 171 31% 52%;
+  --script-string: 63 75% 44%;
+  --script-regex: 25 60% 51%;
+  --script-number: 267 38% 63%;
+  --script-comment: 37 14% 48%;
+  --script-identifier: 41 27% 75%;
+  --script-punctuation: 41 20% 68%;
+  --yaml-key: 20 93% 66%;
+  --yaml-string: 63 75% 44%;
+  --yaml-number: 267 38% 63%;
+  --yaml-boolean: 2 97% 62%;
+  --yaml-punctuation: 41 20% 68%;
+  --yaml-comment: 37 14% 48%;
+  --markup-tag: 2 97% 62%;
+  --markup-attr-name: 20 93% 66%;
+  --markup-attr-value: 63 75% 44%;
+  --markup-punctuation: 41 20% 68%;
+  --markup-comment: 37 14% 48%;
+}
+
+.theme-nord {
+  --background: 220 17% 16%;
+  --foreground: 218 27% 86%;
+  --card: 220 18% 20%;
+  --card-foreground: 218 27% 86%;
+  --popover: 220 18% 22%;
+  --popover-foreground: 218 27% 86%;
+  --primary: 193 43% 67%;
+  --primary-foreground: 220 17% 16%;
+  --secondary: 220 16% 27%;
+  --secondary-foreground: 218 27% 86%;
+  --muted: 220 14% 24%;
+  --muted-foreground: 218 16% 65%;
+  --accent: 220 16% 29%;
+  --accent-foreground: 218 27% 86%;
+  --border: 220 13% 31%;
+  --input: 220 14% 25%;
+  --ring: 193 43% 67%;
+  --success: 157 32% 64%;
+  --success-foreground: 220 17% 16%;
+  --warning: 41 65% 70%;
+  --warning-foreground: 220 17% 16%;
+  --danger: 354 53% 71%;
+  --danger-foreground: 220 17% 16%;
+  --sidebar: 220 17% 18%;
+  --sidebar-foreground: 218 27% 86%;
+  --sidebar-border: 220 13% 30%;
+}
+
+.theme-catppuccin-mocha {
+  --background: 240 21% 14%;
+  --foreground: 226 64% 88%;
+  --card: 241 20% 18%;
+  --card-foreground: 226 64% 88%;
+  --popover: 241 20% 20%;
+  --popover-foreground: 226 64% 88%;
+  --primary: 267 84% 81%;
+  --primary-foreground: 240 21% 14%;
+  --secondary: 240 17% 25%;
+  --secondary-foreground: 226 64% 88%;
+  --muted: 240 14% 22%;
+  --muted-foreground: 227 24% 71%;
+  --accent: 240 17% 27%;
+  --accent-foreground: 226 64% 88%;
+  --border: 240 13% 31%;
+  --input: 240 14% 24%;
+  --ring: 267 84% 81%;
+  --success: 142 58% 78%;
+  --success-foreground: 240 21% 14%;
+  --warning: 39 84% 77%;
+  --warning-foreground: 240 21% 14%;
+  --danger: 343 81% 75%;
+  --danger-foreground: 240 21% 14%;
+  --sidebar: 240 21% 16%;
+  --sidebar-foreground: 226 64% 88%;
+  --sidebar-border: 240 13% 30%;
+}
+
+.theme-vscode-dark {
+  --background: 220 13% 12%;
+  --foreground: 0 0% 83%;
+  --card: 220 13% 15%;
+  --card-foreground: 0 0% 83%;
+  --popover: 220 13% 17%;
+  --popover-foreground: 0 0% 83%;
+  --primary: 207 100% 42%;
+  --primary-foreground: 220 13% 11%;
+  --secondary: 220 12% 22%;
+  --secondary-foreground: 0 0% 83%;
+  --muted: 220 11% 19%;
+  --muted-foreground: 214 10% 62%;
+  --accent: 220 12% 24%;
+  --accent-foreground: 0 0% 83%;
+  --border: 220 11% 26%;
+  --input: 220 11% 20%;
+  --ring: 207 100% 42%;
+  --success: 142 52% 66%;
+  --success-foreground: 220 13% 11%;
+  --warning: 40 80% 69%;
+  --warning-foreground: 220 13% 11%;
+  --warning-ink: 40 86% 74%;
+  --danger: 355 76% 70%;
+  --danger-foreground: 220 13% 11%;
+  --env-resolved: 197 96% 80%;
+  --env-unresolved: 17 74% 68%;
+  --sidebar: 220 13% 13%;
+  --sidebar-foreground: 0 0% 83%;
+  --sidebar-border: 220 11% 25%;
+  --json-key: 207 60% 59%;
+  --json-string: 17 74% 68%;
+  --json-boolean: 207 60% 59%;
+  --json-null: 207 60% 59%;
+  --json-number: 89 34% 69%;
+  --json-punctuation: 0 0% 65%;
+  --graphql-keyword: 207 60% 59%;
+  --graphql-field: 197 96% 80%;
+  --graphql-variable: 197 96% 80%;
+  --graphql-string: 17 74% 68%;
+  --graphql-number: 89 34% 69%;
+  --graphql-directive: 0 91% 64%;
+  --graphql-comment: 107 29% 47%;
+  --graphql-punctuation: 0 0% 65%;
+  --script-keyword: 207 60% 59%;
+  --script-builtin: 207 60% 59%;
+  --script-string: 17 74% 68%;
+  --script-regex: 0 54% 62%;
+  --script-number: 89 34% 69%;
+  --script-comment: 107 29% 47%;
+  --script-identifier: 0 0% 83%;
+  --script-punctuation: 0 0% 65%;
+  --yaml-key: 197 96% 80%;
+  --yaml-string: 17 74% 68%;
+  --yaml-number: 89 34% 69%;
+  --yaml-boolean: 207 60% 59%;
+  --yaml-punctuation: 0 0% 55%;
+  --yaml-comment: 107 29% 47%;
+  --markup-tag: 207 60% 59%;
+  --markup-attr-name: 197 96% 80%;
+  --markup-attr-value: 17 74% 68%;
+  --markup-punctuation: 0 0% 55%;
+  --markup-comment: 107 29% 47%;
+}
+
+.theme-monokai-dark {
+  --background: 65 6% 15%;
+  --foreground: 60 33% 96%;
+  --card: 70 8% 12%;
+  --card-foreground: 60 33% 96%;
+  --popover: 70 8% 12%;
+  --popover-foreground: 60 33% 96%;
+  --primary: 50 11% 42%;
+  --primary-foreground: 60 33% 96%;
+  --secondary: 72 7% 24%;
+  --secondary-foreground: 60 33% 96%;
+  --muted: 72 7% 24%;
+  --muted-foreground: 47 12% 56%;
+  --accent: 72 7% 24%;
+  --accent-foreground: 60 33% 96%;
+  --border: 70 7% 20%;
+  --input: 72 7% 24%;
+  --ring: 49 11% 54%;
+  --success: 80 74% 53%;
+  --success-foreground: 65 6% 15%;
+  --warning: 54 70% 68%;
+  --warning-foreground: 65 6% 15%;
+  --warning-ink: 54 68% 73%;
+  --danger: 336 95% 56%;
+  --danger-foreground: 60 33% 96%;
+  --env-resolved: 190 81% 66%;
+  --env-unresolved: 33 98% 56%;
+  --env-suggestion-active-bg: 72 7% 24%;
+  --env-suggestion-active-text: 60 33% 96%;
+  --env-suggestion-active-border: 50 11% 42%;
+  --env-suggestion-value: 60 7% 79%;
+  --sidebar: 70 8% 12%;
+  --sidebar-foreground: 60 33% 96%;
+  --sidebar-border: 72 7% 24%;
+  --json-key: 60 11% 79%;
+  --json-string: 54 70% 68%;
+  --json-boolean: 264 100% 75%;
+  --json-null: 264 100% 75%;
+  --json-number: 264 100% 75%;
+  --json-punctuation: 60 33% 96%;
+  --graphql-keyword: 336 95% 56%;
+  --graphql-field: 80 74% 53%;
+  --graphql-variable: 33 98% 56%;
+  --graphql-string: 54 70% 68%;
+  --graphql-number: 264 100% 75%;
+  --graphql-directive: 190 81% 66%;
+  --graphql-comment: 47 11% 49%;
+  --graphql-punctuation: 60 33% 96%;
+  --script-keyword: 336 95% 56%;
+  --script-builtin: 190 81% 66%;
+  --script-string: 54 70% 68%;
+  --script-regex: 33 98% 56%;
+  --script-number: 264 100% 75%;
+  --script-comment: 47 11% 49%;
+  --script-identifier: 60 33% 96%;
+  --script-punctuation: 60 33% 96%;
+  --yaml-key: 80 74% 53%;
+  --yaml-string: 54 70% 68%;
+  --yaml-number: 264 100% 75%;
+  --yaml-boolean: 336 95% 56%;
+  --yaml-punctuation: 60 33% 96%;
+  --yaml-comment: 47 11% 49%;
+  --markup-tag: 336 95% 56%;
+  --markup-attr-name: 80 74% 53%;
+  --markup-attr-value: 54 70% 68%;
+  --markup-punctuation: 60 33% 96%;
+  --markup-comment: 47 11% 49%;
+}
+
+.theme-solarized-dark {
+  --background: 193 58% 14%;
+  --foreground: 45 37% 82%;
+  --card: 192 57% 18%;
+  --card-foreground: 45 37% 82%;
+  --popover: 192 57% 20%;
+  --popover-foreground: 45 37% 82%;
+  --primary: 175 74% 35%;
+  --primary-foreground: 193 58% 14%;
+  --secondary: 192 45% 24%;
+  --secondary-foreground: 45 37% 82%;
+  --muted: 192 38% 22%;
+  --muted-foreground: 194 15% 61%;
+  --accent: 192 45% 26%;
+  --accent-foreground: 45 37% 82%;
+  --border: 192 35% 30%;
+  --input: 192 38% 23%;
+  --ring: 175 74% 35%;
+  --success: 68 100% 30%;
+  --success-foreground: 45 37% 90%;
+  --warning: 45 100% 35%;
+  --warning-foreground: 45 37% 90%;
+  --danger: 1 71% 52%;
+  --danger-foreground: 45 37% 90%;
+  --env-resolved: 171 61% 44%;
+  --env-unresolved: 33 74% 54%;
+  --sidebar: 193 58% 16%;
+  --sidebar-foreground: 45 37% 82%;
+  --sidebar-border: 192 35% 29%;
+}
+
+.theme-tomorrow-night-blue {
+  --background: 225 39% 14%;
+  --foreground: 212 38% 88%;
+  --card: 226 35% 18%;
+  --card-foreground: 212 38% 88%;
+  --popover: 226 35% 20%;
+  --popover-foreground: 212 38% 88%;
+  --primary: 200 100% 60%;
+  --primary-foreground: 225 39% 14%;
+  --secondary: 226 27% 25%;
+  --secondary-foreground: 212 38% 88%;
+  --muted: 226 24% 22%;
+  --muted-foreground: 214 16% 66%;
+  --accent: 226 26% 28%;
+  --accent-foreground: 212 38% 88%;
+  --border: 226 22% 33%;
+  --input: 226 23% 25%;
+  --ring: 200 100% 60%;
+  --success: 122 45% 66%;
+  --success-foreground: 225 39% 14%;
+  --warning: 37 88% 68%;
+  --warning-foreground: 225 39% 14%;
+  --danger: 350 86% 72%;
+  --danger-foreground: 225 39% 14%;
+  --env-resolved: 191 90% 73%;
+  --env-unresolved: 35 87% 74%;
+  --sidebar: 226 35% 17%;
+  --sidebar-foreground: 212 38% 88%;
+  --sidebar-border: 226 22% 31%;
+}
+
+.theme-one-dark {
+  --background: 219 13% 18%;
+  --foreground: 220 14% 82%;
+  --card: 220 14% 21%;
+  --card-foreground: 220 14% 82%;
+  --popover: 220 14% 23%;
+  --popover-foreground: 220 14% 82%;
+  --primary: 212 82% 64%;
+  --primary-foreground: 219 13% 18%;
+  --secondary: 220 13% 28%;
+  --secondary-foreground: 220 14% 82%;
+  --muted: 220 12% 25%;
+  --muted-foreground: 220 10% 65%;
+  --accent: 220 13% 30%;
+  --accent-foreground: 220 14% 82%;
+  --border: 220 11% 33%;
+  --input: 220 12% 26%;
+  --ring: 212 82% 64%;
+  --success: 134 48% 64%;
+  --success-foreground: 219 13% 18%;
+  --warning: 35 74% 66%;
+  --warning-foreground: 219 13% 18%;
+  --warning-ink: 36 80% 74%;
+  --danger: 357 68% 68%;
+  --danger-foreground: 219 13% 18%;
+  --env-resolved: 136 52% 70%;
+  --env-unresolved: 35 78% 71%;
+  --sidebar: 220 14% 20%;
+  --sidebar-foreground: 220 14% 82%;
+  --sidebar-border: 220 11% 31%;
+}
+
+.theme-github-dark {
+  --background: 213 23% 12%;
+  --foreground: 212 18% 85%;
+  --card: 213 22% 16%;
+  --card-foreground: 212 18% 85%;
+  --popover: 213 22% 18%;
+  --popover-foreground: 212 18% 85%;
+  --primary: 212 100% 69%;
+  --primary-foreground: 213 23% 12%;
+  --secondary: 213 19% 24%;
+  --secondary-foreground: 212 18% 85%;
+  --muted: 213 17% 21%;
+  --muted-foreground: 212 10% 63%;
+  --accent: 213 20% 27%;
+  --accent-foreground: 212 18% 85%;
+  --border: 213 15% 31%;
+  --input: 213 16% 24%;
+  --ring: 212 100% 69%;
+  --success: 142 50% 65%;
+  --success-foreground: 213 23% 12%;
+  --warning: 40 78% 68%;
+  --warning-foreground: 213 23% 12%;
+  --warning-ink: 40 86% 74%;
+  --danger: 354 74% 70%;
+  --danger-foreground: 213 23% 12%;
+  --env-resolved: 141 55% 71%;
+  --env-unresolved: 40 84% 73%;
+  --sidebar: 213 23% 14%;
+  --sidebar-foreground: 212 18% 85%;
+  --sidebar-border: 213 15% 30%;
+}
+
+.theme-tokyo-night {
+  --background: 235 23% 14%;
+  --foreground: 220 28% 84%;
+  --card: 235 24% 18%;
+  --card-foreground: 220 28% 84%;
+  --popover: 235 24% 20%;
+  --popover-foreground: 220 28% 84%;
+  --primary: 204 86% 68%;
+  --primary-foreground: 235 23% 14%;
+  --secondary: 235 19% 25%;
+  --secondary-foreground: 220 28% 84%;
+  --muted: 235 17% 22%;
+  --muted-foreground: 220 14% 65%;
+  --accent: 235 19% 27%;
+  --accent-foreground: 220 28% 84%;
+  --border: 235 14% 31%;
+  --input: 235 16% 24%;
+  --ring: 204 86% 68%;
+  --success: 142 50% 67%;
+  --success-foreground: 235 23% 14%;
+  --warning: 38 82% 70%;
+  --warning-foreground: 235 23% 14%;
+  --warning-ink: 40 88% 76%;
+  --danger: 356 74% 71%;
+  --danger-foreground: 235 23% 14%;
+  --env-resolved: 143 54% 72%;
+  --env-unresolved: 39 86% 74%;
+  --sidebar: 235 23% 16%;
+  --sidebar-foreground: 220 28% 84%;
+  --sidebar-border: 235 14% 30%;
+}
+
+.theme-dracula {
+  --background: 231 15% 18%;
+  --foreground: 231 30% 88%;
+  --card: 231 15% 22%;
+  --card-foreground: 231 30% 88%;
+  --popover: 231 15% 24%;
+  --popover-foreground: 231 30% 88%;
+  --primary: 265 89% 78%;
+  --primary-foreground: 231 15% 18%;
+  --secondary: 231 13% 29%;
+  --secondary-foreground: 231 30% 88%;
+  --muted: 231 12% 26%;
+  --muted-foreground: 231 12% 66%;
+  --accent: 231 13% 31%;
+  --accent-foreground: 231 30% 88%;
+  --border: 231 11% 34%;
+  --input: 231 12% 27%;
+  --ring: 265 89% 78%;
+  --success: 136 59% 69%;
+  --success-foreground: 231 15% 18%;
+  --warning: 36 90% 72%;
+  --warning-foreground: 231 15% 18%;
+  --warning-ink: 38 92% 78%;
+  --danger: 346 85% 71%;
+  --danger-foreground: 231 15% 18%;
+  --env-resolved: 136 62% 74%;
+  --env-unresolved: 36 90% 75%;
+  --sidebar: 231 15% 20%;
+  --sidebar-foreground: 231 30% 88%;
+  --sidebar-border: 231 11% 33%;
+}
+
+.theme-light-monochrome,
+.theme-gruvbox-light,
+.theme-one-light,
+.theme-solarized-light {
+  --warning-ink: 32 52% 24%;
+  --env-suggestion-active-bg: 210 84% 92%;
+  --env-suggestion-active-text: 216 34% 22%;
+  --env-suggestion-active-border: 212 92% 45%;
+  --env-suggestion-value: 215 16% 42%;
+  --tone-get: 208 88% 36%;
+  --tone-post: 145 67% 28%;
+  --tone-put: 31 92% 32%;
+  --tone-patch: 270 55% 38%;
+  --tone-delete: 355 68% 42%;
+  --tone-gql: 286 56% 33%;
+  --tone-grpc: 194 84% 31%;
+  --tone-ws: 37 90% 31%;
+  --tone-sio: 20 88% 34%;
+  --json-key: 215 72% 40%;
+  --json-string: 156 54% 28%;
+  --json-boolean: 275 52% 42%;
+  --json-null: 25 76% 38%;
+  --json-number: 193 68% 33%;
+  --json-punctuation: 22 10% 42%;
+  --graphql-keyword: 278 62% 34%;
+  --graphql-field: 214 58% 24%;
+  --graphql-variable: 196 70% 32%;
+  --graphql-string: 151 49% 28%;
+  --graphql-number: 31 82% 35%;
+  --graphql-directive: 342 68% 42%;
+  --graphql-comment: 24 8% 46%;
+  --graphql-punctuation: 24 12% 28%;
+  --script-keyword: 278 58% 36%;
+  --script-builtin: 200 74% 33%;
+  --script-string: 154 52% 31%;
+  --script-regex: 172 58% 30%;
+  --script-number: 193 66% 35%;
+  --script-comment: 215 10% 46%;
+  --script-identifier: 220 15% 24%;
+  --script-punctuation: 220 8% 38%;
+}
+
+.theme-dark-monochrome,
+.theme-gruvbox-dark,
+.theme-nord,
+.theme-catppuccin-mocha,
+.theme-one-dark,
+.theme-solarized-dark,
+.theme-tomorrow-night-blue,
+.theme-tokyo-night,
+.theme-dracula {
+  --warning-ink: 40 86% 74%;
+  --env-suggestion-active-bg: 222 16% 26%;
+  --env-suggestion-active-text: 215 20% 92%;
+  --env-suggestion-active-border: 207 100% 69%;
+  --env-suggestion-value: 216 14% 70%;
   --tone-get: 207 100% 69%;
   --tone-post: 120 41% 67%;
   --tone-put: 35 78% 65%;
@@ -146,8 +1025,76 @@
     background-image: radial-gradient(circle at top left, rgba(90, 136, 255, 0.09), transparent 24%), linear-gradient(180deg, hsl(38 34% 94%) 0%, hsl(35 30% 91%) 100%);
   }
 
+  .theme-light-monochrome body {
+    background-image: radial-gradient(circle at top left, rgba(116, 131, 151, 0.12), transparent 25%), linear-gradient(180deg, hsl(212 12% 94%) 0%, hsl(212 10% 90%) 100%);
+  }
+
+  .theme-gruvbox-light body {
+    background-image: radial-gradient(circle at top left, rgba(184, 129, 28, 0.13), transparent 26%), linear-gradient(180deg, hsl(43 39% 93%) 0%, hsl(41 33% 89%) 100%);
+  }
+
+  .theme-one-light body {
+    background-image: radial-gradient(circle at top left, rgba(150, 128, 214, 0.13), transparent 26%), linear-gradient(180deg, hsl(220 18% 96%) 0%, hsl(220 17% 92%) 100%);
+  }
+
+  .theme-vscode-light body {
+    background-image: radial-gradient(circle at top left, rgba(0, 122, 204, 0.12), transparent 24%), linear-gradient(180deg, hsl(0 0% 100%) 0%, hsl(0 0% 96%) 100%);
+  }
+
+  .theme-solarized-light body {
+    background-image: radial-gradient(circle at top left, rgba(38, 139, 210, 0.12), transparent 25%), linear-gradient(180deg, hsl(44 87% 95%) 0%, hsl(45 72% 91%) 100%);
+  }
+
   .theme-dark body {
     background-image: radial-gradient(circle at top left, rgba(104, 127, 255, 0.1), transparent 22%), linear-gradient(180deg, hsl(225 13% 13%) 0%, hsl(223 14% 11%) 100%);
+  }
+
+  .theme-dark-monochrome body {
+    background-image: radial-gradient(circle at top left, rgba(137, 150, 177, 0.12), transparent 24%), linear-gradient(180deg, hsl(220 9% 13%) 0%, hsl(220 9% 10%) 100%);
+  }
+
+  .theme-gruber-darker body {
+    background-image: radial-gradient(circle at top left, rgba(255, 221, 51, 0.13), transparent 22%), linear-gradient(180deg, hsl(0 0% 11%) 0%, hsl(0 0% 8%) 100%);
+  }
+
+  .theme-gruvbox-dark body {
+    background-image: radial-gradient(circle at top left, rgba(250, 189, 47, 0.14), transparent 22%), linear-gradient(180deg, hsl(34 23% 13%) 0%, hsl(34 24% 10%) 100%);
+  }
+
+  .theme-nord body {
+    background-image: radial-gradient(circle at top left, rgba(136, 192, 208, 0.14), transparent 24%), linear-gradient(180deg, hsl(220 18% 18%) 0%, hsl(220 18% 14%) 100%);
+  }
+
+  .theme-catppuccin-mocha body {
+    background-image: radial-gradient(circle at top left, rgba(203, 166, 247, 0.16), transparent 24%), linear-gradient(180deg, hsl(240 21% 16%) 0%, hsl(240 21% 13%) 100%);
+  }
+
+  .theme-vscode-dark body {
+    background-image: radial-gradient(circle at top left, rgba(86, 156, 214, 0.14), transparent 24%), linear-gradient(180deg, hsl(220 13% 13%) 0%, hsl(220 13% 10%) 100%);
+  }
+
+  .theme-monokai-dark body {
+    background-image: radial-gradient(circle at top left, rgba(166, 226, 46, 0.15), transparent 24%), linear-gradient(180deg, hsl(70 8% 17%) 0%, hsl(70 8% 13%) 100%);
+  }
+
+  .theme-solarized-dark body {
+    background-image: radial-gradient(circle at top left, rgba(42, 161, 152, 0.15), transparent 23%), linear-gradient(180deg, hsl(193 58% 16%) 0%, hsl(193 58% 13%) 100%);
+  }
+
+  .theme-tomorrow-night-blue body {
+    background-image: radial-gradient(circle at top left, rgba(102, 217, 239, 0.16), transparent 23%), linear-gradient(180deg, hsl(225 39% 16%) 0%, hsl(225 39% 13%) 100%);
+  }
+
+  .theme-one-dark body {
+    background-image: radial-gradient(circle at top left, rgba(97, 175, 239, 0.14), transparent 23%), linear-gradient(180deg, hsl(219 14% 20%) 0%, hsl(219 14% 16%) 100%);
+  }
+
+  .theme-tokyo-night body {
+    background-image: radial-gradient(circle at top left, rgba(122, 162, 247, 0.16), transparent 23%), linear-gradient(180deg, hsl(235 23% 16%) 0%, hsl(235 23% 13%) 100%);
+  }
+
+  .theme-dracula body {
+    background-image: radial-gradient(circle at top left, rgba(189, 147, 249, 0.17), transparent 23%), linear-gradient(180deg, hsl(231 15% 20%) 0%, hsl(231 15% 17%) 100%);
   }
 
   button,
@@ -350,6 +1297,50 @@
 
   .script-punctuation {
     color: hsl(var(--script-punctuation));
+  }
+
+  .yaml-key {
+    color: hsl(var(--yaml-key));
+  }
+
+  .yaml-string {
+    color: hsl(var(--yaml-string));
+  }
+
+  .yaml-number {
+    color: hsl(var(--yaml-number));
+  }
+
+  .yaml-boolean {
+    color: hsl(var(--yaml-boolean));
+  }
+
+  .yaml-punctuation {
+    color: hsl(var(--yaml-punctuation));
+  }
+
+  .yaml-comment {
+    color: hsl(var(--yaml-comment));
+  }
+
+  .markup-tag {
+    color: hsl(var(--markup-tag));
+  }
+
+  .markup-attr-name {
+    color: hsl(var(--markup-attr-name));
+  }
+
+  .markup-attr-value {
+    color: hsl(var(--markup-attr-value));
+  }
+
+  .markup-punctuation {
+    color: hsl(var(--markup-punctuation));
+  }
+
+  .markup-comment {
+    color: hsl(var(--markup-comment));
   }
 
   .mono-scroll {

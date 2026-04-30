@@ -19,7 +19,14 @@ function HighlightedText({ text, query }) {
       parts.push(<span key={`text-${lastIndex}`}>{str.slice(lastIndex, index)}</span>);
     }
     parts.push(
-      <mark key={`mark-${index}`} className="bg-yellow-500/40 text-foreground rounded-sm px-0.5">
+      <mark
+        key={`mark-${index}`}
+        className="rounded-sm px-0.5"
+        style={{
+          backgroundColor: "hsl(var(--warning) / 0.28)",
+          color: "hsl(var(--foreground))",
+        }}
+      >
         {str.slice(index, index + query.length)}
       </mark>
     );
@@ -51,7 +58,7 @@ function CopyButton({ value }) {
       className="opacity-0 group-hover:opacity-100 transition-opacity ml-2 text-muted-foreground hover:text-foreground focus:outline-none"
       title="Copy value"
     >
-      {copied ? <Check className="h-3.5 w-3.5 text-emerald-500" /> : <Copy className="h-3.5 w-3.5" />}
+      {copied ? <Check className="h-3.5 w-3.5" style={{ color: "hsl(var(--success))" }} /> : <Copy className="h-3.5 w-3.5" />}
     </button>
   );
 }

@@ -2,6 +2,8 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import Prism from "prismjs";
 import "prismjs/components/prism-clike";
 import "prismjs/components/prism-javascript";
+import "prismjs/components/prism-markup";
+import "prismjs/components/prism-yaml";
 
 import { cn } from "@/lib/utils.js";
 import { isJsonText } from "@/lib/formatters.js";
@@ -54,6 +56,34 @@ const prismToScriptClassMap = {
   interpolation: "script-punctuation",
   constant: "script-builtin",
   property: "script-identifier",
+};
+
+const prismToYamlClassMap = {
+  comment: "yaml-comment",
+  key: "yaml-key",
+  atrule: "yaml-key",
+  important: "yaml-key",
+  property: "yaml-key",
+  scalar: "yaml-string",
+  string: "yaml-string",
+  number: "yaml-number",
+  datetime: "yaml-number",
+  boolean: "yaml-boolean",
+  null: "yaml-boolean",
+  tag: "yaml-key",
+  punctuation: "yaml-punctuation",
+};
+
+const prismToMarkupClassMap = {
+  comment: "markup-comment",
+  prolog: "markup-comment",
+  doctype: "markup-comment",
+  cdata: "markup-comment",
+  tag: "markup-tag",
+  "attr-name": "markup-attr-name",
+  "attr-value": "markup-attr-value",
+  entity: "markup-attr-value",
+  punctuation: "markup-punctuation",
 };
 
 function getTokenPrefix(text, cursorPosition) {
@@ -185,32 +215,32 @@ function renderHighlightedJson(text) {
   return nodes;
 }
 
-function resolvePrismScriptClass(token) {
+function resolvePrismClass(token, classMap, fallbackClass) {
   const aliases = Array.isArray(token?.alias)
     ? token.alias
     : (token?.alias ? [token.alias] : []);
   const candidates = [token?.type, ...aliases].map((entry) => String(entry || "").toLowerCase());
   for (const candidate of candidates) {
-    if (prismToScriptClassMap[candidate]) {
-      return prismToScriptClassMap[candidate];
+    if (classMap[candidate]) {
+      return classMap[candidate];
     }
   }
-  return "script-identifier";
+  return fallbackClass;
 }
 
-function renderPrismToken(token, keyPrefix) {
+function renderPrismToken(token, keyPrefix, classMap, fallbackClass) {
   if (typeof token === "string") {
     return token;
   }
 
   if (Array.isArray(token)) {
-    return token.map((item, index) => renderPrismToken(item, `${keyPrefix}-${index}`));
+    return token.map((item, index) => renderPrismToken(item, `${keyPrefix}-${index}`, classMap, fallbackClass));
   }
 
-  const className = resolvePrismScriptClass(token);
+  const className = resolvePrismClass(token, classMap, fallbackClass);
   return (
     <span key={keyPrefix} className={className}>
-      {renderPrismToken(token?.content, `${keyPrefix}-content`)}
+      {renderPrismToken(token?.content, `${keyPrefix}-content`, classMap, fallbackClass)}
     </span>
   );
 }
@@ -223,7 +253,29 @@ function renderHighlightedJavascript(text) {
   }
 
   const tokens = Prism.tokenize(content, javascriptGrammar);
-  return tokens.map((token, index) => renderPrismToken(token, `js-${index}`));
+  return tokens.map((token, index) => renderPrismToken(token, `js-${index}`, prismToScriptClassMap, "script-identifier"));
+}
+
+function renderHighlightedYaml(text) {
+  const content = text || "";
+  const yamlGrammar = Prism.languages.yaml;
+  if (!yamlGrammar) {
+    return content;
+  }
+
+  const tokens = Prism.tokenize(content, yamlGrammar);
+  return tokens.map((token, index) => renderPrismToken(token, `yaml-${index}`, prismToYamlClassMap, "yaml-string"));
+}
+
+function renderHighlightedMarkup(text) {
+  const content = text || "";
+  const markupGrammar = Prism.languages.markup || Prism.languages.xml;
+  if (!markupGrammar) {
+    return content;
+  }
+
+  const tokens = Prism.tokenize(content, markupGrammar);
+  return tokens.map((token, index) => renderPrismToken(token, `xml-${index}`, prismToMarkupClassMap, "markup-punctuation"));
 }
 
 function getLineCount(text) {
@@ -316,7 +368,9 @@ export function CodeEditor({
   const isJson = language === "json" && isJsonText(value);
   const isGraphql = language === "graphql";
   const isJavascript = language === "javascript" || language === "js";
-  const useOverlay = !readOnly && (language === "json" || language === "graphql" || isJavascript);
+  const isYaml = language === "yaml" || language === "yml";
+  const isXml = language === "xml" || language === "markup" || language === "html";
+  const useOverlay = !readOnly && (language === "json" || language === "graphql" || isJavascript || isYaml || isXml);
   const displayValue = useMemo(() => value || "", [value]);
   const totalLines = useMemo(() => getLineCount(displayValue), [displayValue]);
   const suggestionEnabled = !readOnly && !disabled && isJavascript && Array.isArray(autocompleteItems) && autocompleteItems.length > 0;
@@ -492,6 +546,10 @@ export function CodeEditor({
                 ? renderHighlightedGraphql(displayValue)
                 : isJavascript
                   ? renderHighlightedJavascript(displayValue)
+                  : isYaml
+                    ? renderHighlightedYaml(displayValue)
+                    : isXml
+                      ? renderHighlightedMarkup(displayValue)
                 : displayValue}
           </code>
         </pre>
@@ -544,6 +602,10 @@ export function CodeEditor({
                 ? renderHighlightedGraphql(displayValue)
                 : isJavascript
                   ? renderHighlightedJavascript(displayValue)
+                  : isYaml
+                    ? renderHighlightedYaml(displayValue)
+                    : isXml
+                      ? renderHighlightedMarkup(displayValue)
                 : displayValue
             : " "}
         </code>
