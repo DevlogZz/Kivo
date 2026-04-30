@@ -464,7 +464,7 @@ function FolderContextMenu({ menu, onCreateRequest, onCreateFolder, onOpenSettin
 
   return createPortal(
     <div ref={menuRef} className="thin-scrollbar fixed z-[210] min-w-[180px] max-w-[calc(100vw-16px)] overflow-y-auto border border-border/60 bg-popover p-1 shadow-2xl" style={menuStyle} onMouseDown={(e) => e.stopPropagation()} onContextMenu={(e) => e.preventDefault()}>
-      <button type="button" className="flex w-full items-center gap-2 px-3 py-2 text-left text-[12px] text-foreground hover:bg-accent/45" onClick={() => { onCreateRequest(menu.workspaceName, menu.collectionName, menu.folderPath); onClose(); }}>
+      <button type="button" className="flex w-full items-center gap-2 px-3 py-2 text-left text-[12px] text-foreground hover:bg-accent/45" onClick={() => { onCreateRequest(menu); onClose(); }}>
         <Plus className="h-3.5 w-3.5" /> New Request
       </button>
       <button type="button" className="flex w-full items-center gap-2 px-3 py-2 text-left text-[12px] text-foreground hover:bg-accent/45" onClick={() => { onCreateFolder(menu.workspaceName, menu.collectionName, menu.folderPath); onClose(); }}>
@@ -1552,6 +1552,17 @@ export function RequestsView({
     setCreatingRequestInFolder(folderKey);
   }
 
+  function handleOpenFolderCreateRequestMenu(menu) {
+    if (!menu) return;
+    setCreateRequestMenu({
+      x: Number(menu.x || 0) + 6,
+      y: Number(menu.y || 0) + 6,
+      workspaceName: menu.workspaceName,
+      collectionName: menu.collectionName,
+      folderPath: normalizeFolderPath(menu.folderPath)
+    });
+  }
+
   function openCreateRequestMenu(event, workspaceName, collectionName, folderPath = "") {
     event.stopPropagation();
     const rect = event.currentTarget.getBoundingClientRect();
@@ -2179,7 +2190,7 @@ export function RequestsView({
       />
       <FolderContextMenu
         menu={folderContextMenu}
-        onCreateRequest={handleStartCreateFolderRequest}
+        onCreateRequest={handleOpenFolderCreateRequestMenu}
         onCreateFolder={handleStartCreateSubfolder}
         onOpenSettings={handleOpenFolderSettings}
         onCopyFolder={handleCopyFolder}
