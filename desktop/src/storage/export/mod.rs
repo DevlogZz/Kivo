@@ -1,5 +1,247 @@
-use crate::storage::models::{RequestRecord, RequestTextOrJson};
+use crate::storage::models::{
+    CollectionRecord, FolderSettingsRecord, KeyValueRow, OAuthParamRow, RequestRecord,
+    RequestTextOrJson,
+};
 use std::collections::BTreeMap;
+
+fn contains_template_var(value: &str) -> bool {
+    let Some(start) = value.find("{{") else {
+        return false;
+    };
+    value[start + 2..].contains("}}")
+}
+
+fn sanitize_export_text(value: &str) -> String {
+    if contains_template_var(value) {
+        String::new()
+    } else {
+        value.to_string()
+    }
+}
+
+fn sanitize_json_value(value: &mut serde_json::Value) {
+    match value {
+        serde_json::Value::String(text) => {
+            *text = sanitize_export_text(text);
+        }
+        serde_json::Value::Array(items) => {
+            for item in items {
+                sanitize_json_value(item);
+            }
+        }
+        serde_json::Value::Object(map) => {
+            for entry in map.values_mut() {
+                sanitize_json_value(entry);
+            }
+        }
+        _ => {}
+    }
+}
+
+fn sanitize_key_value_rows(rows: &mut [KeyValueRow]) {
+    for row in rows {
+        row.key = sanitize_export_text(&row.key);
+        row.value = sanitize_export_text(&row.value);
+    }
+}
+
+fn sanitize_oauth_rows(rows: &mut [OAuthParamRow]) {
+    for row in rows {
+        row.key = sanitize_export_text(&row.key);
+        row.value = sanitize_export_text(&row.value);
+    }
+}
+
+pub fn is_exportable_request_mode(mode: &str) -> bool {
+    matches!(mode.trim().to_lowercase().as_str(), "http" | "graphql")
+}
+
+pub fn sanitize_request_for_export(request: &RequestRecord) -> RequestRecord {
+    let mut sanitized = request.clone();
+
+    sanitized.name = sanitize_export_text(&sanitized.name);
+    sanitized.method = sanitize_export_text(&sanitized.method);
+    sanitized.url = sanitize_export_text(&sanitized.url);
+    sanitize_key_value_rows(&mut sanitized.query_params);
+    sanitize_key_value_rows(&mut sanitized.headers);
+    sanitize_key_value_rows(&mut sanitized.body_rows);
+    sanitized.body_file_path = sanitize_export_text(&sanitized.body_file_path);
+    sanitized.docs = sanitize_export_text(&sanitized.docs);
+    sanitized.tags = sanitized
+        .tags
+        .iter()
+        .map(|tag| sanitize_export_text(tag))
+        .collect();
+    sanitized.folder_path = sanitize_export_text(&sanitized.folder_path);
+    sanitized.script_pre_request = sanitize_export_text(&sanitized.script_pre_request);
+    sanitized.script_after_response = sanitize_export_text(&sanitized.script_after_response);
+    sanitized.script_active_phase = sanitize_export_text(&sanitized.script_active_phase);
+    sanitized.script_last_run_at = sanitize_export_text(&sanitized.script_last_run_at);
+    sanitized.script_last_phase = sanitize_export_text(&sanitized.script_last_phase);
+    sanitized.script_last_status = sanitize_export_text(&sanitized.script_last_status);
+    sanitized.script_last_error = sanitize_export_text(&sanitized.script_last_error);
+    sanitized.script_last_logs = sanitized
+        .script_last_logs
+        .iter()
+        .map(|line| sanitize_export_text(line))
+        .collect();
+    for test in &mut sanitized.script_last_tests {
+        test.name = sanitize_export_text(&test.name);
+        test.error = sanitize_export_text(&test.error);
+    }
+    for value in sanitized.script_last_vars.values_mut() {
+        sanitize_json_value(value);
+    }
+
+    sanitized.auth.auth_type = sanitize_export_text(&sanitized.auth.auth_type);
+    sanitized.auth.token = sanitize_export_text(&sanitized.auth.token);
+    sanitized.auth.username = sanitize_export_text(&sanitized.auth.username);
+    sanitized.auth.password = sanitize_export_text(&sanitized.auth.password);
+    sanitized.auth.api_key_name = sanitize_export_text(&sanitized.auth.api_key_name);
+    sanitized.auth.api_key_value = sanitize_export_text(&sanitized.auth.api_key_value);
+    sanitized.auth.api_key_in = sanitize_export_text(&sanitized.auth.api_key_in);
+
+    sanitized.auth.oauth2.grant_type = sanitize_export_text(&sanitized.auth.oauth2.grant_type);
+    sanitized.auth.oauth2.auth_url = sanitize_export_text(&sanitized.auth.oauth2.auth_url);
+    sanitized.auth.oauth2.token_url = sanitize_export_text(&sanitized.auth.oauth2.token_url);
+    sanitized.auth.oauth2.callback_url = sanitize_export_text(&sanitized.auth.oauth2.callback_url);
+    sanitized.auth.oauth2.client_id = sanitize_export_text(&sanitized.auth.oauth2.client_id);
+    sanitized.auth.oauth2.client_secret = sanitize_export_text(&sanitized.auth.oauth2.client_secret);
+    sanitized.auth.oauth2.scope = sanitize_export_text(&sanitized.auth.oauth2.scope);
+    sanitized.auth.oauth2.audience = sanitize_export_text(&sanitized.auth.oauth2.audience);
+    sanitized.auth.oauth2.resource = sanitize_export_text(&sanitized.auth.oauth2.resource);
+    sanitized.auth.oauth2.authorization_code =
+        sanitize_export_text(&sanitized.auth.oauth2.authorization_code);
+    sanitized.auth.oauth2.access_token = sanitize_export_text(&sanitized.auth.oauth2.access_token);
+    sanitized.auth.oauth2.refresh_token = sanitize_export_text(&sanitized.auth.oauth2.refresh_token);
+    sanitized.auth.oauth2.token_type = sanitize_export_text(&sanitized.auth.oauth2.token_type);
+    sanitized.auth.oauth2.expires_at = sanitize_export_text(&sanitized.auth.oauth2.expires_at);
+    sanitized.auth.oauth2.username = sanitize_export_text(&sanitized.auth.oauth2.username);
+    sanitized.auth.oauth2.password = sanitize_export_text(&sanitized.auth.oauth2.password);
+    sanitized.auth.oauth2.code_verifier = sanitize_export_text(&sanitized.auth.oauth2.code_verifier);
+    sanitized.auth.oauth2.state = sanitize_export_text(&sanitized.auth.oauth2.state);
+    sanitized.auth.oauth2.client_auth_method =
+        sanitize_export_text(&sanitized.auth.oauth2.client_auth_method);
+    sanitize_oauth_rows(&mut sanitized.auth.oauth2.extra_token_params);
+    sanitized.auth.oauth2.last_error = sanitize_export_text(&sanitized.auth.oauth2.last_error);
+    sanitized.auth.oauth2.last_warning = sanitize_export_text(&sanitized.auth.oauth2.last_warning);
+    sanitized.auth.oauth2.last_status = sanitize_export_text(&sanitized.auth.oauth2.last_status);
+
+    sanitized.grpc_proto_file_path = sanitize_export_text(&sanitized.grpc_proto_file_path);
+    sanitized.grpc_method_path = sanitize_export_text(&sanitized.grpc_method_path);
+    sanitized.grpc_streaming_mode = sanitize_export_text(&sanitized.grpc_streaming_mode);
+    sanitized.grpc_direct_proto_files = sanitized
+        .grpc_direct_proto_files
+        .iter()
+        .map(|path| sanitize_export_text(path))
+        .collect();
+    sanitized.grpc_proto_directories = sanitized
+        .grpc_proto_directories
+        .iter()
+        .map(|entry| {
+            let mut next = entry.clone();
+            next.path = sanitize_export_text(&entry.path);
+            next.files = entry.files.iter().map(|path| sanitize_export_text(path)).collect();
+            next
+        })
+        .collect();
+
+    match &mut sanitized.body {
+        RequestTextOrJson::Text(text) => {
+            *text = sanitize_export_text(text);
+        }
+        RequestTextOrJson::Json(json) => {
+            sanitize_json_value(json);
+        }
+    }
+
+    match &mut sanitized.graphql_variables {
+        RequestTextOrJson::Text(text) => {
+            *text = sanitize_export_text(text);
+        }
+        RequestTextOrJson::Json(json) => {
+            sanitize_json_value(json);
+        }
+    }
+
+    sanitized.last_response = None;
+
+    sanitized
+}
+
+pub fn prepare_request_for_export(request: &RequestRecord) -> Result<RequestRecord, String> {
+    if !is_exportable_request_mode(&request.request_mode) {
+        return Err(
+            "Export is supported only for HTTP and GraphQL requests. Realtime and gRPC requests are not exportable."
+                .to_string(),
+        );
+    }
+
+    Ok(sanitize_request_for_export(request))
+}
+
+pub fn prepare_requests_for_export(requests: &[RequestRecord]) -> Vec<RequestRecord> {
+    requests
+        .iter()
+        .filter(|request| is_exportable_request_mode(&request.request_mode))
+        .map(sanitize_request_for_export)
+        .collect()
+}
+
+pub fn prepare_collection_for_kivo_export(collection: &CollectionRecord) -> CollectionRecord {
+    let mut sanitized = collection.clone();
+    sanitized.name = sanitize_export_text(&sanitized.name);
+    sanitized.folders = sanitized
+        .folders
+        .iter()
+        .map(|folder| sanitize_export_text(folder))
+        .collect();
+    sanitized.folder_settings = sanitized
+        .folder_settings
+        .iter()
+        .map(|setting| {
+            let mut next = FolderSettingsRecord {
+                path: sanitize_export_text(&setting.path),
+                default_headers: setting.default_headers.clone(),
+                default_auth: setting.default_auth.clone(),
+            };
+            sanitize_key_value_rows(&mut next.default_headers);
+            next.default_auth.auth_type = sanitize_export_text(&next.default_auth.auth_type);
+            next.default_auth.token = sanitize_export_text(&next.default_auth.token);
+            next.default_auth.username = sanitize_export_text(&next.default_auth.username);
+            next.default_auth.password = sanitize_export_text(&next.default_auth.password);
+            next.default_auth.api_key_name = sanitize_export_text(&next.default_auth.api_key_name);
+            next.default_auth.api_key_value = sanitize_export_text(&next.default_auth.api_key_value);
+            next.default_auth.api_key_in = sanitize_export_text(&next.default_auth.api_key_in);
+            next.default_auth.oauth2.grant_type = sanitize_export_text(&next.default_auth.oauth2.grant_type);
+            next.default_auth.oauth2.auth_url = sanitize_export_text(&next.default_auth.oauth2.auth_url);
+            next.default_auth.oauth2.token_url = sanitize_export_text(&next.default_auth.oauth2.token_url);
+            next.default_auth.oauth2.callback_url = sanitize_export_text(&next.default_auth.oauth2.callback_url);
+            next.default_auth.oauth2.client_id = sanitize_export_text(&next.default_auth.oauth2.client_id);
+            next.default_auth.oauth2.client_secret = sanitize_export_text(&next.default_auth.oauth2.client_secret);
+            next.default_auth.oauth2.scope = sanitize_export_text(&next.default_auth.oauth2.scope);
+            next.default_auth.oauth2.audience = sanitize_export_text(&next.default_auth.oauth2.audience);
+            next.default_auth.oauth2.resource = sanitize_export_text(&next.default_auth.oauth2.resource);
+            next.default_auth.oauth2.authorization_code = sanitize_export_text(&next.default_auth.oauth2.authorization_code);
+            next.default_auth.oauth2.access_token = sanitize_export_text(&next.default_auth.oauth2.access_token);
+            next.default_auth.oauth2.refresh_token = sanitize_export_text(&next.default_auth.oauth2.refresh_token);
+            next.default_auth.oauth2.token_type = sanitize_export_text(&next.default_auth.oauth2.token_type);
+            next.default_auth.oauth2.expires_at = sanitize_export_text(&next.default_auth.oauth2.expires_at);
+            next.default_auth.oauth2.username = sanitize_export_text(&next.default_auth.oauth2.username);
+            next.default_auth.oauth2.password = sanitize_export_text(&next.default_auth.oauth2.password);
+            next.default_auth.oauth2.code_verifier = sanitize_export_text(&next.default_auth.oauth2.code_verifier);
+            next.default_auth.oauth2.state = sanitize_export_text(&next.default_auth.oauth2.state);
+            next.default_auth.oauth2.client_auth_method = sanitize_export_text(&next.default_auth.oauth2.client_auth_method);
+            sanitize_oauth_rows(&mut next.default_auth.oauth2.extra_token_params);
+            next.default_auth.oauth2.last_error = sanitize_export_text(&next.default_auth.oauth2.last_error);
+            next.default_auth.oauth2.last_warning = sanitize_export_text(&next.default_auth.oauth2.last_warning);
+            next.default_auth.oauth2.last_status = sanitize_export_text(&next.default_auth.oauth2.last_status);
+            next
+        })
+        .collect();
+    sanitized.requests = prepare_requests_for_export(&collection.requests);
+    sanitized
+}
 
 #[derive(Default)]
 pub(crate) struct ExportFolderNode<'a> {
@@ -308,13 +550,21 @@ pub fn build_export_value(
     requests: &[RequestRecord],
 ) -> Result<serde_json::Value, String> {
     let normalized = normalize_export_format(format);
+    let export_requests = prepare_requests_for_export(requests);
+    if export_requests.is_empty() {
+        return Err(
+            "No exportable requests found. Export supports only HTTP and GraphQL requests."
+                .to_string(),
+        );
+    }
+
     match normalized.as_str() {
         "kivo" => {
-            if requests.len() == 1 {
+            if export_requests.len() == 1 {
                 Ok(serde_json::json!({
                     "kivo": "1.0",
                     "type": "request",
-                    "request": requests[0],
+                    "request": export_requests[0],
                 }))
             } else {
                 Ok(serde_json::json!({
@@ -324,7 +574,7 @@ pub fn build_export_value(
                         "name": name,
                         "folders": [],
                         "folderSettings": [],
-                        "requests": requests,
+                        "requests": export_requests,
                     }
                 }))
             }
@@ -334,11 +584,11 @@ pub fn build_export_value(
                 "name": name,
                 "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
             },
-            "item": postman_items_from_tree(&build_export_folder_tree(requests))
+            "item": postman_items_from_tree(&build_export_folder_tree(&export_requests))
         })),
-        "openapi3.0" => Ok(requests_to_openapi_doc(requests, name, "1.0.0", "3.0.0")),
-        "swagger2.0" => Ok(requests_to_openapi_doc(requests, name, "1.0.0", "2.0")),
-        "bruno" => Ok(requests_to_bruno_doc(requests, name)),
+        "openapi3.0" => Ok(requests_to_openapi_doc(&export_requests, name, "1.0.0", "3.0.0")),
+        "swagger2.0" => Ok(requests_to_openapi_doc(&export_requests, name, "1.0.0", "2.0")),
+        "bruno" => Ok(requests_to_bruno_doc(&export_requests, name)),
         _ => Err(
             "Unsupported export format. Use kivo, postman, openapi3.0, swagger2.0, or bruno.".to_string(),
         ),

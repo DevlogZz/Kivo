@@ -427,6 +427,10 @@ function getRequestBaseNameByMode(mode) {
   }
 }
 
+function isRequestExportSupported(mode) {
+  return mode === REQUEST_MODES.HTTP || mode === REQUEST_MODES.GRAPHQL;
+}
+
 function getRequestBadgeMeta(request) {
   const mode = request?.requestMode ?? REQUEST_MODES.HTTP;
   switch (mode) {
@@ -899,7 +903,7 @@ function GenerateCodeModal({ request, language, context, isLoadingContext, onLan
   );
 }
 
-function RequestContextMenu({ menu, onGenerateCode, onCopyCurl, onRename, onDuplicate, onCopy, onPaste, onExportRequest, onReveal, onTogglePin, onDelete, onClose, canPaste }) {
+function RequestContextMenu({ menu, onGenerateCode, onCopyCurl, onRename, onDuplicate, onCopy, onPaste, onExportRequest, onReveal, onTogglePin, onDelete, onClose, canPaste, canExport }) {
   const { menuRef, menuStyle } = useFloatingMenuPosition(menu, { minWidth: 180 });
 
   useEffect(() => {
@@ -938,7 +942,19 @@ function RequestContextMenu({ menu, onGenerateCode, onCopyCurl, onRename, onDupl
       <button type="button" className="flex w-full items-center gap-2 px-3 py-2 text-left text-[12px] text-foreground hover:bg-accent/45" onClick={() => { onDuplicate(menu.workspaceName, menu.collectionName, menu.requestName); onClose(); }}>
         <Copy className="h-3.5 w-3.5" /> Duplicate
       </button>
-      <button type="button" className="flex w-full items-center gap-2 px-3 py-2 text-left text-[12px] text-foreground hover:bg-accent/45" onClick={() => { onExportRequest(menu.workspaceName, menu.collectionName, menu.requestName); onClose(); }}>
+      <button
+        type="button"
+        disabled={!canExport}
+        className={cn(
+          "flex w-full items-center gap-2 px-3 py-2 text-left text-[12px] transition-colors",
+          canExport ? "text-foreground hover:bg-accent/45" : "text-muted-foreground opacity-50 cursor-not-allowed"
+        )}
+        onClick={() => {
+          if (!canExport) return;
+          onExportRequest(menu.workspaceName, menu.collectionName, menu.requestName);
+          onClose();
+        }}
+      >
         <Copy className="h-3.5 w-3.5" /> Export Request
       </button>
       <button type="button" className="flex w-full items-center gap-2 px-3 py-2 text-left text-[12px] text-foreground hover:bg-accent/45" onClick={() => { onReveal(menu.workspaceName, menu.collectionName, menu.requestName); onClose(); }}>
@@ -1283,7 +1299,8 @@ export function RequestsView({
       workspaceName,
       collectionName,
       requestName: request.name,
-      pinned: request.pinned
+      pinned: request.pinned,
+      requestMode: request.requestMode
     });
   }
 
@@ -1447,6 +1464,12 @@ export function RequestsView({
   }
 
   function handleExportRequest(workspaceName, collectionName, requestName) {
+    const request = getRequestRecord(workspaces, workspaceName, collectionName, requestName);
+    if (!request || !isRequestExportSupported(request.requestMode)) {
+      setFeedbackMessage("Export is available only for HTTP and GraphQL requests.");
+      setTimeout(() => setFeedbackMessage(""), 2200);
+      return;
+    }
     setImportExportState({ mode: "export", scope: "request", workspaceName, collectionName, requestName, targetFolderPath: "" });
   }
 
@@ -2173,6 +2196,7 @@ export function RequestsView({
         onDelete={onDeleteRequest}
         onClose={() => setContextMenu(null)}
         canPaste={Boolean(clipboard) && (clipboard.workspaceName !== contextMenu?.workspaceName || clipboard.collectionName !== contextMenu?.collectionName)}
+        canExport={isRequestExportSupported(contextMenu?.requestMode)}
       />
       <CollectionContextMenu
         menu={collectionContextMenu}
