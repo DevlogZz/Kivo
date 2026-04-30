@@ -174,6 +174,10 @@ pub struct WorkspaceInfo {
 pub struct CollectionMeta {
     pub name: String,
     pub path: String,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub folders: Vec<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub folder_settings: Vec<FolderSettingsRecord>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

@@ -241,11 +241,17 @@ pub fn fs_load_workspaces(root: &Path) -> Result<Vec<WorkspaceRecord>, String> {
             .map_err(|e| format!("Failed to parse workspace.json: {e}"))?;
         let mut collections = Vec::new();
         for col_meta in ws_file.collections {
-            let col_meta_path = PathBuf::from(&col_meta.path);
+            let CollectionMeta {
+                name: collection_name,
+                path: collection_path,
+                folders: mut collection_folders,
+                folder_settings: mut collection_folder_settings,
+            } = col_meta;
+            let col_meta_path = PathBuf::from(&collection_path);
             let col_path = if col_meta_path.is_absolute() {
                 col_meta_path
             } else {
-                path.join(&col_meta.path)
+                path.join(&collection_path)
             };
             if !col_path.exists() || !col_path.is_dir() {
                 continue;
@@ -265,22 +271,26 @@ pub fn fs_load_workspaces(root: &Path) -> Result<Vec<WorkspaceRecord>, String> {
                     Err(e) => eprintln!("Skipping malformed request file {:?}: {e}", req_path),
                 }
             }
-            let collection_state = {
-                let state_path = col_path.join(COLLECTION_STATE_FILE_NAME);
-                if state_path.exists() {
-                    fs::read_to_string(&state_path)
-                        .ok()
-                        .and_then(|json| serde_json::from_str::<CollectionStateFile>(&json).ok())
-                        .unwrap_or_default()
-                } else {
-                    CollectionStateFile::default()
-                }
-            };
+            if collection_folders.is_empty() && collection_folder_settings.is_empty() {
+                let collection_state = {
+                    let state_path = col_path.join(COLLECTION_STATE_FILE_NAME);
+                    if state_path.exists() {
+                        fs::read_to_string(&state_path)
+                            .ok()
+                            .and_then(|json| serde_json::from_str::<CollectionStateFile>(&json).ok())
+                            .unwrap_or_default()
+                    } else {
+                        CollectionStateFile::default()
+                    }
+                };
+                collection_folders = collection_state.folders;
+                collection_folder_settings = collection_state.folder_settings;
+            }
 
             collections.push(CollectionRecord {
-                name: col_meta.name,
-                folders: collection_state.folders,
-                folder_settings: collection_state.folder_settings,
+                name: collection_name,
+                folders: collection_folders,
+                folder_settings: collection_folder_settings,
                 requests,
             });
         }
@@ -374,21 +384,16 @@ pub fn fs_save_workspaces(root: &Path, workspaces: &[WorkspaceRecord]) -> Result
                     .map_err(|e| format!("Failed to write request file: {e}"))?;
             }
 
-            let collection_state_json = serde_json::to_string_pretty(&CollectionStateFile {
-                folders: collection.folders.clone(),
-                folder_settings: collection.folder_settings.clone(),
-            })
-            .map_err(|e| format!("Failed to serialize collection state: {e}"))?;
-
-            fs::write(
-                col_path.join(COLLECTION_STATE_FILE_NAME),
-                collection_state_json,
-            )
-            .map_err(|e| format!("Failed to write collection state file: {e}"))?;
+            let legacy_state_path = col_path.join(COLLECTION_STATE_FILE_NAME);
+            if legacy_state_path.exists() {
+                let _ = fs::remove_file(legacy_state_path);
+            }
 
             collections_meta.push(CollectionMeta {
                 name: collection.name.clone(),
                 path: col_dir_name,
+                folders: collection.folders.clone(),
+                folder_settings: collection.folder_settings.clone(),
             });
         }
         let ws_file = WorkspaceFile {
