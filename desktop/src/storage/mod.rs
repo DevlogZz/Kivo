@@ -27,7 +27,7 @@ pub use models::{
 
 pub use import::parse_collection_content;
 
-pub use export::{build_export_value, serialize_export_value};
+pub use export::{build_export_value, normalize_export_format, serialize_export_value};
 
 pub use io::{
     fs_get_env_vars, fs_load_workspaces, fs_save_collection_config, fs_save_env_vars,
@@ -524,7 +524,15 @@ pub fn export_collection_file(
     name: String,
     collection: CollectionRecord,
 ) -> Result<(), String> {
-    let value = build_export_value(&format, &name, &collection.requests)?;
+    let value = if normalize_export_format(&format) == "kivo" {
+        serde_json::json!({
+            "kivo": "1.0",
+            "type": "collection",
+            "collection": collection,
+        })
+    } else {
+        build_export_value(&format, &name, &collection.requests)?
+    };
     let content = serialize_export_value(&format, &value)?;
     fs::write(&file_path, content).map_err(|e| format!("Failed to write export file: {e}"))
 }

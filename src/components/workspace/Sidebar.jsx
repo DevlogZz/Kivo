@@ -78,6 +78,7 @@ function useFloatingMenuPosition(menu, { minWidth = 220, viewportPadding = 8 } =
 }
 
 const IMPORT_EXPORT_FORMATS = [
+  { value: "kivo", label: "Kivo (JSON)", extension: "json" },
   { value: "postman", label: "Postman (JSON)", extension: "json" },
   { value: "openapi3.0", label: "OpenAPI 3.0", extension: "json" },
   { value: "swagger2.0", label: "Swagger 2.0", extension: "json" },
@@ -88,7 +89,7 @@ const REQUEST_RENAME_EVENT = "kivo:request-rename-focus";
 const REQUEST_IMPORT_EVENT = "kivo:request-import-open";
 const CURL_IMPORT_EVENT = "kivo:curl-import-open";
 
-const SUPPORTED_IMPORT_FORMATS_LABEL = "Supported formats: Postman, OpenAPI 3.0, Swagger 2.0, Bruno (JSON/YAML).";
+const SUPPORTED_IMPORT_FORMATS_LABEL = "Supported formats: Kivo JSON, Postman, OpenAPI 3.0, Swagger 2.0, Bruno (JSON/YAML).";
 
 const CURL_IMPORT_TARGETS = [
   { value: REQUEST_MODES.HTTP, label: "HTTP" },

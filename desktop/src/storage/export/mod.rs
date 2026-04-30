@@ -296,6 +296,7 @@ pub fn normalize_export_format(format: &str) -> String {
         "openapi3" | "openapi3.0" | "openapi" => "openapi3.0".to_string(),
         "swagger2" | "swagger2.0" | "swagger" => "swagger2.0".to_string(),
         "postman" => "postman".to_string(),
+        "kivo" | "kivo-json" | "kivo.json" => "kivo".to_string(),
         "bruno" | "bruno-yml" | "bruno.yml" | "yml" | "yaml" => "bruno".to_string(),
         other => other.to_string(),
     }
@@ -308,6 +309,26 @@ pub fn build_export_value(
 ) -> Result<serde_json::Value, String> {
     let normalized = normalize_export_format(format);
     match normalized.as_str() {
+        "kivo" => {
+            if requests.len() == 1 {
+                Ok(serde_json::json!({
+                    "kivo": "1.0",
+                    "type": "request",
+                    "request": requests[0],
+                }))
+            } else {
+                Ok(serde_json::json!({
+                    "kivo": "1.0",
+                    "type": "collection",
+                    "collection": {
+                        "name": name,
+                        "folders": [],
+                        "folderSettings": [],
+                        "requests": requests,
+                    }
+                }))
+            }
+        }
         "postman" => Ok(serde_json::json!({
             "info": {
                 "name": name,
@@ -319,7 +340,7 @@ pub fn build_export_value(
         "swagger2.0" => Ok(requests_to_openapi_doc(requests, name, "1.0.0", "2.0")),
         "bruno" => Ok(requests_to_bruno_doc(requests, name)),
         _ => Err(
-            "Unsupported export format. Use postman, openapi3.0, swagger2.0, or bruno.".to_string(),
+            "Unsupported export format. Use kivo, postman, openapi3.0, swagger2.0, or bruno.".to_string(),
         ),
     }
 }

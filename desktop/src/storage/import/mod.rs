@@ -279,7 +279,133 @@ fn import_postman_items(
     }
 }
 
+fn normalize_imported_kivo_collection(mut collection: CollectionRecord) -> CollectionRecord {
+    if collection.name.trim().is_empty() {
+        collection.name = "Kivo Import".to_string();
+    }
+
+    for request in &mut collection.requests {
+        if request.name.trim().is_empty() {
+            request.name = format!(
+                "{} {}",
+                if request.method.trim().is_empty() {
+                    "GET"
+                } else {
+                    request.method.as_str()
+                },
+                if request.url.trim().is_empty() {
+                    "/"
+                } else {
+                    request.url.as_str()
+                }
+            );
+        }
+    }
+
+    if collection.folders.is_empty() {
+        let mut folders = BTreeSet::new();
+        for request in &collection.requests {
+            if !request.folder_path.trim().is_empty() {
+                folders.insert(request.folder_path.trim().to_string());
+            }
+        }
+        collection.folders = folders.into_iter().collect();
+    }
+
+    collection
+}
+
+fn import_kivo(value: &Value) -> Result<CollectionRecord, String> {
+    if value
+        .get("type")
+        .and_then(|v| v.as_str())
+        .map(|kind| kind.eq_ignore_ascii_case("request"))
+        .unwrap_or(false)
+    {
+        if let Some(request_value) = value.get("request") {
+            let mut request = serde_json::from_value::<RequestRecord>(request_value.clone())
+                .map_err(|e| format!("Invalid Kivo request JSON: {e}"))?;
+            if request.name.trim().is_empty() {
+                request.name = "Imported Request".to_string();
+            }
+            let folder_path = request.folder_path.trim().to_string();
+            return Ok(CollectionRecord {
+                name: "Kivo Request Import".to_string(),
+                folders: if folder_path.is_empty() {
+                    vec![]
+                } else {
+                    vec![folder_path]
+                },
+                folder_settings: vec![],
+                requests: vec![request],
+            });
+        }
+    }
+
+    if let Some(collection_value) = value.get("collection") {
+        if let Ok(collection) = serde_json::from_value::<CollectionRecord>(collection_value.clone()) {
+            return Ok(normalize_imported_kivo_collection(collection));
+        }
+    }
+
+    if let Ok(collection) = serde_json::from_value::<CollectionRecord>(value.clone()) {
+        return Ok(normalize_imported_kivo_collection(collection));
+    }
+
+    if let Some(request_value) = value.get("request") {
+        if let Ok(mut request) = serde_json::from_value::<RequestRecord>(request_value.clone()) {
+            if request.name.trim().is_empty() {
+                request.name = "Imported Request".to_string();
+            }
+            let folder_path = request.folder_path.trim().to_string();
+            return Ok(CollectionRecord {
+                name: "Kivo Request Import".to_string(),
+                folders: if folder_path.is_empty() {
+                    vec![]
+                } else {
+                    vec![folder_path]
+                },
+                folder_settings: vec![],
+                requests: vec![request],
+            });
+        }
+    }
+
+    if let Ok(mut request) = serde_json::from_value::<RequestRecord>(value.clone()) {
+        if request.name.trim().is_empty() {
+            request.name = "Imported Request".to_string();
+        }
+        let folder_path = request.folder_path.trim().to_string();
+        return Ok(CollectionRecord {
+            name: "Kivo Request Import".to_string(),
+            folders: if folder_path.is_empty() {
+                vec![]
+            } else {
+                vec![folder_path]
+            },
+            folder_settings: vec![],
+            requests: vec![request],
+        });
+    }
+
+    Err("Unsupported Kivo JSON payload. Provide a Kivo request or collection export file.".to_string())
+}
+
 pub fn detect_format(value: &Value) -> String {
+    if value.get("kivo").is_some()
+        || value.get("kivoVersion").is_some()
+        || value.get("requestMode").is_some()
+        || value.get("request_mode").is_some()
+        || value
+            .get("collection")
+            .and_then(|v| v.get("folderSettings"))
+            .is_some()
+        || value.get("folderSettings").is_some()
+        || value.get("folder_settings").is_some()
+    {
+        return "kivo".to_string();
+    }
+
     if value.get("openapi").is_some() {
         return "openapi3".to_string();
     }
@@ -591,6 +717,7 @@ impl IfEmptyThen for String {
 pub fn import_collection_value(value: &Value) -> Result<ImportedCollectionResult, String> {
     let detected_format = detect_format(value);
     let collection = match detected_format.as_str() {
+        "kivo" => import_kivo(value)?,
         "postman" => {
             let mut requests = vec![];
             let mut folders = BTreeSet::new();
@@ -613,9 +740,14 @@ pub fn import_collection_value(value: &Value) -> Result<ImportedCollectionResult
         "swagger2" => import_openapi_like(value, "swagger2"),
         "bruno" => import_bruno(value),
         _ => {
+            if let Ok(collection) = import_kivo(value) {
+                return Ok(ImportedCollectionResult {
+                    detected_format: "kivo".to_string(),
+                    collection,
+                });
+            }
             return Err(
-                "Unsupported collection format. Use Postman, OpenAPI 3, Swagger 2, or Bruno."
-                    .to_string(),
+                "Unsupported collection format. Use Kivo JSON, Postman, OpenAPI 3, Swagger 2, or Bruno.".to_string(),
             )
         }
     };
