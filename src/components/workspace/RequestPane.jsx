@@ -14,8 +14,9 @@ import { listGrpcProtoFilesInDirectory, parseGrpcProtoFile } from "@/lib/http-cl
 import { REQUEST_MODES } from "@/lib/workspace-store.js";
 import { cn } from "@/lib/utils.js";
 import { EnvHighlightInput } from "@/components/ui/EnvHighlightInput.jsx";
+import { LoadTestPane } from "@/components/workspace/LoadTestPane.jsx";
 
-const tabs = ["Params", "Body", "Auth", "Headers", "Scripts", "Docs", "Settings"];
+const tabs = ["Params", "Body", "Auth", "Headers", "Scripts", "Docs", "Settings", "Load Test"];
 const requestMethods = ["GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS"];
 const DEFAULT_USER_AGENT_VALUE = "kivo/0.4.1";
 const webSocketBodyModes = [
@@ -2786,6 +2787,15 @@ export function RequestPane({
 
         {activeTab === "Scripts" && !isRealtimeRequest && !isGrpcRequest ? (
           <ScriptsPanel state={state} onChange={onChange} />
+        ) : null}
+
+        {activeTab === "Load Test" ? (
+          <LoadTestPane
+            url={state.url}
+            method={state.method}
+            headers={state.headers}
+            body={state.body}
+          />
         ) : null}
       </div>
 
