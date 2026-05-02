@@ -9,7 +9,7 @@ use http::client::{
     upsert_cookie_jar_entry,
     wait_for_oauth_callback,
 };
-use http::load_test::run_load_test;
+use http::load_test::{run_load_test, cancel_load_test};
 use storage::{
     export_collection_file, export_request_file, export_response_file,
     get_app_config, get_app_settings, get_default_storage_path, get_env_vars,
@@ -61,6 +61,7 @@ fn main() {
             export_request_file,
             export_response_file,
             run_load_test,
+            cancel_load_test,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
