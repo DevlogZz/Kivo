@@ -1,19 +1,19 @@
 use std::collections::HashMap;
-use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex, OnceLock};
 use std::time::{Duration, Instant};
 
 use reqwest::header::{HeaderMap, HeaderName, HeaderValue, USER_AGENT};
 use serde::{Deserialize, Serialize};
-use tokio::sync::Semaphore;
+use tokio::sync::{watch, Semaphore};
 use tokio::time::sleep;
 
 const DEFAULT_USER_AGENT: &str = concat!("kivo/", env!("CARGO_PKG_VERSION"));
 const MAX_ERRORS: usize = 50;
 
-static CANCEL_REGISTRY: OnceLock<Mutex<HashMap<String, Arc<AtomicBool>>>> = OnceLock::new();
+static CANCEL_REGISTRY: OnceLock<Mutex<HashMap<String, watch::Sender<bool>>>> = OnceLock::new();
 
-fn cancel_registry() -> &'static Mutex<HashMap<String, Arc<AtomicBool>>> {
+fn cancel_registry() -> &'static Mutex<HashMap<String, watch::Sender<bool>>> {
     CANCEL_REGISTRY.get_or_init(|| Mutex::new(HashMap::new()))
 }
 
@@ -22,8 +22,8 @@ struct LoadTestCancelGuard {
 }
 
 impl LoadTestCancelGuard {
-    fn new(test_id: String, flag: Arc<AtomicBool>) -> Self {
-        cancel_registry().lock().unwrap().insert(test_id.clone(), flag);
+    fn new(test_id: String, tx: watch::Sender<bool>) -> Self {
+        cancel_registry().lock().unwrap().insert(test_id.clone(), tx);
         Self { test_id }
     }
 }
@@ -36,8 +36,8 @@ impl Drop for LoadTestCancelGuard {
 
 #[tauri::command]
 pub async fn cancel_load_test(test_id: String) -> bool {
-    if let Some(flag) = cancel_registry().lock().unwrap().get(&test_id) {
-        flag.store(true, Ordering::Relaxed);
+    if let Some(tx) = cancel_registry().lock().unwrap().get(&test_id) {
+        let _ = tx.send(true);
         true
     } else {
         false
@@ -125,7 +125,6 @@ impl BucketStats {
 
 fn build_load_test_headers(headers: &HashMap<String, String>) -> Result<HeaderMap, String> {
     let mut header_map = HeaderMap::new();
-
     for (key, value) in headers {
         let trimmed_key = key.trim();
         if trimmed_key.is_empty() {
@@ -137,11 +136,9 @@ fn build_load_test_headers(headers: &HashMap<String, String>) -> Result<HeaderMa
             HeaderValue::from_str(value).map_err(|_| format!("Invalid header value for: {trimmed_key}"))?;
         header_map.insert(name, header_value);
     }
-
     if !header_map.contains_key(USER_AGENT) {
         header_map.insert(USER_AGENT, HeaderValue::from_static(DEFAULT_USER_AGENT));
     }
-
     Ok(header_map)
 }
 
@@ -185,8 +182,8 @@ pub async fn run_load_test(payload: LoadTestPayload) -> Result<LoadTestResult, S
         payload.test_id.trim().to_string()
     };
 
-    let cancelled = Arc::new(AtomicBool::new(false));
-    let _guard = LoadTestCancelGuard::new(test_id.clone(), Arc::clone(&cancelled));
+    let (cancel_tx, cancel_rx) = watch::channel(false);
+    let _guard = LoadTestCancelGuard::new(test_id.clone(), cancel_tx);
 
     let header_map = build_load_test_headers(&payload.headers)?;
 
@@ -236,7 +233,7 @@ pub async fn run_load_test(payload: LoadTestPayload) -> Result<LoadTestResult, S
         let connection_errors = Arc::clone(&connection_errors);
         let timeout_errors = Arc::clone(&timeout_errors);
         let buckets = Arc::clone(&buckets);
-        let cancelled = Arc::clone(&cancelled);
+        let mut cancel_rx = cancel_rx.clone();
 
         let ramp_delay_ms = if ramp_up_secs > 0 && virtual_users > 1 {
             (ramp_up_secs * 1000 * vu_index as u64) / (virtual_users as u64).saturating_sub(1)
@@ -246,20 +243,32 @@ pub async fn run_load_test(payload: LoadTestPayload) -> Result<LoadTestResult, S
 
         let handle = tokio::spawn(async move {
             if ramp_delay_ms > 0 {
-                sleep(Duration::from_millis(ramp_delay_ms)).await;
+                tokio::select! {
+                    _ = sleep(Duration::from_millis(ramp_delay_ms)) => {}
+                    _ = cancel_rx.changed() => { return; }
+                }
+                if *cancel_rx.borrow() {
+                    return;
+                }
             }
 
             loop {
-                if Instant::now() >= test_deadline || cancelled.load(Ordering::Relaxed) {
+                if *cancel_rx.borrow() || Instant::now() >= test_deadline {
                     break;
                 }
 
-                let _permit = match semaphore.clone().acquire_owned().await {
-                    Ok(p) => p,
-                    Err(_) => break,
+                let _permit = tokio::select! {
+                    biased;
+                    _ = cancel_rx.changed() => break,
+                    result = semaphore.clone().acquire_owned() => {
+                        match result {
+                            Ok(p) => p,
+                            Err(_) => break,
+                        }
+                    }
                 };
 
-                if Instant::now() >= test_deadline || cancelled.load(Ordering::Relaxed) {
+                if *cancel_rx.borrow() || Instant::now() >= test_deadline {
                     break;
                 }
 
@@ -282,9 +291,19 @@ pub async fn run_load_test(payload: LoadTestPayload) -> Result<LoadTestResult, S
                 };
 
                 let req_start = Instant::now();
-                let result = req_builder.send().await;
-                let latency_ms = req_start.elapsed().as_millis() as u64;
 
+                let outcome = tokio::select! {
+                    biased;
+                    _ = cancel_rx.changed() => {
+                        if *cancel_rx.borrow() { break; }
+                        None
+                    }
+                    result = req_builder.send() => Some(result),
+                };
+
+                let Some(result) = outcome else { break };
+
+                let latency_ms = req_start.elapsed().as_millis() as u64;
                 let elapsed_secs = test_start.elapsed().as_secs() as usize;
                 let bucket_idx = elapsed_secs.min(bucket_count - 1);
 
@@ -339,7 +358,7 @@ pub async fn run_load_test(payload: LoadTestPayload) -> Result<LoadTestResult, S
         let _ = handle.await;
     }
 
-    let was_cancelled = cancelled.load(Ordering::Relaxed);
+    let was_cancelled = *cancel_rx.borrow();
     let actual_duration_ms = test_start.elapsed().as_millis() as u64;
     let actual_duration_secs = actual_duration_ms as f64 / 1000.0;
 

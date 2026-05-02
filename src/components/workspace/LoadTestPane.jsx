@@ -126,7 +126,9 @@ function ConfigInput({ configKey, label, value, onChange, disabled }) {
     <div className="flex flex-col gap-1">
       <label className="text-[9px] uppercase tracking-[0.18em] text-muted-foreground">{label}</label>
       <Input
-        type="number"
+        type="text"
+        inputMode="numeric"
+        pattern="[0-9]*"
         min={min}
         max={max}
         value={value}
