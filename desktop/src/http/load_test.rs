@@ -5,11 +5,11 @@ use std::time::{Duration, Instant};
 
 use reqwest::header::{HeaderMap, HeaderName, HeaderValue, USER_AGENT};
 use serde::{Deserialize, Serialize};
-use tokio::sync::{watch, Semaphore};
+use tokio::sync::watch;
 use tokio::time::sleep;
 
 const DEFAULT_USER_AGENT: &str = concat!("kivo/", env!("CARGO_PKG_VERSION"));
-const MAX_ERRORS: usize = 50;
+const MAX_ERRORS_PER_WORKER: usize = 10;
 
 static CANCEL_REGISTRY: OnceLock<Mutex<HashMap<String, watch::Sender<bool>>>> = OnceLock::new();
 
@@ -123,6 +123,17 @@ impl BucketStats {
     }
 }
 
+struct WorkerResult {
+    latencies: Vec<u64>,
+    status_codes: HashMap<String, u64>,
+    errors: Vec<String>,
+    local_success: u64,
+    local_fail: u64,
+    local_bytes: u64,
+    local_timeouts: u64,
+    local_connects: u64,
+}
+
 fn build_load_test_headers(headers: &HashMap<String, String>) -> Result<HeaderMap, String> {
     let mut header_map = HeaderMap::new();
     for (key, value) in headers {
@@ -161,6 +172,10 @@ fn compute_histogram(sorted: &[u64]) -> LatencyHistogram {
     }
 }
 
+fn compute_worker_count(virtual_users: usize) -> usize {
+    virtual_users.min(2048)
+}
+
 #[tauri::command]
 pub async fn run_load_test(payload: LoadTestPayload) -> Result<LoadTestResult, String> {
     let virtual_users = (payload.virtual_users as usize).clamp(1, 10_000);
@@ -187,87 +202,69 @@ pub async fn run_load_test(payload: LoadTestPayload) -> Result<LoadTestResult, S
 
     let header_map = build_load_test_headers(&payload.headers)?;
 
+    let worker_count = compute_worker_count(virtual_users);
+
     let client = reqwest::Client::builder()
         .timeout(Duration::from_millis(timeout_ms))
         .default_headers(header_map)
         .redirect(reqwest::redirect::Policy::limited(10))
-        .pool_max_idle_per_host(virtual_users.min(512))
+        .pool_max_idle_per_host(worker_count.min(256))
         .build()
         .map_err(|e| format!("Failed to build HTTP client: {e}"))?;
 
     let client = Arc::new(client);
-    let semaphore = Arc::new(Semaphore::new(virtual_users));
     let method = payload.method.trim().to_uppercase();
     let body = payload.body.filter(|b| !b.trim().is_empty());
 
     let bucket_count = duration_secs as usize + 2;
-    let buckets: Arc<Vec<BucketStats>> = Arc::new((0..bucket_count).map(|_| BucketStats::new()).collect());
-    let latencies: Arc<tokio::sync::Mutex<Vec<u64>>> = Arc::new(tokio::sync::Mutex::new(Vec::with_capacity(4096)));
-    let status_codes: Arc<tokio::sync::Mutex<HashMap<String, u64>>> = Arc::new(tokio::sync::Mutex::new(HashMap::new()));
-    let errors: Arc<tokio::sync::Mutex<Vec<String>>> = Arc::new(tokio::sync::Mutex::new(Vec::new()));
-    let total_requests = Arc::new(AtomicU64::new(0));
-    let successful = Arc::new(AtomicU64::new(0));
-    let failed = Arc::new(AtomicU64::new(0));
-    let bytes_received = Arc::new(AtomicU64::new(0));
-    let connection_errors = Arc::new(AtomicU64::new(0));
-    let timeout_errors = Arc::new(AtomicU64::new(0));
+    let buckets: Arc<Vec<BucketStats>> = Arc::new(
+        (0..bucket_count).map(|_| BucketStats::new()).collect(),
+    );
 
     let test_start = Instant::now();
     let test_deadline = test_start + Duration::from_secs(duration_secs);
 
-    let mut handles = Vec::with_capacity(virtual_users);
+    let ramp_duration_ms = ramp_up_secs * 1000;
 
-    for vu_index in 0..virtual_users {
+    let mut handles = Vec::with_capacity(worker_count);
+
+    for worker_index in 0..worker_count {
         let client = Arc::clone(&client);
-        let semaphore = Arc::clone(&semaphore);
         let url = url.clone();
         let method = method.clone();
         let body = body.clone();
-        let latencies = Arc::clone(&latencies);
-        let status_codes = Arc::clone(&status_codes);
-        let errors = Arc::clone(&errors);
-        let total_requests = Arc::clone(&total_requests);
-        let successful = Arc::clone(&successful);
-        let failed = Arc::clone(&failed);
-        let bytes_received = Arc::clone(&bytes_received);
-        let connection_errors = Arc::clone(&connection_errors);
-        let timeout_errors = Arc::clone(&timeout_errors);
         let buckets = Arc::clone(&buckets);
         let mut cancel_rx = cancel_rx.clone();
 
-        let ramp_delay_ms = if ramp_up_secs > 0 && virtual_users > 1 {
-            (ramp_up_secs * 1000 * vu_index as u64) / (virtual_users as u64).saturating_sub(1)
+        let ramp_delay_ms = if ramp_duration_ms > 0 && worker_count > 1 {
+            (ramp_duration_ms * worker_index as u64) / (worker_count as u64 - 1)
         } else {
             0
         };
 
         let handle = tokio::spawn(async move {
+            let mut result = WorkerResult {
+                latencies: Vec::with_capacity(512),
+                status_codes: HashMap::new(),
+                errors: Vec::new(),
+                local_success: 0,
+                local_fail: 0,
+                local_bytes: 0,
+                local_timeouts: 0,
+                local_connects: 0,
+            };
+
             if ramp_delay_ms > 0 {
                 tokio::select! {
                     _ = sleep(Duration::from_millis(ramp_delay_ms)) => {}
-                    _ = cancel_rx.changed() => { return; }
+                    _ = cancel_rx.changed() => { return result; }
                 }
                 if *cancel_rx.borrow() {
-                    return;
+                    return result;
                 }
             }
 
             loop {
-                if *cancel_rx.borrow() || Instant::now() >= test_deadline {
-                    break;
-                }
-
-                let _permit = tokio::select! {
-                    biased;
-                    _ = cancel_rx.changed() => break,
-                    result = semaphore.clone().acquire_owned() => {
-                        match result {
-                            Ok(p) => p,
-                            Err(_) => break,
-                        }
-                    }
-                };
-
                 if *cancel_rx.borrow() || Instant::now() >= test_deadline {
                     break;
                 }
@@ -298,45 +295,51 @@ pub async fn run_load_test(payload: LoadTestPayload) -> Result<LoadTestResult, S
                         if *cancel_rx.borrow() { break; }
                         None
                     }
-                    result = req_builder.send() => Some(result),
+                    res = req_builder.send() => Some(res),
                 };
 
-                let Some(result) = outcome else { break };
+                let Some(net_result) = outcome else { break };
 
                 let latency_ms = req_start.elapsed().as_millis() as u64;
                 let elapsed_secs = test_start.elapsed().as_secs() as usize;
                 let bucket_idx = elapsed_secs.min(bucket_count - 1);
 
-                total_requests.fetch_add(1, Ordering::Relaxed);
-                latencies.lock().await.push(latency_ms);
+                result.latencies.push(latency_ms);
                 buckets[bucket_idx].requests.fetch_add(1, Ordering::Relaxed);
                 buckets[bucket_idx].latency_sum.fetch_add(latency_ms, Ordering::Relaxed);
 
-                match result {
+                match net_result {
                     Ok(response) => {
                         let status = response.status();
                         let code = status.as_u16().to_string();
                         if status.is_success() {
-                            successful.fetch_add(1, Ordering::Relaxed);
+                            result.local_success += 1;
                         } else {
-                            failed.fetch_add(1, Ordering::Relaxed);
+                            result.local_fail += 1;
                             buckets[bucket_idx].errors.fetch_add(1, Ordering::Relaxed);
                         }
-                        *status_codes.lock().await.entry(code).or_insert(0) += 1;
-                        if let Ok(bytes) = response.bytes().await {
-                            bytes_received.fetch_add(bytes.len() as u64, Ordering::Relaxed);
+                        *result.status_codes.entry(code).or_insert(0) += 1;
+                        match response.content_length() {
+                            Some(len) => {
+                                result.local_bytes += len;
+                                let _ = response.bytes().await;
+                            }
+                            None => {
+                                if let Ok(bytes) = response.bytes().await {
+                                    result.local_bytes += bytes.len() as u64;
+                                }
+                            }
                         }
                     }
                     Err(err) => {
-                        failed.fetch_add(1, Ordering::Relaxed);
+                        result.local_fail += 1;
                         buckets[bucket_idx].errors.fetch_add(1, Ordering::Relaxed);
                         if err.is_timeout() {
-                            timeout_errors.fetch_add(1, Ordering::Relaxed);
+                            result.local_timeouts += 1;
                         } else if err.is_connect() {
-                            connection_errors.fetch_add(1, Ordering::Relaxed);
+                            result.local_connects += 1;
                         }
-                        let mut error_list = errors.lock().await;
-                        if error_list.len() < MAX_ERRORS {
+                        if result.errors.len() < MAX_ERRORS_PER_WORKER {
                             let msg = if err.is_timeout() {
                                 format!("[timeout] {err}")
                             } else if err.is_connect() {
@@ -344,40 +347,64 @@ pub async fn run_load_test(payload: LoadTestPayload) -> Result<LoadTestResult, S
                             } else {
                                 err.to_string()
                             };
-                            error_list.push(msg);
+                            result.errors.push(msg);
                         }
                     }
                 }
+
+                tokio::task::yield_now().await;
             }
+
+            result
         });
 
         handles.push(handle);
     }
 
+    let mut all_latencies: Vec<u64> = Vec::new();
+    let mut merged_status: HashMap<String, u64> = HashMap::new();
+    let mut merged_errors: Vec<String> = Vec::new();
+    let mut total_success: u64 = 0;
+    let mut total_fail: u64 = 0;
+    let mut total_bytes: u64 = 0;
+    let mut total_timeouts: u64 = 0;
+    let mut total_connects: u64 = 0;
+
     for handle in handles {
-        let _ = handle.await;
+        if let Ok(wr) = handle.await {
+            all_latencies.extend(wr.latencies);
+            for (code, count) in wr.status_codes {
+                *merged_status.entry(code).or_insert(0) += count;
+            }
+            if merged_errors.len() < 50 {
+                let remaining = 50 - merged_errors.len();
+                merged_errors.extend(wr.errors.into_iter().take(remaining));
+            }
+            total_success += wr.local_success;
+            total_fail += wr.local_fail;
+            total_bytes += wr.local_bytes;
+            total_timeouts += wr.local_timeouts;
+            total_connects += wr.local_connects;
+        }
     }
 
     let was_cancelled = *cancel_rx.borrow();
     let actual_duration_ms = test_start.elapsed().as_millis() as u64;
     let actual_duration_secs = actual_duration_ms as f64 / 1000.0;
 
-    let total = total_requests.load(Ordering::Relaxed);
-    let success = successful.load(Ordering::Relaxed);
-    let fail = failed.load(Ordering::Relaxed);
+    let total = all_latencies.len() as u64;
 
-    let mut sorted_latencies = latencies.lock().await.clone();
-    sorted_latencies.sort_unstable();
+    all_latencies.sort_unstable();
 
-    let avg_latency = if sorted_latencies.is_empty() {
+    let avg_latency = if all_latencies.is_empty() {
         0.0
     } else {
-        sorted_latencies.iter().sum::<u64>() as f64 / sorted_latencies.len() as f64
+        all_latencies.iter().sum::<u64>() as f64 / all_latencies.len() as f64
     };
 
-    let min_latency = sorted_latencies.first().copied().unwrap_or(0);
-    let max_latency = sorted_latencies.last().copied().unwrap_or(0);
-    let histogram = compute_histogram(&sorted_latencies);
+    let min_latency = all_latencies.first().copied().unwrap_or(0);
+    let max_latency = all_latencies.last().copied().unwrap_or(0);
+    let histogram = compute_histogram(&all_latencies);
 
     let rps = if actual_duration_secs > 0.0 {
         total as f64 / actual_duration_secs
@@ -386,7 +413,7 @@ pub async fn run_load_test(payload: LoadTestPayload) -> Result<LoadTestResult, S
     };
 
     let error_rate = if total > 0 {
-        fail as f64 / total as f64 * 100.0
+        total_fail as f64 / total as f64 * 100.0
     } else {
         0.0
     };
@@ -413,13 +440,10 @@ pub async fn run_load_test(payload: LoadTestPayload) -> Result<LoadTestResult, S
         });
     }
 
-    let final_status_codes = status_codes.lock().await.clone();
-    let final_errors = errors.lock().await.clone();
-
     Ok(LoadTestResult {
         total_requests: total,
-        successful: success,
-        failed: fail,
+        successful: total_success,
+        failed: total_fail,
         avg_latency_ms: (avg_latency * 10.0).round() / 10.0,
         min_latency_ms: min_latency,
         max_latency_ms: max_latency,
@@ -427,13 +451,13 @@ pub async fn run_load_test(payload: LoadTestPayload) -> Result<LoadTestResult, S
         requests_per_sec: (rps * 10.0).round() / 10.0,
         peak_rps: (peak_rps * 10.0).round() / 10.0,
         error_rate: (error_rate * 10.0).round() / 10.0,
-        status_codes: final_status_codes,
-        bytes_received: bytes_received.load(Ordering::Relaxed),
+        status_codes: merged_status,
+        bytes_received: total_bytes,
         duration_ms: actual_duration_ms,
         timeline,
-        errors: final_errors,
-        connection_errors: connection_errors.load(Ordering::Relaxed),
-        timeout_errors: timeout_errors.load(Ordering::Relaxed),
+        errors: merged_errors,
+        connection_errors: total_connects,
+        timeout_errors: total_timeouts,
         was_cancelled,
     })
 }
