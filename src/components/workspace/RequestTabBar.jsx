@@ -56,7 +56,7 @@ export function RequestTabBar({ tabs, activeTab, onTabChange }) {
             </button>
 
             {menuOpen && (
-              <div className="absolute right-0 top-full z-50 mt-1 min-w-[130px] border border-border/40 bg-background py-1 shadow-lg">
+              <div className="absolute right-0 top-full z-50 mt-1 min-w-[130px] border border-border/60 bg-popover py-1 shadow-2xl">
                 {overflowTabs.map((tab) => (
                   <button
                     key={tab}
