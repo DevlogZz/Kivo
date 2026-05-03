@@ -15,6 +15,7 @@ import { REQUEST_MODES } from "@/lib/workspace-store.js";
 import { cn } from "@/lib/utils.js";
 import { EnvHighlightInput } from "@/components/ui/EnvHighlightInput.jsx";
 import { LoadTestPane } from "@/components/workspace/LoadTestPane.jsx";
+import { RequestTabBar } from "@/components/workspace/RequestTabBar.jsx";
 
 const tabs = ["Params", "Body", "Auth", "Headers", "Scripts", "Docs", "Settings", "Load Test"];
 const requestMethods = ["GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS"];
@@ -2582,20 +2583,7 @@ export function RequestPane({
         </div>
       )}
 
-      <div className="border-b border-border/25 px-2 py-2 text-[11px] text-muted-foreground lg:text-[12px]">
-        <div className="flex items-center gap-1">
-          {visibleTabs.map((tab) => (
-            <button
-              key={tab}
-              type="button"
-              onClick={() => onTabChange(tab)}
-              className={cn("px-2 py-1 text-muted-foreground transition-colors lg:px-3 lg:py-1.5", activeTab === tab && "text-foreground")}
-            >
-              {tab}
-            </button>
-          ))}
-        </div>
-      </div>
+      <RequestTabBar tabs={visibleTabs} activeTab={activeTab} onTabChange={onTabChange} />
 
       <div className="min-h-0 flex-1 overflow-hidden bg-transparent">
         {activeTab === "Params" ? (
