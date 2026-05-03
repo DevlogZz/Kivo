@@ -317,9 +317,33 @@ export function normalizeRequestRecord(request) {
   }
 
   const allowedModes = Object.values(REQUEST_MODES);
-  const requestMode = allowedModes.includes(request?.requestMode)
-    ? request.requestMode
-    : (request?.bodyType === "graphql" ? REQUEST_MODES.GRAPHQL : REQUEST_MODES.HTTP);
+  let requestMode;
+  if (allowedModes.includes(request?.requestMode)) {
+    requestMode = request.requestMode;
+  } else {
+    const url = String(request?.url || "").trim().toLowerCase();
+    const bodyType = String(request?.bodyType || "").trim().toLowerCase();
+    const headers = Array.isArray(request?.headers) ? request.headers : [];
+    const acceptHeader = headers.find((h) => String(h?.key || "").trim().toLowerCase() === "accept");
+    const contentTypeHeader = headers.find((h) => String(h?.key || "").trim().toLowerCase() === "content-type");
+    const acceptValue = String(acceptHeader?.value || "").toLowerCase();
+    const contentTypeValue = String(contentTypeHeader?.value || "").toLowerCase();
+    const hasSocketIoEvents = Array.isArray(request?.socketIoEvents) && request.socketIoEvents.length > 0;
+
+    if (url.startsWith("ws://") || url.startsWith("wss://")) {
+      requestMode = REQUEST_MODES.WEBSOCKET;
+    } else if (bodyType === "graphql" || url.includes("/graphql")) {
+      requestMode = REQUEST_MODES.GRAPHQL;
+    } else if (bodyType === "grpc" || url.startsWith("grpc://") || url.startsWith("grpcs://") || contentTypeValue.includes("application/grpc")) {
+      requestMode = REQUEST_MODES.GRPC;
+    } else if (acceptValue.includes("text/event-stream")) {
+      requestMode = REQUEST_MODES.SSE;
+    } else if (hasSocketIoEvents || url.includes("socket.io")) {
+      requestMode = REQUEST_MODES.SOCKET_IO;
+    } else {
+      requestMode = REQUEST_MODES.HTTP;
+    }
+  }
 
   const socketIoEvents = Array.isArray(request?.socketIoEvents)
     ? request.socketIoEvents
