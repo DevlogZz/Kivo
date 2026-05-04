@@ -1870,14 +1870,14 @@ export function RequestPane({
   const visibleTabs = isWebSocketRequest
     ? ["Params", "Body", "Auth", "Headers", "Settings", "Docs"]
     : isSseRequest
-      ? ["Params", "Body", "Auth", "Headers", "Docs"]
+      ? ["Params", "Body", "Auth", "Headers", "Scripts", "Settings", "Docs"]
       : isSocketIoRequest
         ? ["Params", "Body", "Events", "Auth", "Headers", "Docs"]
     : isGrpcRequest
       ? [...(hasGrpcMethodSelected ? ["Body"] : []), "Headers", "Docs"]
       : tabs;
   const activeTab = state.activeEditorTab ?? "Params";
-  const bodyDisabled = !isRealtimeRequest && !isGrpcRequest && (state.method === "GET" || state.method === "DELETE" || state.bodyType === "none");
+  const bodyDisabled = !isWebSocketRequest && !isSocketIoRequest && !isGrpcRequest && (state.method === "GET" || state.method === "DELETE" || state.bodyType === "none");
   const isJsonBody = state.bodyType === "json";
   const isXmlBody = state.bodyType === "xml";
   const isYamlBody = state.bodyType === "yaml";
@@ -2008,10 +2008,7 @@ export function RequestPane({
     if (!visibleTabs.includes(activeTab)) {
       onTabChange("Params");
     }
-    if (state.bodyType !== "none") {
-      onChange("bodyType", "none");
-    }
-  }, [activeTab, isSseRequest, onChange, onTabChange, state.bodyType, visibleTabs]);
+  }, [activeTab, isSseRequest, onTabChange, visibleTabs]);
 
   useEffect(() => {
     if (!isGrpcRequest) return;
@@ -2567,12 +2564,6 @@ export function RequestPane({
         </div>
       ) : null}
 
-      {isRealtimeRequest && activeWsState.error ? (
-        <div className="flex items-center gap-2 border-b border-amber-500/20 bg-amber-500/[0.08] px-3 py-1.5 text-[11px] text-amber-500 dark:text-amber-400">
-          <span>{activeWsState.error}</span>
-        </div>
-      ) : null}
-
       {missingVars.length > 0 && (
         <div className="flex items-center gap-2 border-b border-amber-500/20 bg-amber-500/[0.08] px-3 py-1.5 text-[11px] text-amber-500 dark:text-amber-400">
           <span className="shrink-0">âš </span>
@@ -2622,9 +2613,6 @@ export function RequestPane({
         ) : null}
 
         {activeTab === "Body" ? (
-          isSseRequest ? (
-            <SseOptionsPanel state={state} onChange={onChange} />
-          ) :
           isGrpcRequest && hasGrpcMethodSelected ? (
             <div className="grid h-full min-h-0 grid-rows-[auto_minmax(0,1fr)]">
               <div className="flex items-center justify-between gap-3 border-b border-border/20 px-3 py-2 text-[11px] text-muted-foreground">
@@ -2659,16 +2647,19 @@ export function RequestPane({
                   <span>{isWebSocketRequest ? "WebSocket Message" : isSocketIoRequest ? `Socket.IO Payload${selectedSocketIoEvent ? ` · ${selectedSocketIoEvent.name}` : ""}` : (isGraphqlBody ? "GraphQL Request" : isTableBody ? "Form Request" : isFileBody ? "Binary/File Upload" : isJsonBody ? "JSON Highlight" : "Plain Editor")}</span>
                 </div>
               </div>
-              {isWebSocketRequest || isSocketIoRequest ? (
-                <Button variant="outline" size="sm" className="h-8 px-2.5 text-[11px]" type="button" onClick={onWebSocketSend} disabled={!activeWsState.connected}>
-                  Send
-                </Button>
-              ) : isJsonBody ? (
-                <Button variant="outline" size="sm" className="h-8 px-2.5 text-[11px]" type="button" onClick={handleFormatBody} disabled={bodyDisabled}>
-                  <Wand2 className="h-3 w-3" />
-                  Format JSON
-                </Button>
-              ) : null}
+              <div className="flex items-center gap-2">
+                {isJsonBody ? (
+                  <Button variant="outline" size="sm" className="h-8 px-2.5 text-[11px]" type="button" onClick={handleFormatBody} disabled={bodyDisabled}>
+                    <Wand2 className="h-3 w-3" />
+                    Format JSON
+                  </Button>
+                ) : null}
+                {isWebSocketRequest || isSocketIoRequest ? (
+                  <Button variant="outline" size="sm" className="h-8 px-2.5 text-[11px]" type="button" onClick={onWebSocketSend} disabled={!activeWsState.connected}>
+                    Send
+                  </Button>
+                ) : null}
+              </div>
             </div>
 
             {isTableBody ? (
@@ -2770,10 +2761,12 @@ export function RequestPane({
         {activeTab === "Settings" ? (
           isWebSocketRequest
             ? <WebSocketSettingsPanel state={state} onChange={onChange} />
-            : <RequestSettingsPanel state={state} onChange={onChange} />
+            : isSseRequest
+              ? <SseOptionsPanel state={state} onChange={onChange} />
+              : <RequestSettingsPanel state={state} onChange={onChange} />
         ) : null}
 
-        {activeTab === "Scripts" && !isRealtimeRequest && !isGrpcRequest ? (
+        {activeTab === "Scripts" && !isWebSocketRequest && !isSocketIoRequest && !isGrpcRequest ? (
           <ScriptsPanel state={state} onChange={onChange} />
         ) : null}
 

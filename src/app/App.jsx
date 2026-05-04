@@ -107,6 +107,8 @@ export default function App() {
     requestTabs,
     response,
     activeWebSocketState,
+    activeStreamMessages,
+    clearActiveStreamMessages,
     SIDEBAR_MIN_WIDTH,
     SIDEBAR_REOPEN_WIDTH,
     updateStore,
@@ -633,6 +635,8 @@ export default function App() {
                   onWebSocketConnect={connectActiveWebSocket}
                   onWebSocketDisconnect={disconnectActiveWebSocket}
                   onWebSocketSend={sendActiveWebSocketMessage}
+                  streamMessages={activeStreamMessages}
+                  onClearStreamMessages={clearActiveStreamMessages}
                   onCancelSend={cancelSend}
                   onFieldChange={handleRequestFieldChange}
                   onUpdateActiveRequest={updateActiveRequest}

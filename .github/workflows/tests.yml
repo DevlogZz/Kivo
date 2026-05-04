@@ -21,13 +21,30 @@ jobs:
           
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy, rustfmt
+
+      - name: Cache cargo registry & target
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: desktop
 
       - name: Create dummy dist (Tauri requirement)
         run: mkdir -p dist && touch dist/index.html
 
+      - name: Cargo fmt (check)
+        working-directory: desktop
+        run: cargo fmt --all -- --check
+        continue-on-error: true
+
+      - name: Cargo clippy
+        working-directory: desktop
+        run: cargo clippy --all-targets --no-deps -- -D warnings
+        continue-on-error: true
+
       - name: Run Cargo Test
         working-directory: desktop
-        run: cargo test
+        run: cargo test --all-targets --verbose
 
   test-frontend:
     name: Frontend Build Check

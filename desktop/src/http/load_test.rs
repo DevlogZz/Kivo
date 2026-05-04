@@ -42,6 +42,10 @@ const READ_CHUNK: usize = 16 * 1024;
 const MAX_HEADERS: usize = 64;
 const MAX_ERRORS_TOTAL: usize = 64;
 
+#[cfg(test)]
+#[path = "load_test_tests.rs"]
+mod tests;
+
 // ========================================================================
 // Cancellation registry (test_id -> watch sender).
 // ========================================================================

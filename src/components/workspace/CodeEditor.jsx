@@ -278,6 +278,138 @@ function renderHighlightedMarkup(text) {
   return tokens.map((token, index) => renderPrismToken(token, `xml-${index}`, prismToMarkupClassMap, "markup-punctuation"));
 }
 
+const AUTO_PAIRS = { "{": "}", "[": "]", "(": ")", "\"": "\"", "'": "'", "`": "`" };
+const AUTO_CLOSERS = new Set([")", "]", "}", "\"", "'", "`"]);
+
+function handleSmartTyping(event, textarea, value, onChange, pendingCursorRef, language) {
+  const start = textarea.selectionStart;
+  const end = textarea.selectionEnd;
+  const val = value || "";
+  const isJsonLang = language === "json";
+
+  if (isJsonLang && event.key === ":" && start === end) {
+    const prevChar = val[start - 1];
+    const nextChar = val[start];
+    if (prevChar === "\"" && nextChar !== " ") {
+      event.preventDefault();
+      const insert = ": ";
+      const updated = val.slice(0, start) + insert + val.slice(end);
+      pendingCursorRef.current = start + insert.length;
+      onChange?.(updated);
+      return true;
+    }
+  }
+
+  if (Object.prototype.hasOwnProperty.call(AUTO_PAIRS, event.key)) {
+    const close = AUTO_PAIRS[event.key];
+    const selection = val.slice(start, end);
+    if (selection) {
+      event.preventDefault();
+      const insert = event.key + selection + close;
+      const next = val.slice(0, start) + insert + val.slice(end);
+      pendingCursorRef.current = start + insert.length;
+      onChange?.(next);
+      return true;
+    }
+    const nextChar = val[start];
+    const isQuote = event.key === "\"" || event.key === "'" || event.key === "`";
+    if (isQuote && nextChar === event.key) {
+      event.preventDefault();
+      pendingCursorRef.current = null;
+      textarea.setSelectionRange(start + 1, start + 1);
+      return true;
+    }
+    const prevChar = val[start - 1];
+    if (isQuote && prevChar && /[A-Za-z0-9_$]/.test(prevChar)) {
+      return false;
+    }
+    event.preventDefault();
+    const insert = event.key + close;
+    const next = val.slice(0, start) + insert + val.slice(end);
+    pendingCursorRef.current = start + 1;
+    onChange?.(next);
+    return true;
+  }
+
+  if (AUTO_CLOSERS.has(event.key) && start === end && val[start] === event.key) {
+    event.preventDefault();
+    pendingCursorRef.current = null;
+    textarea.setSelectionRange(start + 1, start + 1);
+    return true;
+  }
+
+  if (event.key === "Backspace" && start === end && start > 0) {
+    const prev = val[start - 1];
+    const next = val[start];
+    if (AUTO_PAIRS[prev] === next) {
+      event.preventDefault();
+      const updated = val.slice(0, start - 1) + val.slice(start + 1);
+      pendingCursorRef.current = start - 1;
+      onChange?.(updated);
+      return true;
+    }
+  }
+
+  if (event.key === "Enter" && start === end) {
+    const lineStart = val.lastIndexOf("\n", start - 1) + 1;
+    const currentLine = val.slice(lineStart, start);
+    const indentMatch = currentLine.match(/^\s*/);
+    const indent = indentMatch ? indentMatch[0] : "";
+    const prev = val[start - 1];
+    const next = val[start];
+    if ((prev === "{" && next === "}") || (prev === "[" && next === "]") || (prev === "(" && next === ")")) {
+      event.preventDefault();
+      const extra = "  ";
+      const insert = `\n${indent}${extra}\n${indent}`;
+      const updated = val.slice(0, start) + insert + val.slice(end);
+      pendingCursorRef.current = start + 1 + indent.length + extra.length;
+      onChange?.(updated);
+      return true;
+    }
+    if (indent) {
+      event.preventDefault();
+      const insert = `\n${indent}`;
+      const updated = val.slice(0, start) + insert + val.slice(end);
+      pendingCursorRef.current = start + insert.length;
+      onChange?.(updated);
+      return true;
+    }
+  }
+
+  if (event.key === "Tab" && !event.shiftKey && !event.ctrlKey && !event.altKey && !event.metaKey) {
+    if (start === end) {
+      event.preventDefault();
+      const insert = "  ";
+      const updated = val.slice(0, start) + insert + val.slice(end);
+      pendingCursorRef.current = start + insert.length;
+      onChange?.(updated);
+      return true;
+    }
+    event.preventDefault();
+    const lineStart = val.lastIndexOf("\n", start - 1) + 1;
+    const selectedBlock = val.slice(lineStart, end);
+    const indented = selectedBlock.replace(/^/gm, "  ");
+    const updated = val.slice(0, lineStart) + indented + val.slice(end);
+    pendingCursorRef.current = end + (indented.length - selectedBlock.length);
+    onChange?.(updated);
+    return true;
+  }
+
+  if (event.key === "Tab" && event.shiftKey && start === end) {
+    const lineStart = val.lastIndexOf("\n", start - 1) + 1;
+    const head = val.slice(lineStart, lineStart + 2);
+    if (head === "  ") {
+      event.preventDefault();
+      const updated = val.slice(0, lineStart) + val.slice(lineStart + 2);
+      pendingCursorRef.current = Math.max(lineStart, start - 2);
+      onChange?.(updated);
+      return true;
+    }
+  }
+
+  return false;
+}
+
 function getLineCount(text) {
   const source = String(text ?? "");
   return Math.max(1, source.split("\n").length);
@@ -620,6 +752,10 @@ export function CodeEditor({
         onKeyDown={(event) => {
           const isArrowDown = event.key === "ArrowDown" || event.key === "Down" || event.code === "ArrowDown" || event.keyCode === 40;
           const isArrowUp = event.key === "ArrowUp" || event.key === "Up" || event.code === "ArrowUp" || event.keyCode === 38;
+          if (suggestions.length === 0 && handleSmartTyping(event, event.currentTarget, displayValue, onChange, pendingCursorRef, language)) {
+            suppressKeyUpRef.current = true;
+            return;
+          }
           if (suggestions.length > 0) {
             if (isArrowDown) {
               event.preventDefault();

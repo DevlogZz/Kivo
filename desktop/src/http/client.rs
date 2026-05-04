@@ -36,6 +36,10 @@ use crate::storage::{
 const DEFAULT_USER_AGENT: &str = concat!("kivo/", env!("CARGO_PKG_VERSION"));
 const COOKIE_STORE_FILE_NAME: &str = "cookies.json";
 
+#[cfg(test)]
+#[path = "client_tests.rs"]
+mod tests;
+
 #[derive(Clone)]
 struct DynamicCodec {
     input: prost_reflect::MessageDescriptor,
@@ -788,7 +792,7 @@ fn cookie_store_path(app: &AppHandle) -> Result<PathBuf, String> {
     Ok(app_data_dir.join(COOKIE_STORE_FILE_NAME))
 }
 
-fn load_cookie_store(app: &AppHandle) -> Result<Vec<CookieJarEntry>, String> {
+pub(crate) fn load_cookie_store(app: &AppHandle) -> Result<Vec<CookieJarEntry>, String> {
     let path = cookie_store_path(app)?;
     if !path.exists() {
         return Ok(vec![]);
@@ -960,7 +964,7 @@ fn parse_set_cookie(
     })
 }
 
-fn merge_set_cookie_headers(
+pub(crate) fn merge_set_cookie_headers(
     app: &AppHandle,
     workspace_name: &str,
     collection_name: &str,
@@ -987,7 +991,7 @@ fn merge_set_cookie_headers(
     save_cookie_store(app, &store)
 }
 
-fn build_cookie_header_from_store(
+pub(crate) fn build_cookie_header_from_store(
     app: &AppHandle,
     workspace_name: &str,
     collection_name: &str,

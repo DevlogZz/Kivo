@@ -1,4 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
+import { listen } from "@tauri-apps/api/event";
 
 const AUTH_ENCRYPTION_KEY_ID = "kivo.auth.enc.key.v1";
 const AUTH_ENCRYPTION_PREFIX = "enc:v1:";
@@ -531,6 +532,137 @@ export function exportResponseFile(filePath, response) {
   return invoke("export_response_file", {
     filePath,
     response,
+  });
+}
+
+const REALTIME_EVENT_CHANNEL = "realtime:event";
+const realtimeListenersByStream = new Map();
+const realtimePendingEventsByStream = new Map();
+const REALTIME_PENDING_CAP = 500;
+const REALTIME_PENDING_TTL_MS = 30_000;
+let realtimeUnlistenPromise = null;
+
+function dropPendingEvents(streamId) {
+  realtimePendingEventsByStream.delete(streamId);
+}
+
+function ensureRealtimeBridge() {
+  if (realtimeUnlistenPromise) return realtimeUnlistenPromise;
+  realtimeUnlistenPromise = listen(REALTIME_EVENT_CHANNEL, (envelope) => {
+    const payload = envelope?.payload;
+    if (!payload || typeof payload !== "object") return;
+    const streamId = String(payload.streamId || "");
+    if (!streamId) return;
+    const handlers = realtimeListenersByStream.get(streamId);
+    if (handlers && handlers.size > 0) {
+      handlers.forEach((handler) => {
+        try {
+          handler(payload);
+        } catch (error) {
+          console.error("[realtime] handler error:", error);
+        }
+      });
+      return;
+    }
+    let queue = realtimePendingEventsByStream.get(streamId);
+    if (!queue) {
+      queue = { events: [], timer: null };
+      realtimePendingEventsByStream.set(streamId, queue);
+    }
+    queue.events.push(payload);
+    if (queue.events.length > REALTIME_PENDING_CAP) {
+      queue.events.splice(0, queue.events.length - REALTIME_PENDING_CAP);
+    }
+    if (queue.timer) {
+      clearTimeout(queue.timer);
+    }
+    queue.timer = setTimeout(() => dropPendingEvents(streamId), REALTIME_PENDING_TTL_MS);
+  }).catch((error) => {
+    console.error("[realtime] failed to attach listener:", error);
+    realtimeUnlistenPromise = null;
+    return () => {};
+  });
+  return realtimeUnlistenPromise;
+}
+
+// Eagerly attach the bridge so events emitted before the first subscriber are not lost.
+ensureRealtimeBridge();
+
+export function subscribeRealtime(streamId, handler) {
+  const id = String(streamId || "").trim();
+  if (!id || typeof handler !== "function") return () => {};
+  ensureRealtimeBridge();
+  let handlers = realtimeListenersByStream.get(id);
+  if (!handlers) {
+    handlers = new Set();
+    realtimeListenersByStream.set(id, handlers);
+  }
+  handlers.add(handler);
+
+  const queue = realtimePendingEventsByStream.get(id);
+  if (queue) {
+    if (queue.timer) {
+      clearTimeout(queue.timer);
+    }
+    realtimePendingEventsByStream.delete(id);
+    for (const payload of queue.events) {
+      try {
+        handler(payload);
+      } catch (error) {
+        console.error("[realtime] handler error replaying buffered event:", error);
+      }
+    }
+  }
+
+  return () => {
+    const current = realtimeListenersByStream.get(id);
+    if (!current) return;
+    current.delete(handler);
+    if (current.size === 0) {
+      realtimeListenersByStream.delete(id);
+    }
+  };
+}
+
+export function realtimeConnectWebSocket(payload) {
+  return invoke("realtime_connect_websocket", { payload });
+}
+
+export function realtimeConnectSse(payload) {
+  return invoke("realtime_connect_sse", { payload });
+}
+
+export function realtimeConnectSocketIo(payload) {
+  return invoke("realtime_connect_socketio", { payload });
+}
+
+export function realtimeSend(streamId, kind, data) {
+  return invoke("realtime_send", {
+    payload: {
+      streamId: String(streamId || ""),
+      kind: String(kind || "text"),
+      data: data == null ? "" : String(data),
+    },
+  });
+}
+
+export function realtimeEmitSocketIo(streamId, event, data) {
+  return invoke("realtime_emit_socketio", {
+    payload: {
+      streamId: String(streamId || ""),
+      event: String(event || ""),
+      data: data == null ? "" : String(data),
+    },
+  });
+}
+
+export function realtimeDisconnect(streamId, code, reason) {
+  return invoke("realtime_disconnect", {
+    payload: {
+      streamId: String(streamId || ""),
+      code: typeof code === "number" ? code : null,
+      reason: reason == null ? null : String(reason),
+    },
   });
 }
 

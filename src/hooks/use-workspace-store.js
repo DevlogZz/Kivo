@@ -7,10 +7,17 @@ import {
   exchangeOAuthToken,
   getCollectionConfig,
   loadAppState,
+  realtimeConnectSocketIo,
+  realtimeConnectSse,
+  realtimeConnectWebSocket,
+  realtimeDisconnect,
+  realtimeEmitSocketIo,
+  realtimeSend,
   saveAppState,
   saveCollectionConfig,
   sendGrpcRequest,
   sendHttpRequest,
+  subscribeRealtime,
 } from "@/lib/http-client.js";
 import { buildRequestPayload, buildUrlWithParams, serializeHeaders } from "@/lib/http-ui.js";
 import {
@@ -37,6 +44,54 @@ import { runRequestScript } from "@/lib/request-scripts.js";
 const SIDEBAR_COLLAPSED_WIDTH = 52;
 const SIDEBAR_MIN_WIDTH = 220;
 const SIDEBAR_REOPEN_WIDTH = 260;
+
+function buildRealtimeAuthPayload(auth) {
+  const next = auth && typeof auth === "object" ? auth : { type: "none" };
+  return {
+    type: String(next.type || "none"),
+    token: String(next.token ?? ""),
+    username: String(next.username ?? ""),
+    password: String(next.password ?? ""),
+    apiKeyName: String(next.apiKeyName ?? ""),
+    apiKeyValue: String(next.apiKeyValue ?? ""),
+    apiKeyIn: String(next.apiKeyIn ?? "header"),
+    accessToken: String(next?.oauth2?.accessToken ?? ""),
+    tokenType: String(next?.oauth2?.tokenType ?? ""),
+  };
+}
+
+function buildRealtimeHeadersObject(headerRows = []) {
+  const headers = {};
+  for (const row of Array.isArray(headerRows) ? headerRows : []) {
+    if (!row || !row.enabled) continue;
+    const key = String(row.key || "").trim();
+    if (!key) continue;
+    headers[key] = String(row.value ?? "");
+  }
+  return headers;
+}
+
+function buildRealtimePayload(request, workspaceName, collectionName, extras = {}) {
+  return {
+    url: String(request?.url ?? ""),
+    headers: buildRealtimeHeadersObject(request?.headers),
+    auth: buildRealtimeAuthPayload(request?.auth),
+    workspaceName: String(workspaceName ?? ""),
+    collectionName: String(collectionName ?? ""),
+    useCookieJar: request?.useCookieJar ?? true,
+    timeoutMs: Number.isFinite(request?.timeoutMs) ? Number(request.timeoutMs) : null,
+    disableUserAgent: false,
+    ...extras,
+  };
+}
+
+function realtimeMessageBytes(text) {
+  try {
+    return new TextEncoder().encode(String(text ?? "")).length;
+  } catch {
+    return String(text ?? "").length;
+  }
+}
 
 function normalizeFolderPath(path) {
   return String(path ?? "")
@@ -518,6 +573,9 @@ export function useWorkspaceStore() {
   const sseConnectionsRef = useRef(new Map());
   const socketIoConnectionsRef = useRef(new Map());
   const [wsStates, setWsStates] = useState({});
+  const [streamMessages, setStreamMessages] = useState({});
+  const streamKeyByIdRef = useRef(new Map());
+  const messageIdCounterRef = useRef(0);
 
   useEffect(() => {
     async function checkSetup() {
@@ -700,33 +758,24 @@ export function useWorkspaceStore() {
   }, []);
 
   useEffect(() => () => {
-    wsConnectionsRef.current.forEach((socket) => {
-      try {
-        socket.close();
-      } catch {
-      }
-    });
-    wsConnectionsRef.current.clear();
+    const maps = [wsConnectionsRef, sseConnectionsRef, socketIoConnectionsRef];
+    for (const ref of maps) {
+      ref.current.forEach((handle) => {
+        try { handle?.unsubscribe?.(); } catch {}
+        if (handle?.keepAliveTimer) {
+          try { clearInterval(handle.keepAliveTimer); } catch {}
+        }
+        if (handle?.streamId) {
+          realtimeDisconnect(handle.streamId).catch(() => {});
+        }
+      });
+      ref.current.clear();
+    }
     wsKeepAliveTimersRef.current.forEach((timer) => clearInterval(timer));
     wsKeepAliveTimersRef.current.clear();
     wsConnectTimeoutsRef.current.forEach((timer) => clearTimeout(timer));
     wsConnectTimeoutsRef.current.clear();
-
-    sseConnectionsRef.current.forEach((source) => {
-      try {
-        source.close();
-      } catch {
-      }
-    });
-    sseConnectionsRef.current.clear();
-
-    socketIoConnectionsRef.current.forEach((socket) => {
-      try {
-        socket.close();
-      } catch {
-      }
-    });
-    socketIoConnectionsRef.current.clear();
+    streamKeyByIdRef.current.clear();
   }, []);
 
   function updateStore(updater) {
@@ -807,6 +856,148 @@ export function useWorkspaceStore() {
     }));
   }
 
+  function nextMessageId() {
+    messageIdCounterRef.current += 1;
+    return `rtm_${Date.now()}_${messageIdCounterRef.current}`;
+  }
+
+  function appendStreamMessage(requestKey, message) {
+    if (!requestKey || !message) return;
+    const enriched = {
+      id: message.id || nextMessageId(),
+      direction: message.direction || "in",
+      kind: message.kind || "text",
+      event: message.event || "",
+      text: typeof message.text === "string" ? message.text : "",
+      raw: message.raw ?? null,
+      size: Number.isFinite(message.size) ? Number(message.size) : realtimeMessageBytes(message.text),
+      at: message.at || formatSavedAt(),
+    };
+    setStreamMessages((current) => {
+      const list = current[requestKey] ? current[requestKey].slice() : [];
+      list.push(enriched);
+      if (list.length > 2000) {
+        list.splice(0, list.length - 2000);
+      }
+      return { ...current, [requestKey]: list };
+    });
+  }
+
+  function clearStreamMessagesForKey(requestKey) {
+    if (!requestKey) return;
+    setStreamMessages((current) => {
+      if (!current[requestKey]) return current;
+      const { [requestKey]: _removed, ...rest } = current;
+      return rest;
+    });
+  }
+
+  function dispatchRealtimeEvent(requestKey, eventPayload) {
+    if (!requestKey || !eventPayload) return;
+    const { kind, event, data, at, streamId } = eventPayload;
+
+    if (kind === "open") {
+      updateWsState(requestKey, {
+        connecting: false,
+        connected: true,
+        error: "",
+        lastEventAt: at || formatSavedAt(),
+      });
+      appendStreamMessage(requestKey, {
+        direction: "system",
+        kind: "system",
+        event: "open",
+        text: `Connected to ${data?.url ?? ""}`,
+        raw: data,
+        size: 0,
+        at,
+      });
+      return;
+    }
+
+    if (kind === "close") {
+      updateWsState(requestKey, {
+        connecting: false,
+        connected: false,
+        lastEventAt: at || formatSavedAt(),
+      });
+      appendStreamMessage(requestKey, {
+        direction: "system",
+        kind: "system",
+        event: "close",
+        text: data?.reason ? `Closed (${data.code}): ${data.reason}` : `Closed (${data?.code ?? ""})`,
+        raw: data,
+        size: 0,
+        at,
+      });
+      streamKeyByIdRef.current.delete(streamId);
+      return;
+    }
+
+    if (kind === "error") {
+      const detail = data?.message ? String(data.message) : "Stream error";
+      updateWsState(requestKey, {
+        connecting: false,
+        connected: false,
+        error: detail,
+        lastEventAt: at || formatSavedAt(),
+      });
+      appendStreamMessage(requestKey, {
+        direction: "system",
+        kind: "error",
+        event: "error",
+        text: detail,
+        raw: data,
+        size: realtimeMessageBytes(detail),
+        at,
+      });
+      return;
+    }
+
+    // message / event
+    let displayText = "";
+    if (event === "binary") {
+      displayText = `<binary ${data?.bytes?.length ?? 0} chars base64>`;
+    } else if (event === "ping" || event === "pong") {
+      displayText = event;
+    } else if (typeof data === "string") {
+      displayText = data;
+    } else if (data?.text != null) {
+      displayText = String(data.text);
+    } else if (data?.data != null && typeof data.data !== "object") {
+      displayText = String(data.data);
+    } else {
+      try {
+        displayText = JSON.stringify(data, null, 2);
+      } catch {
+        displayText = String(data);
+      }
+    }
+
+    setWsStates((current) => ({
+      ...current,
+      [requestKey]: {
+        ...(current[requestKey] || { connected: true, connecting: false, messageCount: 0, lastMessage: "", lastEventAt: "", error: "" }),
+        connected: true,
+        connecting: false,
+        messageCount: (current[requestKey]?.messageCount ?? 0) + 1,
+        lastMessage: displayText,
+        lastEventAt: at || formatSavedAt(),
+        error: "",
+      },
+    }));
+
+    appendStreamMessage(requestKey, {
+      direction: "in",
+      kind: kind === "event" ? "event" : event || "text",
+      event: event || "message",
+      text: displayText,
+      raw: data,
+      size: realtimeMessageBytes(displayText),
+      at,
+    });
+  }
+
   function setRequestLocalMessage(workspaceName, collectionName, requestName, method, url, text, statusText = "Realtime") {
     const savedAt = formatSavedAt();
     updateStore((current) => updateRequestWithLocalResponseByIdentity(current, workspaceName, collectionName, requestName, {
@@ -828,31 +1019,30 @@ export function useWorkspaceStore() {
     }));
   }
 
-  function connectActiveWebSocket() {
+  function teardownStreamHandle(ref, requestKey) {
+    const handle = ref.current.get(requestKey);
+    if (!handle) return null;
+    ref.current.delete(requestKey);
+    try { handle.unsubscribe?.(); } catch {}
+    if (handle.keepAliveTimer) {
+      try { clearInterval(handle.keepAliveTimer); } catch {}
+    }
+    return handle;
+  }
+
+  async function connectActiveWebSocket() {
     if (!activeRequest || activeRequest.requestMode !== REQUEST_MODES.WEBSOCKET) return;
 
     const workspaceName = activeWorkspace?.name ?? "";
     const collectionName = activeCollection?.name ?? "";
     const requestName = activeRequest.name;
     const requestMethod = activeRequest.method;
+    const requestKey = buildRequestKey(workspaceName, collectionName, requestName);
 
-    const requestKey = buildRequestKey(
-      workspaceName,
-      collectionName,
-      requestName
-    );
-
-    const existing = wsConnectionsRef.current.get(requestKey);
-    if (existing && existing.readyState === WebSocket.OPEN) {
-      return;
-    }
-    if (existing) {
-      clearWebSocketRuntimeTimers(requestKey);
-      try {
-        existing.close();
-      } catch {
-      }
-      wsConnectionsRef.current.delete(requestKey);
+    const existing = teardownStreamHandle(wsConnectionsRef, requestKey);
+    if (existing?.streamId) {
+      try { await realtimeDisconnect(existing.streamId); } catch {}
+      streamKeyByIdRef.current.delete(existing.streamId);
     }
 
     let finalUrl = "";
@@ -868,183 +1058,58 @@ export function useWorkspaceStore() {
       return;
     }
 
-    updateWsState(requestKey, { connecting: true, connected: false, error: "" });
+    clearStreamMessagesForKey(requestKey);
+    updateWsState(requestKey, { connecting: true, connected: false, error: "", messageCount: 0, lastMessage: "" });
+    setRequestLocalMessage(workspaceName, collectionName, requestName, requestMethod, finalUrl, `Connecting to ${finalUrl}`, "Connecting");
+
+    const payload = buildRealtimePayload(activeRequest, workspaceName, collectionName, { url: finalUrl });
 
     try {
-      const socket = new WebSocket(finalUrl);
-      wsConnectionsRef.current.set(requestKey, socket);
-      clearWebSocketRuntimeTimers(requestKey);
+      const streamId = await realtimeConnectWebSocket(payload);
+      if (!streamId) throw new Error("Backend did not return a stream id.");
 
-      const timeoutMs = Number.isFinite(activeRequest.timeoutMs) ? Number(activeRequest.timeoutMs) : 0;
-      if (timeoutMs > 0) {
-        const timeoutId = setTimeout(() => {
-          if (socket.readyState !== WebSocket.CONNECTING) {
-            return;
-          }
-          clearWebSocketRuntimeTimers(requestKey);
-          try {
-            socket.close();
-          } catch {
-          }
-          wsConnectionsRef.current.delete(requestKey);
-          const detail = `WebSocket connection timed out after ${timeoutMs}ms.`;
-          updateWsState(requestKey, {
-            connecting: false,
-            connected: false,
-            error: detail,
-            lastEventAt: formatSavedAt()
-          });
-          setRequestLocalMessage(
-            workspaceName,
-            collectionName,
-            requestName,
-            requestMethod,
-            finalUrl,
-            detail,
-            "Connection error"
-          );
-        }, timeoutMs);
-        wsConnectTimeoutsRef.current.set(requestKey, timeoutId);
+      streamKeyByIdRef.current.set(streamId, requestKey);
+      const unsubscribe = subscribeRealtime(streamId, (eventPayload) => {
+        dispatchRealtimeEvent(requestKey, eventPayload);
+      });
+
+      const keepAliveIntervalMs = Number.isFinite(activeRequest.webSocketKeepAliveIntervalMs)
+        ? Number(activeRequest.webSocketKeepAliveIntervalMs)
+        : 0;
+      let keepAliveTimer = null;
+      if (keepAliveIntervalMs > 0) {
+        keepAliveTimer = setInterval(() => {
+          realtimeSend(streamId, "ping", "ping").catch(() => {});
+        }, keepAliveIntervalMs);
       }
 
-      socket.onopen = () => {
-        const connectTimeout = wsConnectTimeoutsRef.current.get(requestKey);
-        if (connectTimeout) {
-          clearTimeout(connectTimeout);
-          wsConnectTimeoutsRef.current.delete(requestKey);
-        }
-
-        const keepAliveIntervalMs = Number.isFinite(activeRequest.webSocketKeepAliveIntervalMs)
-          ? Number(activeRequest.webSocketKeepAliveIntervalMs)
-          : 0;
-        if (keepAliveIntervalMs > 0) {
-          const keepAliveId = setInterval(() => {
-            if (socket.readyState !== WebSocket.OPEN) {
-              return;
-            }
-            try {
-              socket.send("ping");
-              updateWsState(requestKey, {
-                error: "",
-                lastEventAt: formatSavedAt()
-              });
-            } catch {
-            }
-          }, keepAliveIntervalMs);
-          wsKeepAliveTimersRef.current.set(requestKey, keepAliveId);
-        }
-
-        updateWsState(requestKey, {
-          connecting: false,
-          connected: true,
-          error: "",
-          lastEventAt: formatSavedAt()
-        });
-        setRequestLocalMessage(workspaceName, collectionName, requestName, requestMethod, finalUrl, `Connected to ${finalUrl}`, "Connected");
-      };
-
-      socket.onmessage = (event) => {
-        const message = String(event?.data ?? "");
-        setWsStates((current) => ({
-          ...current,
-          [requestKey]: {
-            connected: true,
-            connecting: false,
-            messageCount: (current[requestKey]?.messageCount ?? 0) + 1,
-            lastMessage: message,
-            lastEventAt: formatSavedAt(),
-            error: ""
-          }
-        }));
-        setRequestLocalMessage(workspaceName, collectionName, requestName, requestMethod, finalUrl, message, "Message received");
-      };
-
-      socket.onerror = () => {
-        const detail = `Failed to connect to ${finalUrl}. Verify the URL is reachable and the server is running.`;
-        updateWsState(requestKey, {
-          connecting: false,
-          connected: false,
-          error: detail,
-          lastEventAt: formatSavedAt()
-        });
-        setRequestLocalMessage(
-          workspaceName,
-          collectionName,
-          requestName,
-          requestMethod,
-          finalUrl,
-          detail,
-          "Connection error"
-        );
-      };
-
-      socket.onclose = (event) => {
-        clearWebSocketRuntimeTimers(requestKey);
-        const wasTracked = wsConnectionsRef.current.has(requestKey);
-        wsConnectionsRef.current.delete(requestKey);
-        updateWsState(requestKey, {
-          connecting: false,
-          connected: false,
-          lastEventAt: formatSavedAt()
-        });
-
-        const code = Number(event?.code || 0);
-        const reason = String(event?.reason || "").trim();
-        const abnormal = code !== 0 && code !== 1000 && code !== 1001;
-        if (wasTracked && abnormal) {
-          const detail = reason
-            ? `WebSocket closed (${code}): ${reason}`
-            : `WebSocket closed (${code}). Verify the server at ${finalUrl} is running.`;
-          setRequestLocalMessage(
-            workspaceName,
-            collectionName,
-            requestName,
-            requestMethod,
-            finalUrl,
-            detail,
-            "Connection error"
-          );
-        }
-      };
-    } catch {
-      updateWsState(requestKey, {
-        connecting: false,
-        connected: false,
-        error: "Failed to create WebSocket connection"
-      });
-      setRequestLocalMessage(workspaceName, collectionName, requestName, requestMethod, activeRequest.url, "Failed to create WebSocket connection.", "Connection error");
+      wsConnectionsRef.current.set(requestKey, { streamId, unsubscribe, keepAliveTimer });
+    } catch (error) {
+      const detail = toErrorText(error) || `Failed to connect to ${finalUrl}.`;
+      updateWsState(requestKey, { connecting: false, connected: false, error: detail, lastEventAt: formatSavedAt() });
+      setRequestLocalMessage(workspaceName, collectionName, requestName, requestMethod, finalUrl, detail, "Connection error");
     }
   }
 
-  function disconnectActiveWebSocket() {
+  async function disconnectActiveWebSocket() {
     if (!activeRequest || activeRequest.requestMode !== REQUEST_MODES.WEBSOCKET) return;
     const workspaceName = activeWorkspace?.name ?? "";
     const collectionName = activeCollection?.name ?? "";
     const requestName = activeRequest.name;
     const requestMethod = activeRequest.method;
-    const requestKey = buildRequestKey(
-      workspaceName,
-      collectionName,
-      requestName
-    );
-    const socket = wsConnectionsRef.current.get(requestKey);
-    if (socket) {
-      clearWebSocketRuntimeTimers(requestKey);
-      try {
-        socket.close();
-      } catch {
-      }
-      wsConnectionsRef.current.delete(requestKey);
+    const requestKey = buildRequestKey(workspaceName, collectionName, requestName);
+
+    const handle = teardownStreamHandle(wsConnectionsRef, requestKey);
+    if (handle?.streamId) {
+      try { await realtimeDisconnect(handle.streamId, 1000, "client"); } catch {}
+      streamKeyByIdRef.current.delete(handle.streamId);
     }
-    updateWsState(requestKey, {
-      connected: false,
-      connecting: false,
-      lastEventAt: formatSavedAt()
-    });
+
+    updateWsState(requestKey, { connected: false, connecting: false, lastEventAt: formatSavedAt() });
     setRequestLocalMessage(workspaceName, collectionName, requestName, requestMethod, activeRequest.url, "Disconnected from WebSocket.", "Disconnected");
   }
 
-  function sendActiveWebSocketMessage() {
+  async function sendActiveWebSocketMessage() {
     if (!activeRequest) return;
 
     if (activeRequest.requestMode === REQUEST_MODES.SOCKET_IO) {
@@ -1057,23 +1122,19 @@ export function useWorkspaceStore() {
     const collectionName = activeCollection?.name ?? "";
     const requestName = activeRequest.name;
     const requestMethod = activeRequest.method;
-    const requestKey = buildRequestKey(
-      workspaceName,
-      collectionName,
-      requestName
-    );
-    const socket = wsConnectionsRef.current.get(requestKey);
+    const requestKey = buildRequestKey(workspaceName, collectionName, requestName);
+    const handle = wsConnectionsRef.current.get(requestKey);
 
-    if (!socket || socket.readyState !== WebSocket.OPEN) {
+    if (!handle?.streamId) {
       updateWsState(requestKey, { error: "Connect first before sending a message." });
       setRequestLocalMessage(workspaceName, collectionName, requestName, requestMethod, activeRequest.url, "Connect first before sending a message.", "Send blocked");
       return;
     }
 
-    let payload = String(activeRequest.body ?? "");
+    let payloadText = String(activeRequest.body ?? "");
     if (activeRequest.bodyType === "json") {
       try {
-        payload = JSON.stringify(JSON.parse(payload), null, 2);
+        payloadText = JSON.stringify(JSON.parse(payloadText), null, 2);
       } catch {
         updateWsState(requestKey, { error: "Invalid JSON payload" });
         setRequestLocalMessage(workspaceName, collectionName, requestName, requestMethod, activeRequest.url, "Invalid JSON payload.", "Send blocked");
@@ -1082,19 +1143,25 @@ export function useWorkspaceStore() {
     }
 
     try {
-      socket.send(payload);
-      updateWsState(requestKey, {
-        error: "",
-        lastEventAt: formatSavedAt()
+      await realtimeSend(handle.streamId, "text", payloadText);
+      updateWsState(requestKey, { error: "", lastEventAt: formatSavedAt() });
+      appendStreamMessage(requestKey, {
+        direction: "out",
+        kind: "text",
+        event: "send",
+        text: payloadText,
+        raw: { text: payloadText },
+        size: realtimeMessageBytes(payloadText),
       });
-      setRequestLocalMessage(workspaceName, collectionName, requestName, requestMethod, activeRequest.url, payload, "Message sent");
-    } catch {
-      updateWsState(requestKey, { error: "Failed to send WebSocket message" });
-      setRequestLocalMessage(workspaceName, collectionName, requestName, requestMethod, activeRequest.url, "Failed to send WebSocket message.", "Send failed");
+      setRequestLocalMessage(workspaceName, collectionName, requestName, requestMethod, activeRequest.url, payloadText, "Message sent");
+    } catch (error) {
+      const detail = toErrorText(error) || "Failed to send WebSocket message";
+      updateWsState(requestKey, { error: detail });
+      setRequestLocalMessage(workspaceName, collectionName, requestName, requestMethod, activeRequest.url, detail, "Send failed");
     }
   }
 
-  function connectActiveSse() {
+  async function connectActiveSse() {
     if (!activeRequest || activeRequest.requestMode !== REQUEST_MODES.SSE) return;
 
     const workspaceName = activeWorkspace?.name ?? "";
@@ -1103,13 +1170,10 @@ export function useWorkspaceStore() {
     const requestMethod = activeRequest.method;
     const requestKey = buildRequestKey(workspaceName, collectionName, requestName);
 
-    const existing = sseConnectionsRef.current.get(requestKey);
-    if (existing) {
-      try {
-        existing.close();
-      } catch {
-      }
-      sseConnectionsRef.current.delete(requestKey);
+    const existing = teardownStreamHandle(sseConnectionsRef, requestKey);
+    if (existing?.streamId) {
+      try { await realtimeDisconnect(existing.streamId); } catch {}
+      streamKeyByIdRef.current.delete(existing.streamId);
     }
 
     const finalUrl = buildSseUrl(activeRequest.url, activeRequest.queryParams);
@@ -1119,122 +1183,34 @@ export function useWorkspaceStore() {
       return;
     }
 
-    updateWsState(requestKey, { connecting: true, connected: false, error: "" });
+    clearStreamMessagesForKey(requestKey);
+    updateWsState(requestKey, { connecting: true, connected: false, error: "", messageCount: 0, lastMessage: "" });
+    setRequestLocalMessage(workspaceName, collectionName, requestName, requestMethod, finalUrl, `Connecting to ${finalUrl}`, "Connecting");
+
+    const payload = buildRealtimePayload(activeRequest, workspaceName, collectionName, {
+      url: finalUrl,
+      method: activeRequest.method || "GET",
+      body: activeRequest.body || null,
+    });
 
     try {
-      const source = new EventSource(finalUrl, {
-        withCredentials: Boolean(activeRequest.sseWithCredentials)
-      });
-      sseConnectionsRef.current.set(requestKey, source);
+      const streamId = await realtimeConnectSse(payload);
+      if (!streamId) throw new Error("Backend did not return a stream id.");
 
-      const urlEventNames = (() => {
-        try {
-          const parsed = new URL(finalUrl);
-          const values = parsed.searchParams.getAll("event")
-            .map((value) => String(value || "").trim())
-            .filter(Boolean);
-          return Array.from(new Set(values));
-        } catch {
-          return [];
-        }
-      })();
-
-      const handleSseData = (event, fallbackType = "message") => {
-        const eventType = String(event?.type || fallbackType || "message");
-        const rawMessage = String(event?.data ?? "");
-        const message = eventType === "message"
-          ? rawMessage
-          : JSON.stringify({ event: eventType, data: rawMessage }, null, 2);
-
-        setWsStates((current) => ({
-          ...current,
-          [requestKey]: {
-            connected: true,
-            connecting: false,
-            messageCount: (current[requestKey]?.messageCount ?? 0) + 1,
-            lastMessage: message,
-            lastEventAt: formatSavedAt(),
-            error: ""
-          }
-        }));
-        setRequestLocalMessage(workspaceName, collectionName, requestName, requestMethod, finalUrl, message, "Event received");
-      };
-
-      let sseStreamCompleted = false;
-
-      source.onopen = () => {
-        updateWsState(requestKey, {
-          connecting: false,
-          connected: true,
-          error: "",
-          lastEventAt: formatSavedAt()
-        });
-        setRequestLocalMessage(workspaceName, collectionName, requestName, requestMethod, finalUrl, `Connected to SSE stream at ${finalUrl}`, "Connected");
-      };
-
-      source.onmessage = (event) => {
-        handleSseData(event, "message");
-      };
-
-      urlEventNames.forEach((eventName) => {
-        source.addEventListener(eventName, (event) => {
-          handleSseData(event, eventName);
-        });
+      streamKeyByIdRef.current.set(streamId, requestKey);
+      const unsubscribe = subscribeRealtime(streamId, (eventPayload) => {
+        dispatchRealtimeEvent(requestKey, eventPayload);
       });
 
-      source.addEventListener("complete", (event) => {
-        handleSseData(event, "complete");
-        sseStreamCompleted = true;
-        try {
-          source.close();
-        } catch {
-        }
-        sseConnectionsRef.current.delete(requestKey);
-        updateWsState(requestKey, {
-          connecting: false,
-          connected: false,
-          error: "",
-          lastEventAt: formatSavedAt()
-        });
-        setRequestLocalMessage(workspaceName, collectionName, requestName, requestMethod, finalUrl, "SSE stream completed.", "Completed");
-      });
-
-      source.onerror = () => {
-        if (sseStreamCompleted) {
-          return;
-        }
-
-        if (source.readyState === EventSource.CLOSED) {
-          sseConnectionsRef.current.delete(requestKey);
-          updateWsState(requestKey, {
-            connecting: false,
-            connected: false,
-            error: "",
-            lastEventAt: formatSavedAt()
-          });
-          setRequestLocalMessage(workspaceName, collectionName, requestName, requestMethod, finalUrl, "SSE stream completed.", "Completed");
-          return;
-        }
-
-        updateWsState(requestKey, {
-          connecting: false,
-          connected: false,
-          error: `SSE stream error from ${finalUrl}`,
-          lastEventAt: formatSavedAt()
-        });
-        setRequestLocalMessage(workspaceName, collectionName, requestName, requestMethod, finalUrl, `SSE stream error from ${finalUrl}`, "Connection error");
-      };
-    } catch {
-      updateWsState(requestKey, {
-        connecting: false,
-        connected: false,
-        error: "Failed to create SSE connection"
-      });
-      setRequestLocalMessage(workspaceName, collectionName, requestName, requestMethod, activeRequest.url, "Failed to create SSE connection.", "Connection error");
+      sseConnectionsRef.current.set(requestKey, { streamId, unsubscribe });
+    } catch (error) {
+      const detail = toErrorText(error) || `Failed to connect to ${finalUrl}.`;
+      updateWsState(requestKey, { connecting: false, connected: false, error: detail, lastEventAt: formatSavedAt() });
+      setRequestLocalMessage(workspaceName, collectionName, requestName, requestMethod, finalUrl, detail, "Connection error");
     }
   }
 
-  function disconnectActiveSse() {
+  async function disconnectActiveSse() {
     if (!activeRequest || activeRequest.requestMode !== REQUEST_MODES.SSE) return;
     const workspaceName = activeWorkspace?.name ?? "";
     const collectionName = activeCollection?.name ?? "";
@@ -1242,24 +1218,17 @@ export function useWorkspaceStore() {
     const requestMethod = activeRequest.method;
     const requestKey = buildRequestKey(workspaceName, collectionName, requestName);
 
-    const source = sseConnectionsRef.current.get(requestKey);
-    if (source) {
-      try {
-        source.close();
-      } catch {
-      }
-      sseConnectionsRef.current.delete(requestKey);
+    const handle = teardownStreamHandle(sseConnectionsRef, requestKey);
+    if (handle?.streamId) {
+      try { await realtimeDisconnect(handle.streamId, 1000, "client"); } catch {}
+      streamKeyByIdRef.current.delete(handle.streamId);
     }
 
-    updateWsState(requestKey, {
-      connected: false,
-      connecting: false,
-      lastEventAt: formatSavedAt()
-    });
+    updateWsState(requestKey, { connected: false, connecting: false, lastEventAt: formatSavedAt() });
     setRequestLocalMessage(workspaceName, collectionName, requestName, requestMethod, activeRequest.url, "Disconnected from SSE stream.", "Disconnected");
   }
 
-  function connectActiveSocketIo() {
+  async function connectActiveSocketIo() {
     if (!activeRequest || activeRequest.requestMode !== REQUEST_MODES.SOCKET_IO) return;
 
     const workspaceName = activeWorkspace?.name ?? "";
@@ -1268,16 +1237,10 @@ export function useWorkspaceStore() {
     const requestMethod = activeRequest.method;
     const requestKey = buildRequestKey(workspaceName, collectionName, requestName);
 
-    const existing = socketIoConnectionsRef.current.get(requestKey);
-    if (existing && existing.readyState === WebSocket.OPEN) {
-      return;
-    }
-    if (existing) {
-      try {
-        existing.close();
-      } catch {
-      }
-      socketIoConnectionsRef.current.delete(requestKey);
+    const existing = teardownStreamHandle(socketIoConnectionsRef, requestKey);
+    if (existing?.streamId) {
+      try { await realtimeDisconnect(existing.streamId); } catch {}
+      streamKeyByIdRef.current.delete(existing.streamId);
     }
 
     const finalUrl = buildSocketIoWebSocketUrl(activeRequest.url, activeRequest.queryParams);
@@ -1289,105 +1252,33 @@ export function useWorkspaceStore() {
       return;
     }
 
-    updateWsState(requestKey, { connecting: true, connected: false, error: "" });
+    clearStreamMessagesForKey(requestKey);
+    updateWsState(requestKey, { connecting: true, connected: false, error: "", messageCount: 0, lastMessage: "" });
+    setRequestLocalMessage(workspaceName, collectionName, requestName, requestMethod, finalUrl, `Connecting to ${finalUrl}`, "Connecting");
+
+    const payload = buildRealtimePayload(activeRequest, workspaceName, collectionName, {
+      url: finalUrl,
+      namespace: normalizedNamespace,
+    });
 
     try {
-      const socket = new WebSocket(finalUrl);
-      socketIoConnectionsRef.current.set(requestKey, socket);
+      const streamId = await realtimeConnectSocketIo(payload);
+      if (!streamId) throw new Error("Backend did not return a stream id.");
 
-      socket.onopen = () => {
-        try {
-          const connectPacket = normalizedNamespace === "/" ? "40" : `40${normalizedNamespace},`;
-          socket.send(connectPacket);
-        } catch {
-        }
-        updateWsState(requestKey, {
-          connecting: false,
-          connected: true,
-          error: "",
-          lastEventAt: formatSavedAt()
-        });
-        setRequestLocalMessage(workspaceName, collectionName, requestName, requestMethod, finalUrl, `Connected to Socket.IO endpoint ${finalUrl}`, "Connected");
-      };
-
-      socket.onmessage = (event) => {
-        const message = String(event?.data ?? "");
-        if (message === "2") {
-          try {
-            socket.send("3");
-          } catch {
-          }
-        }
-
-        let display = message;
-        const parsedEvent = parseSocketIoEventPacket(message);
-        if (parsedEvent) {
-          const configuredEvents = Array.isArray(activeRequest.socketIoEvents)
-            ? activeRequest.socketIoEvents
-            : [];
-          const matchingConfigured = configuredEvents.find((row) => String(row?.name || "").trim() === parsedEvent.eventName);
-          const shouldListen = !matchingConfigured || (matchingConfigured.enabled !== false && matchingConfigured.listen !== false);
-          if (!shouldListen) {
-            return;
-          }
-          display = parsedEvent.pretty;
-        }
-
-        setWsStates((current) => ({
-          ...current,
-          [requestKey]: {
-            connected: true,
-            connecting: false,
-            messageCount: (current[requestKey]?.messageCount ?? 0) + 1,
-            lastMessage: display,
-            lastEventAt: formatSavedAt(),
-            error: ""
-          }
-        }));
-        setRequestLocalMessage(workspaceName, collectionName, requestName, requestMethod, finalUrl, display, "Event received");
-      };
-
-      socket.onerror = () => {
-        const detail = `Failed to connect to Socket.IO at ${finalUrl}. Verify server and transport settings.`;
-        updateWsState(requestKey, {
-          connecting: false,
-          connected: false,
-          error: detail,
-          lastEventAt: formatSavedAt()
-        });
-        setRequestLocalMessage(workspaceName, collectionName, requestName, requestMethod, finalUrl, detail, "Connection error");
-      };
-
-      socket.onclose = (event) => {
-        const wasTracked = socketIoConnectionsRef.current.has(requestKey);
-        socketIoConnectionsRef.current.delete(requestKey);
-        updateWsState(requestKey, {
-          connecting: false,
-          connected: false,
-          lastEventAt: formatSavedAt()
-        });
-
-        const code = Number(event?.code || 0);
-        const reason = String(event?.reason || "").trim();
-        const abnormal = code !== 0 && code !== 1000 && code !== 1001;
-        if (wasTracked && abnormal) {
-          const detail = reason
-            ? `Socket.IO closed (${code}): ${reason}`
-            : `Socket.IO closed (${code}). Verify server at ${finalUrl}.`;
-          setRequestLocalMessage(workspaceName, collectionName, requestName, requestMethod, finalUrl, detail, "Connection error");
-        }
-      };
-    } catch {
-      updateWsState(requestKey, {
-        connecting: false,
-        connected: false,
-        error: "Failed to create Socket.IO connection"
+      streamKeyByIdRef.current.set(streamId, requestKey);
+      const unsubscribe = subscribeRealtime(streamId, (eventPayload) => {
+        dispatchRealtimeEvent(requestKey, eventPayload);
       });
-      setRequestLocalMessage(workspaceName, collectionName, requestName, requestMethod, activeRequest.url, "Failed to create Socket.IO connection.", "Connection error");
+
+      socketIoConnectionsRef.current.set(requestKey, { streamId, unsubscribe });
+    } catch (error) {
+      const detail = toErrorText(error) || `Failed to connect to Socket.IO at ${finalUrl}.`;
+      updateWsState(requestKey, { connecting: false, connected: false, error: detail, lastEventAt: formatSavedAt() });
+      setRequestLocalMessage(workspaceName, collectionName, requestName, requestMethod, finalUrl, detail, "Connection error");
     }
   }
 
-  function disconnectActiveSocketIo() {
+  async function disconnectActiveSocketIo() {
     if (!activeRequest || activeRequest.requestMode !== REQUEST_MODES.SOCKET_IO) return;
     const workspaceName = activeWorkspace?.name ?? "";
     const collectionName = activeCollection?.name ?? "";
@@ -1395,39 +1286,31 @@ export function useWorkspaceStore() {
     const requestMethod = activeRequest.method;
     const requestKey = buildRequestKey(workspaceName, collectionName, requestName);
 
-    const socket = socketIoConnectionsRef.current.get(requestKey);
-    if (socket) {
-      try {
-        socket.close();
-      } catch {
-      }
-      socketIoConnectionsRef.current.delete(requestKey);
+    const handle = teardownStreamHandle(socketIoConnectionsRef, requestKey);
+    if (handle?.streamId) {
+      try { await realtimeDisconnect(handle.streamId, 1000, "client"); } catch {}
+      streamKeyByIdRef.current.delete(handle.streamId);
     }
-    updateWsState(requestKey, {
-      connected: false,
-      connecting: false,
-      lastEventAt: formatSavedAt()
-    });
+
+    updateWsState(requestKey, { connected: false, connecting: false, lastEventAt: formatSavedAt() });
     setRequestLocalMessage(workspaceName, collectionName, requestName, requestMethod, activeRequest.url, "Disconnected from Socket.IO.", "Disconnected");
   }
 
-  function sendActiveSocketIoMessage() {
+  async function sendActiveSocketIoMessage() {
     if (!activeRequest || activeRequest.requestMode !== REQUEST_MODES.SOCKET_IO) return;
     const workspaceName = activeWorkspace?.name ?? "";
     const collectionName = activeCollection?.name ?? "";
     const requestName = activeRequest.name;
     const requestMethod = activeRequest.method;
     const requestKey = buildRequestKey(workspaceName, collectionName, requestName);
-    const socket = socketIoConnectionsRef.current.get(requestKey);
+    const handle = socketIoConnectionsRef.current.get(requestKey);
 
-    if (!socket || socket.readyState !== WebSocket.OPEN) {
+    if (!handle?.streamId) {
       updateWsState(requestKey, { error: "Connect first before sending a Socket.IO event." });
       setRequestLocalMessage(workspaceName, collectionName, requestName, requestMethod, activeRequest.url, "Connect first before sending a Socket.IO event.", "Send blocked");
       return;
     }
 
-    const namespace = String(activeRequest.socketIoNamespace || "/").trim() || "/";
-    const normalizedNamespace = namespace.startsWith("/") ? namespace : `/${namespace}`;
     const configuredEvents = Array.isArray(activeRequest.socketIoEvents)
       ? activeRequest.socketIoEvents
       : [];
@@ -1443,11 +1326,11 @@ export function useWorkspaceStore() {
     }
 
     const selectedPayloadType = selectedEvent?.payloadType === "text" ? "text" : (activeRequest.bodyType || "json");
-    let payload = String(selectedEvent?.payload ?? activeRequest.body ?? "");
+    let payloadText = String(selectedEvent?.payload ?? activeRequest.body ?? "");
 
     if (selectedPayloadType === "json") {
       try {
-        payload = JSON.stringify(JSON.parse(payload));
+        payloadText = JSON.stringify(JSON.parse(payloadText));
       } catch {
         updateWsState(requestKey, { error: "Invalid JSON payload" });
         setRequestLocalMessage(workspaceName, collectionName, requestName, requestMethod, activeRequest.url, "Invalid JSON payload.", "Send blocked");
@@ -1455,22 +1338,22 @@ export function useWorkspaceStore() {
       }
     }
 
-    const normalizedPayload = selectedPayloadType === "json"
-      ? JSON.parse(payload)
-      : payload;
-    const packetPrefix = normalizedNamespace === "/" ? "42" : `42${normalizedNamespace},`;
-    const packet = `${packetPrefix}${JSON.stringify([eventName, normalizedPayload])}`;
-
     try {
-      socket.send(packet);
-      updateWsState(requestKey, {
-        error: "",
-        lastEventAt: formatSavedAt()
+      await realtimeEmitSocketIo(handle.streamId, eventName, payloadText);
+      updateWsState(requestKey, { error: "", lastEventAt: formatSavedAt() });
+      appendStreamMessage(requestKey, {
+        direction: "out",
+        kind: "event",
+        event: eventName,
+        text: payloadText,
+        raw: { event: eventName, data: payloadText },
+        size: realtimeMessageBytes(payloadText),
       });
-      setRequestLocalMessage(workspaceName, collectionName, requestName, requestMethod, activeRequest.url, JSON.stringify([eventName, normalizedPayload], null, 2), "Event sent");
-    } catch {
-      updateWsState(requestKey, { error: "Failed to send Socket.IO event" });
-      setRequestLocalMessage(workspaceName, collectionName, requestName, requestMethod, activeRequest.url, "Failed to send Socket.IO event.", "Send failed");
+      setRequestLocalMessage(workspaceName, collectionName, requestName, requestMethod, activeRequest.url, JSON.stringify({ event: eventName, data: payloadText }, null, 2), "Event sent");
+    } catch (error) {
+      const detail = toErrorText(error) || "Failed to send Socket.IO event";
+      updateWsState(requestKey, { error: detail });
+      setRequestLocalMessage(workspaceName, collectionName, requestName, requestMethod, activeRequest.url, detail, "Send failed");
     }
   }
 
@@ -2953,6 +2836,13 @@ export function useWorkspaceStore() {
         lastEventAt: "",
         error: ""
       },
+    activeStreamMessages: activeRequest
+      ? (streamMessages[buildRequestKey(activeWorkspace?.name ?? "", activeCollection?.name ?? "", activeRequest.name)] || [])
+      : [],
+    clearActiveStreamMessages: () => {
+      if (!activeRequest) return;
+      clearStreamMessagesForKey(buildRequestKey(activeWorkspace?.name ?? "", activeCollection?.name ?? "", activeRequest.name));
+    },
     SIDEBAR_COLLAPSED_WIDTH,
     SIDEBAR_MIN_WIDTH,
     SIDEBAR_REOPEN_WIDTH,
@@ -2988,6 +2878,13 @@ export function useWorkspaceStore() {
     connectActiveWebSocket,
     disconnectActiveWebSocket,
     sendActiveWebSocketMessage,
+    connectActiveSse,
+    disconnectActiveSse,
+    connectActiveSocketIo,
+    disconnectActiveSocketIo,
+    sendActiveSocketIoMessage,
+    streamMessages,
+    clearStreamMessagesForKey,
     cancelSend,
     checkSetup: async () => {
       try {

@@ -26,7 +26,7 @@ function StatCard({ label, value, sub, successText, dangerText }) {
       : "text-foreground";
 
   return (
-    <div className="flex flex-col gap-0.5 border border-border/30 bg-background/35 px-3 py-2.5">
+    <div className="flex flex-col gap-0.5 border border-border/30 px-3 py-2.5">
       <span className="text-[9px] uppercase tracking-[0.18em] text-muted-foreground">{label}</span>
       <span className={cn("text-[20px] font-bold leading-none tracking-tight", valueClass)}>
         {value}
@@ -72,7 +72,7 @@ function TimelineChart({ timeline, durationSecs }) {
         <span className="text-[9px] uppercase tracking-[0.18em] text-muted-foreground">Requests / second</span>
         <span className="text-[9px] text-muted-foreground/60">peak {maxRps.toFixed(0)} req/s</span>
       </div>
-      <div className="relative flex h-16 items-stretch gap-px overflow-hidden border border-border/20 bg-background/20 px-0.5 pt-1">
+      <div className="relative flex h-16 items-stretch gap-px overflow-hidden border border-border/20 px-0.5 pt-1">
         {Array.from({ length: totalBuckets }, (_, i) => {
           const b = bySecond.get(i);
           const rpsH = b ? Math.max(2, Math.round((b.rps / maxRps) * 100)) : 0;
@@ -134,7 +134,7 @@ function ConfigInput({ configKey, label, value, onChange, disabled }) {
         value={value}
         onChange={(e) => onChange(configKey, e.target.value)}
         onBlur={(e) => onChange(configKey, e.target.value)}
-        className="h-8 border-border/35 bg-background/35 text-[13px]"
+        className="h-8 border-border/35 text-[13px]"
         disabled={disabled}
       />
       <span className="text-[9px] text-muted-foreground/50">{hint}</span>
@@ -147,8 +147,8 @@ export function LoadTestPane({ url, method, headers, body }) {
 
   return (
     <div className="thin-scrollbar flex h-full flex-col overflow-y-auto">
-      <div className="flex items-center gap-2.5 border-b border-border/25 bg-background/30 px-4 py-3">
-        <div className="flex h-6 w-6 items-center justify-center bg-primary/15 text-primary">
+      <div className="flex items-center gap-2.5 border-b border-border/25 px-4 py-3">
+        <div className="flex h-6 w-6 items-center justify-center text-primary">
           <Zap className="h-3.5 w-3.5" />
         </div>
         <div>
@@ -254,7 +254,7 @@ export function LoadTestPane({ url, method, headers, body }) {
                   dangerText={result.maxLatencyMs > 5000}
                 />
               </div>
-              <div className="flex flex-col gap-2.5 border border-border/30 bg-background/25 p-3">
+              <div className="flex flex-col gap-2.5 border border-border/30 p-3">
                 <LatencyBar label="P50" value={result.latencyHistogram.p50} max={result.latencyHistogram.p999 || result.maxLatencyMs} />
                 <LatencyBar label="P75" value={result.latencyHistogram.p75} max={result.latencyHistogram.p999 || result.maxLatencyMs} />
                 <LatencyBar label="P90" value={result.latencyHistogram.p90} max={result.latencyHistogram.p999 || result.maxLatencyMs} tone="warn" />
@@ -266,7 +266,7 @@ export function LoadTestPane({ url, method, headers, body }) {
 
             <div className="flex flex-col gap-3">
               <SectionHeader icon={TrendingUp} label="Timeline" />
-              <div className="border border-border/30 bg-background/25 p-3">
+              <div className="border border-border/30 p-3">
                 <TimelineChart timeline={result.timeline} durationSecs={config.durationSecs} />
               </div>
             </div>
@@ -300,7 +300,7 @@ export function LoadTestPane({ url, method, headers, body }) {
             {result.errors.length > 0 && (
               <div className="flex flex-col gap-3">
                 <SectionHeader icon={AlertTriangle} label="Error log" right={`${result.errors.length} samples`} />
-                <div className="border border-border/30 bg-background/20 p-3">
+                <div className="border border-border/30 p-3">
                   <ul className="flex flex-col gap-1">
                     {result.errors.map((err, i) => (
                       <li key={i} className="break-all font-mono text-[10px] text-[hsl(var(--danger))]">
