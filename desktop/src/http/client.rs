@@ -629,11 +629,9 @@ async fn send_oauth_form(
                         if *receiver.borrow() {
                             return Err("OAuth token request cancelled by user.".to_string());
                         }
-                        return Err("OAuth token request cancelled by user.".to_string());
+                        Err("OAuth token request cancelled by user.".to_string())
                     }
-                    Err(_) => {
-                        return Err("OAuth token request cancelled by user.".to_string());
-                    }
+                    Err(_) => Err("OAuth token request cancelled by user.".to_string()),
                 }
             }
             response = request.form(form).send() => {
@@ -675,11 +673,9 @@ async fn send_http_request_with_cancel(
                         if *receiver.borrow() {
                             return Err("Request cancelled by user.".to_string());
                         }
-                        return Err("Request cancelled by user.".to_string());
+                        Err("Request cancelled by user.".to_string())
                     }
-                    Err(_) => {
-                        return Err("Request cancelled by user.".to_string());
-                    }
+                    Err(_) => Err("Request cancelled by user.".to_string()),
                 }
             }
             response = request.send() => {

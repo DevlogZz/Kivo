@@ -118,7 +118,7 @@ pub fn list_grpc_proto_files_in_directory(dir_path: String) -> Result<Vec<String
 
     let mut files = Vec::new();
     collect_proto_files(&dir, &mut files)?;
-    files.sort_by(|a, b| a.to_lowercase().cmp(&b.to_lowercase()));
+    files.sort_by_key(|a| a.to_lowercase());
     Ok(files)
 }
 

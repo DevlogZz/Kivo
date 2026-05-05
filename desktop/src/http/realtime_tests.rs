@@ -107,7 +107,7 @@ fn ensure_user_agent_injects_default_when_missing() {
 fn ensure_user_agent_disabled_flag_skips_insertion() {
     let mut h = HashMap::new();
     ensure_user_agent(&mut h, true);
-    assert!(h.get("User-Agent").is_none());
+    assert!(!h.contains_key("User-Agent"));
 }
 
 #[test]
@@ -345,10 +345,7 @@ async fn sse_stream_parses_three_events_via_helpers() {
 
     let mut last_id = String::new();
     let mut events: Vec<(String, String, String, Option<u64>)> = Vec::new();
-    loop {
-        let Some((idx, next)) = find_event_boundary(&buffer) else {
-            break;
-        };
+    while let Some((idx, next)) = find_event_boundary(&buffer) {
         let frame_bytes = buffer.drain(..next).collect::<Vec<u8>>();
         let frame_text = std::str::from_utf8(&frame_bytes[..idx]).unwrap_or("").to_string();
         if let Some(ev) = parse_sse_event(&frame_text, &mut last_id) {

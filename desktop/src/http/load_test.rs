@@ -873,7 +873,7 @@ pub async fn run_load_test(payload: LoadTestPayload) -> Result<LoadTestResult, S
         .body
         .filter(|b| !b.is_empty())
         .map(|b| Bytes::from(b.into_bytes()))
-        .unwrap_or_else(Bytes::new);
+        .unwrap_or_default();
 
     // --- pre-build HTTP wire bytes (ONCE) ---------------------------------
     let request_bytes = build_request_bytes(

@@ -851,7 +851,7 @@ mod save_load_tests {
             .flatten()
             .filter(|e| {
                 let path = e.path();
-                let is_json = path.extension().map_or(false, |x| x == "json");
+                let is_json = path.extension().is_some_and(|x| x == "json");
                 let file_name = path.file_name().and_then(|n| n.to_str()).unwrap_or("");
                 is_json
                     && file_name != "collection.json"
@@ -993,7 +993,7 @@ mod save_load_tests {
             .flatten()
             .filter(|e| {
                 let path = e.path();
-                let is_json = path.extension().map_or(false, |x| x == "json");
+                let is_json = path.extension().is_some_and(|x| x == "json");
                 let file_name = path.file_name().and_then(|n| n.to_str()).unwrap_or("");
                 is_json
                     && file_name != "collection.json"
@@ -1372,7 +1372,7 @@ mod stress_tests {
         let loaded = fs_load_workspaces(dir.path()).unwrap();
         assert_eq!(loaded[0].collections.len(), 10);
         for c in &loaded[0].collections {
-            let idx: usize = c.name.split('-').last().unwrap().parse().unwrap();
+            let idx: usize = c.name.split('-').next_back().unwrap().parse().unwrap();
             assert_eq!(idx % 2, 0);
         }
     }

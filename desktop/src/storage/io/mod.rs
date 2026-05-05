@@ -98,7 +98,7 @@ pub fn get_collection_dir(root: &Path, workspace_name: &str, collection_name: &s
 fn is_reserved_collection_json(path: &Path) -> bool {
     path.file_name()
         .and_then(|name| name.to_str())
-        .map_or(false, |name| {
+        .is_some_and(|name| {
             name == COLLECTION_CONFIG_FILE_NAME || name == COLLECTION_STATE_FILE_NAME
         })
 }
@@ -135,7 +135,7 @@ pub fn collect_request_json_files(collection_path: &Path) -> Result<Vec<PathBuf>
             }
 
             if path.is_file()
-                && path.extension().map_or(false, |ext| ext == "json")
+                && path.extension().is_some_and(|ext| ext == "json")
                 && !is_reserved_collection_json(&path)
             {
                 files.push(path);

@@ -546,7 +546,7 @@ pub async fn realtime_connect_websocket(
     let settings = load_app_settings(&app);
     let timeout_ms = payload
         .timeout_ms
-        .unwrap_or_else(|| settings.request_timeout_ms);
+        .unwrap_or(settings.request_timeout_ms);
     let use_jar = payload.use_cookie_jar.unwrap_or(true);
 
     let mut headers = payload.headers.clone();
@@ -705,9 +705,9 @@ async fn run_websocket_loop<S>(
                     break;
                 };
                 let send_result = match msg {
-                    OutgoingMessage::Text(text) => sink.send(WsMessage::Text(text.into())).await,
-                    OutgoingMessage::Binary(bytes) => sink.send(WsMessage::Binary(bytes.into())).await,
-                    OutgoingMessage::Ping(bytes) => sink.send(WsMessage::Ping(bytes.into())).await,
+                    OutgoingMessage::Text(text) => sink.send(WsMessage::Text(text)).await,
+                    OutgoingMessage::Binary(bytes) => sink.send(WsMessage::Binary(bytes)).await,
+                    OutgoingMessage::Ping(bytes) => sink.send(WsMessage::Ping(bytes)).await,
                     OutgoingMessage::Close(detail) => {
                         let frame = detail.map(|(code, reason)| CloseFrame {
                             code: tokio_tungstenite::tungstenite::protocol::frame::coding::CloseCode::from(code),
@@ -858,7 +858,7 @@ pub async fn realtime_connect_sse(
     let settings = load_app_settings(&app);
     let timeout_ms = payload
         .timeout_ms
-        .unwrap_or_else(|| settings.request_timeout_ms);
+        .unwrap_or(settings.request_timeout_ms);
     let use_jar = payload.use_cookie_jar.unwrap_or(true);
 
     let mut headers = payload.headers.clone();
@@ -1145,10 +1145,8 @@ fn parse_sse_event(text: &str, last_event_id: &mut String) -> Option<ParsedSseEv
             None => (line, String::new()),
         };
         match field {
-            "event" => {
-                if !value.is_empty() {
-                    event_name = value;
-                }
+            "event" if !value.is_empty() => {
+                event_name = value;
             }
             "data" => {
                 data_lines.push(value);
@@ -1209,7 +1207,7 @@ pub async fn realtime_connect_socketio(
     let settings = load_app_settings(&app);
     let timeout_ms = payload
         .timeout_ms
-        .unwrap_or_else(|| settings.request_timeout_ms);
+        .unwrap_or(settings.request_timeout_ms);
     let use_jar = payload.use_cookie_jar.unwrap_or(true);
 
     let mut headers = payload.headers.clone();

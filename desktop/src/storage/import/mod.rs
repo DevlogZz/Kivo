@@ -412,7 +412,7 @@ pub fn detect_format(value: &Value) -> String {
     if value
         .get("swagger")
         .and_then(|v| v.as_str())
-        .map_or(false, |v| v == "2.0")
+        == Some("2.0")
     {
         return "swagger2".to_string();
     }
