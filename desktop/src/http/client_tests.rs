@@ -7,9 +7,12 @@
 use std::collections::HashMap;
 
 use chrono::{Duration as ChronoDuration, Utc};
+use tokio::io::{AsyncReadExt, AsyncWriteExt};
+use tokio::net::TcpListener;
 
 use super::*;
 use crate::http::models::CookieJarEntry;
+use crate::storage::models::AppSettings;
 
 // ---------------------------------------------------------------------------
 // proxy bypass logic
@@ -334,6 +337,97 @@ fn cookie_jar_entry_camelcase_keys() {
     assert!(s.contains("\"httpOnly\""));
     assert!(s.contains("\"sameSite\""));
     assert!(s.contains("\"workspaceName\""));
+}
+
+// ---------------------------------------------------------------------------
+// redirect behavior
+// ---------------------------------------------------------------------------
+
+async fn spawn_redirect_server() -> u16 {
+    let listener = TcpListener::bind("127.0.0.1:0").await.expect("bind");
+    let port = listener.local_addr().expect("local addr").port();
+
+    tokio::spawn(async move {
+        loop {
+            let (mut socket, _) = match listener.accept().await {
+                Ok(pair) => pair,
+                Err(_) => return,
+            };
+
+            tokio::spawn(async move {
+                let mut buf = vec![0_u8; 4096];
+                let n = match socket.read(&mut buf).await {
+                    Ok(0) | Err(_) => return,
+                    Ok(n) => n,
+                };
+                let req = String::from_utf8_lossy(&buf[..n]);
+                let path = req
+                    .lines()
+                    .next()
+                    .and_then(|line| line.split_whitespace().nth(1))
+                    .unwrap_or("/");
+
+                let response = if path == "/start" {
+                    "HTTP/1.1 302 Found\r\nLocation: /final\r\nContent-Length: 0\r\nConnection: close\r\n\r\n".to_string()
+                } else {
+                    "HTTP/1.1 200 OK\r\nContent-Length: 2\r\nConnection: close\r\n\r\nok".to_string()
+                };
+
+                let _ = socket.write_all(response.as_bytes()).await;
+            });
+        }
+    });
+
+    port
+}
+
+#[tokio::test]
+async fn build_http_client_does_not_follow_redirects_when_disabled() {
+    let port = spawn_redirect_server().await;
+    let settings = AppSettings::default();
+    let client = build_http_client(
+        &settings,
+        &format!("http://127.0.0.1:{port}/start"),
+        2_000,
+        false,
+        5,
+        true,
+    )
+    .expect("client");
+
+    let response = client
+        .get(format!("http://127.0.0.1:{port}/start"))
+        .send()
+        .await
+        .expect("request");
+
+    assert_eq!(response.status().as_u16(), 302);
+}
+
+#[tokio::test]
+async fn build_http_client_follows_redirects_when_enabled() {
+    let port = spawn_redirect_server().await;
+    let settings = AppSettings::default();
+    let client = build_http_client(
+        &settings,
+        &format!("http://127.0.0.1:{port}/start"),
+        2_000,
+        true,
+        5,
+        true,
+    )
+    .expect("client");
+
+    let response = client
+        .get(format!("http://127.0.0.1:{port}/start"))
+        .send()
+        .await
+        .expect("request");
+    let status = response.status().as_u16();
+    let body = response.text().await.expect("body");
+
+    assert_eq!(status, 200);
+    assert_eq!(body, "ok");
 }
 
 // ---------------------------------------------------------------------------
