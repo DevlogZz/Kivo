@@ -110,6 +110,12 @@ pub struct RequestPayload {
     pub timeout_ms: Option<u64>,
 
     #[serde(default)]
+    pub follow_redirects: Option<bool>,
+
+    #[serde(default)]
+    pub max_redirects: Option<u32>,
+
+    #[serde(default)]
     pub auth_payload: Option<AuthPayload>,
 }
 

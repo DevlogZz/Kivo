@@ -266,9 +266,16 @@ fn build_http_client(
     settings: &AppSettings,
     request_url: &str,
     timeout_ms: u64,
+    follow_redirects: bool,
+    max_redirects: u32,
     validate_certs: bool,
 ) -> Result<reqwest::Client, String> {
-    let mut builder = reqwest::Client::builder().redirect(reqwest::redirect::Policy::limited(10));
+    let redirect_policy = if follow_redirects {
+        reqwest::redirect::Policy::limited(max_redirects.clamp(1, 50) as usize)
+    } else {
+        reqwest::redirect::Policy::none()
+    };
+    let mut builder = reqwest::Client::builder().redirect(redirect_policy);
 
     if timeout_ms > 0 {
         builder = builder.timeout(Duration::from_millis(timeout_ms));
@@ -1385,6 +1392,8 @@ pub async fn oauth_exchange_token(
         &app_settings,
         &token_url,
         oauth_timeout_ms,
+        true,
+        10,
         app_settings.validate_certificates_during_authentication,
     )?;
 
@@ -1732,10 +1741,14 @@ pub async fn send_http_request(
     } else {
         app_settings.request_timeout_ms
     };
+    let effective_follow_redirects = payload.follow_redirects.unwrap_or(true);
+    let effective_max_redirects = payload.max_redirects.unwrap_or(5);
     let client = build_http_client(
         &app_settings,
         &url,
         effective_timeout_ms,
+        effective_follow_redirects,
+        effective_max_redirects,
         app_settings.ssl_tls_certificate_verification,
     )?;
 
