@@ -54,13 +54,20 @@ fn normalize_env_id(input: &str) -> String {
     }
 }
 
-fn resolve_workspace_env_path(workspace_path: &Path, environment_id: Option<&str>) -> PathBuf {
-    if let Some(id) = environment_id {
-        return workspace_env_file_path(workspace_path, id);
+fn collection_env_file_path(collection_path: &Path, environment_id: &str) -> PathBuf {
+    if environment_id == WORKSPACE_DEFAULT_ENV_ID {
+        collection_path.join(".env")
+    } else {
+        collection_path.join(format!(".env.{}", normalize_env_id(environment_id)))
     }
+}
 
+fn resolve_effective_environment_id(workspace_path: &Path, environment_id: Option<&str>) -> String {
+    if let Some(id) = environment_id {
+        return normalize_env_id(id);
+    }
     let file = read_workspace_environments_file(workspace_path);
-    workspace_env_file_path(workspace_path, &file.active_environment_id)
+    file.active_environment_id
 }
 
 fn workspace_env_meta_path(workspace_path: &Path) -> PathBuf {
@@ -429,10 +436,12 @@ pub fn load_env_vars(
     workspace_path: &Path,
     collection_path: Option<&Path>,
 ) -> HashMap<String, String> {
-    let workspace_env_path = resolve_workspace_env_path(workspace_path, None);
+    let active_env_id = resolve_effective_environment_id(workspace_path, None);
+    let workspace_env_path = workspace_env_file_path(workspace_path, &active_env_id);
     let mut vars = parse_env_file(&workspace_env_path);
     if let Some(col_path) = collection_path {
-        for (k, v) in parse_env_file(&col_path.join(".env")) {
+        let collection_env_path = collection_env_file_path(col_path, &active_env_id);
+        for (k, v) in parse_env_file(&collection_env_path) {
             vars.insert(k, v);
         }
     }
@@ -647,12 +656,14 @@ pub fn fs_get_env_vars(
     workspace_environment_id: Option<&str>,
 ) -> EnvVarsResult {
     let ws_path = root.join(workspace_name);
-    let workspace_env_path = resolve_workspace_env_path(&ws_path, workspace_environment_id);
+    let effective_env_id = resolve_effective_environment_id(&ws_path, workspace_environment_id);
+    let workspace_env_path = workspace_env_file_path(&ws_path, &effective_env_id);
     let workspace_vars = parse_env_file_ordered(&workspace_env_path);
     let collection_vars = match collection_name {
         Some(col) => {
             let col_path = get_collection_dir(root, workspace_name, col);
-            parse_env_file_ordered(&col_path.join(".env"))
+            let collection_env_path = collection_env_file_path(&col_path, &effective_env_id);
+            parse_env_file_ordered(&collection_env_path)
         }
         None => vec![],
     };
@@ -677,6 +688,8 @@ pub fn fs_save_env_vars(
     workspace_environment_id: Option<&str>,
     vars: &[EnvVar],
 ) -> Result<(), String> {
+    let ws_path = root.join(workspace_name);
+    let effective_env_id = resolve_effective_environment_id(&ws_path, workspace_environment_id);
     let env_path = match collection_name {
         Some(col) => {
             let col_path = get_collection_dir(root, workspace_name, col);
@@ -684,14 +697,13 @@ pub fn fs_save_env_vars(
                 fs::create_dir_all(&col_path)
                     .map_err(|e| format!("Failed to create collection dir: {e}"))?;
             }
-            col_path.join(".env")
+            collection_env_file_path(&col_path, &effective_env_id)
         }
         None => {
-            let ws_path = root.join(workspace_name);
             if !ws_path.exists() {
                 return Err(format!("Workspace '{}' does not exist", workspace_name));
             }
-            resolve_workspace_env_path(&ws_path, workspace_environment_id)
+            workspace_env_file_path(&ws_path, &effective_env_id)
         }
     };
     write_env_file(&env_path, vars)

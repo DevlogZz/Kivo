@@ -716,7 +716,7 @@ mod fs_env_vars_tests {
     #[test]
     fn explicit_workspace_environment_id_reads_and_writes_separate_files() {
         let dir = TempDir::new().unwrap();
-        fs_save_workspaces(dir.path(), &[ws("ws", vec![])]).unwrap();
+        fs_save_workspaces(dir.path(), &[ws("ws", vec![col("api", vec![])])]).unwrap();
         create_workspace_environment(dir.path(), "ws", "Prod").unwrap();
 
         fs_save_env_vars(
@@ -743,10 +743,82 @@ mod fs_env_vars_tests {
         )
         .unwrap();
 
+        fs_save_env_vars(
+            dir.path(),
+            "ws",
+            Some("api"),
+            Some("default"),
+            &[EnvVar {
+                key: "TOKEN".to_string(),
+                value: "dev-token".to_string(),
+            }],
+        )
+        .unwrap();
+
+        fs_save_env_vars(
+            dir.path(),
+            "ws",
+            Some("api"),
+            Some("prod"),
+            &[EnvVar {
+                key: "TOKEN".to_string(),
+                value: "prod-token".to_string(),
+            }],
+        )
+        .unwrap();
+
         let default_vars = fs_get_env_vars(dir.path(), "ws", None, Some("default"));
         let prod_vars = fs_get_env_vars(dir.path(), "ws", None, Some("prod"));
         assert_eq!(default_vars.merged.get("BASE_URL"), Some(&"https://dev.example.com".to_string()));
         assert_eq!(prod_vars.merged.get("BASE_URL"), Some(&"https://prod.example.com".to_string()));
+
+        let default_collection_vars = fs_get_env_vars(dir.path(), "ws", Some("api"), Some("default"));
+        let prod_collection_vars = fs_get_env_vars(dir.path(), "ws", Some("api"), Some("prod"));
+        assert_eq!(default_collection_vars.merged.get("TOKEN"), Some(&"dev-token".to_string()));
+        assert_eq!(prod_collection_vars.merged.get("TOKEN"), Some(&"prod-token".to_string()));
+    }
+
+    #[test]
+    fn active_environment_controls_collection_env_resolution() {
+        let dir = TempDir::new().unwrap();
+        fs_save_workspaces(dir.path(), &[ws("ws", vec![col("api", vec![])])]).unwrap();
+        create_workspace_environment(dir.path(), "ws", "Prod").unwrap();
+
+        fs_save_env_vars(
+            dir.path(),
+            "ws",
+            Some("api"),
+            Some("default"),
+            &[EnvVar {
+                key: "COL_HOST".to_string(),
+                value: "dev.collection.example.com".to_string(),
+            }],
+        )
+        .unwrap();
+        fs_save_env_vars(
+            dir.path(),
+            "ws",
+            Some("api"),
+            Some("prod"),
+            &[EnvVar {
+                key: "COL_HOST".to_string(),
+                value: "prod.collection.example.com".to_string(),
+            }],
+        )
+        .unwrap();
+
+        let default_result = fs_get_env_vars(dir.path(), "ws", Some("api"), None);
+        assert_eq!(
+            default_result.merged.get("COL_HOST"),
+            Some(&"dev.collection.example.com".to_string())
+        );
+
+        set_active_workspace_environment(dir.path(), "ws", "prod").unwrap();
+        let prod_result = fs_get_env_vars(dir.path(), "ws", Some("api"), None);
+        assert_eq!(
+            prod_result.merged.get("COL_HOST"),
+            Some(&"prod.collection.example.com".to_string())
+        );
     }
 }
 
