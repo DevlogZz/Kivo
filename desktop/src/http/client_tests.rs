@@ -102,8 +102,28 @@ fn resolve_variables_replaces_simple_and_multiple() {
 #[test]
 fn resolve_variables_leaves_unknown_placeholders() {
     let vars = HashMap::new();
-    let out = resolve_variables("a/{{MISSING}}", &vars);
-    assert_eq!(out, "a/{{MISSING}}");
+    let out = resolve_variables("a/{{MISSING}}/{{$unknown}}", &vars);
+    assert_eq!(out, "a/{{MISSING}}/{{$unknown}}");
+}
+
+#[test]
+fn resolve_variables_supports_dynamic_uuid() {
+    let vars = HashMap::new();
+    let out = resolve_variables("id={{$uuid}}", &vars);
+    let uuid_value = out.trim_start_matches("id=");
+    assert!(uuid::Uuid::parse_str(uuid_value).is_ok());
+}
+
+#[test]
+fn resolve_variables_supports_dynamic_timestamp() {
+    let vars = HashMap::new();
+    let before = Utc::now().timestamp();
+    let out = resolve_variables("t={{$timestamp}}", &vars);
+    let after = Utc::now().timestamp();
+
+    let raw = out.trim_start_matches("t=");
+    let parsed = raw.parse::<i64>().expect("timestamp should be numeric");
+    assert!(parsed >= before && parsed <= after);
 }
 
 // ---------------------------------------------------------------------------

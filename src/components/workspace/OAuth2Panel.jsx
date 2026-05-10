@@ -34,11 +34,12 @@ import {
   oauthGrantOptions,
   parseOAuthCallbackInput,
 } from "@/lib/oauth.js";
+import { resolveTemplateVariables } from "@/lib/template-variables.js";
 import { cn } from "@/lib/utils.js";
 
 function resolveEnvValue(text, envVars) {
   const merged = envVars?.merged ?? {};
-  return String(text ?? "").replace(/\{\{([^}]+)\}\}/g, (_, key) => merged[key.trim()] ?? "");
+  return resolveTemplateVariables(text, merged);
 }
 
 function SectionShell({ icon: Icon, title, subtitle, children, className }) {

@@ -1,5 +1,6 @@
 import { normalizeAuthState } from "@/lib/oauth.js";
 import { REQUEST_MODES } from "@/lib/workspace-store.js";
+import { resolveTemplateVariables } from "@/lib/template-variables.js";
 
 const methodTones = {
   GET: "tone-get-text tone-get-bg",
@@ -231,10 +232,6 @@ export function buildRequestExport(request) {
   };
 }
 
-function resolveTemplateValue(value, mergedEnv = {}) {
-  return String(value ?? "").replace(/\{\{([^}]+)\}\}/g, (_, key) => mergedEnv[key.trim()] ?? "");
-}
-
 function hasHeaderName(headers, name) {
   const lookup = String(name || "").toLowerCase();
   return Object.keys(headers).some((key) => String(key).toLowerCase() === lookup);
@@ -254,7 +251,7 @@ export function buildResolvedRequestExport(request, context = {}) {
   const method = String(request?.method || "GET").toUpperCase();
   const bodyType = request?.bodyType ?? "json";
   const mergedEnv = context?.envVars?.merged ?? {};
-  const resolveValue = (value) => resolveTemplateValue(value, mergedEnv);
+  const resolveValue = (value) => resolveTemplateVariables(value, mergedEnv);
   const requestAuth = normalizeAuthState(request?.auth ?? { type: "none" });
   const collectionAuth = normalizeAuthState(context?.collectionConfig?.defaultAuth ?? { type: "none" });
   const effectiveAuth = requestAuth.type === "inherit" ? collectionAuth : requestAuth;

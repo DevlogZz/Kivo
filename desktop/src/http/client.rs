@@ -28,6 +28,7 @@ use super::models::{
     OAuthTokenExchangePayload, OAuthTokenExchangeResult, RequestPayload, ResponsePayload,
     UpsertCookieJarEntryPayload,
 };
+use crate::http::dynamic_vars::resolve_template_variables;
 use crate::storage::{
     get_app_config, get_collection_dir, get_storage_root, load_collection_config_from_path,
     load_env_vars, AppSettings,
@@ -738,12 +739,7 @@ pub async fn cancel_http_request(request_id: String) -> Result<bool, String> {
 }
 
 fn resolve_variables(input: &str, vars: &HashMap<String, String>) -> String {
-    let mut result = input.to_string();
-    for (key, value) in vars {
-        let placeholder = format!("{{{{{}}}}}", key);
-        result = result.replace(&placeholder, value);
-    }
-    result
+    resolve_template_variables(input, vars)
 }
 
 fn normalize_url(raw: &str) -> Result<String, String> {

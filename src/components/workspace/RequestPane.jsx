@@ -11,6 +11,7 @@ import { OAuth2Panel } from "@/components/workspace/OAuth2Panel.jsx";
 import { formatGraphqlText, formatJsonText } from "@/lib/formatters.js";
 import { buildUrlWithParams, getMethodTone, requestBodyModes } from "@/lib/http-ui.js";
 import { listGrpcProtoFilesInDirectory, parseGrpcProtoFile } from "@/lib/http-client.js";
+import { isDynamicTemplateVariable } from "@/lib/template-variables.js";
 import { REQUEST_MODES } from "@/lib/workspace-store.js";
 import { cn } from "@/lib/utils.js";
 import { EnvHighlightInput } from "@/components/ui/EnvHighlightInput.jsx";
@@ -2177,7 +2178,7 @@ export function RequestPane({
       .map((m) => m[1].trim())
       .filter(Boolean);
 
-    return [...new Set(placeholders)].filter((key) => !(key in merged));
+    return [...new Set(placeholders)].filter((key) => !(key in merged) && !isDynamicTemplateVariable(key));
   }, [debouncedState, envVars]);
 
   function handleFormatBody() {
