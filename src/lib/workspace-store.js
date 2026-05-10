@@ -19,6 +19,8 @@ export const REQUEST_MODE_OPTIONS = [
   { value: REQUEST_MODES.SOCKET_IO, label: "Socket.IO Request" }
 ];
 
+export const DEFAULT_USER_AGENT_VALUE = "kivo/0.4.1";
+
 export function createDefaultAppSettings() {
   return {
     clearOAuthSessionOnStart: false,
@@ -40,8 +42,18 @@ export function createDefaultAppSettings() {
   };
 }
 
-function withDefaultUserAgent(headers = []) {
-  return Array.isArray(headers) ? headers.map((row) => ({ ...row })) : [];
+function withDefaultUserAgent(headers = [], options = {}) {
+  const normalized = Array.isArray(headers) ? headers.map((row) => ({ ...row })) : [];
+  if (!options.injectMissing) {
+    return normalized;
+  }
+
+  const hasUserAgent = normalized.some((row) => String(row?.key || "").trim().toLowerCase() === "user-agent");
+  if (hasUserAgent) {
+    return normalized;
+  }
+
+  return [...normalized, { key: "User-Agent", value: DEFAULT_USER_AGENT_VALUE, enabled: false }];
 }
 
 function createSocketIoEvent(name = "message") {
@@ -67,7 +79,7 @@ function getRequestModeTemplate(mode) {
         body: "",
         graphqlVariables: "{\n\n}",
         activeEditorTab: "Body",
-        headers: withDefaultUserAgent([])
+        headers: withDefaultUserAgent([], { injectMissing: true })
       };
     case REQUEST_MODES.SSE:
       return {
@@ -77,14 +89,14 @@ function getRequestModeTemplate(mode) {
         sseWithCredentials: false,
         sseLastEventId: "",
         sseRetryMs: 3000,
-        headers: withDefaultUserAgent([{ key: "Accept", value: "text/event-stream", enabled: true }])
+        headers: withDefaultUserAgent([{ key: "Accept", value: "text/event-stream", enabled: true }], { injectMissing: true })
       };
     case REQUEST_MODES.GRPC:
       return {
         method: "POST",
         bodyType: "json",
         activeEditorTab: "Body",
-        headers: withDefaultUserAgent([{ key: "Content-Type", value: "application/grpc", enabled: true }])
+        headers: withDefaultUserAgent([{ key: "Content-Type", value: "application/grpc", enabled: true }], { injectMissing: true })
       };
     case REQUEST_MODES.WEBSOCKET:
       return {
@@ -92,7 +104,7 @@ function getRequestModeTemplate(mode) {
         bodyType: "json",
         activeEditorTab: "Body",
         webSocketKeepAliveIntervalMs: 0,
-        headers: withDefaultUserAgent([])
+        headers: withDefaultUserAgent([], { injectMissing: true })
       };
     case REQUEST_MODES.SOCKET_IO:
       {
@@ -107,7 +119,7 @@ function getRequestModeTemplate(mode) {
         socketIoAckTimeoutMs: 0,
         socketIoEvents: [defaultEvent],
         socketIoSelectedEventId: defaultEvent.id,
-        headers: withDefaultUserAgent([])
+        headers: withDefaultUserAgent([], { injectMissing: true })
       };
       }
     case REQUEST_MODES.HTTP:
@@ -115,7 +127,7 @@ function getRequestModeTemplate(mode) {
       return {
         method: "GET",
         bodyType: "json",
-        headers: withDefaultUserAgent([])
+        headers: withDefaultUserAgent([], { injectMissing: true })
       };
   }
 }
