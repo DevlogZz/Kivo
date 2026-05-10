@@ -248,7 +248,7 @@ function sanitizeRequestForSave(request, options = {}) {
     activeEditorTab: String(request?.activeEditorTab ?? "Params"),
     activeResponseTab: String(request?.activeResponseTab ?? "Body"),
     responseBodyView: String(request?.responseBodyView ?? "JSON"),
-    inheritHeaders: request?.inheritHeaders ?? true,
+    inheritHeaders: request?.inheritHeaders ?? false,
     tags: Array.isArray(request?.tags) ? request.tags.map((tag) => String(tag)) : [],
     urlEncoding: request?.urlEncoding ?? true,
     followRedirects: request?.followRedirects ?? true,

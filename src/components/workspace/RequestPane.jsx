@@ -2607,7 +2607,7 @@ export function RequestPane({
                 <input
                   type="checkbox"
                   className="accent-primary w-3 h-3.5 outline-none"
-                  checked={state.inheritHeaders ?? true}
+                  checked={state.inheritHeaders ?? false}
                   onChange={(e) => onChange("inheritHeaders", e.target.checked)}
                 />
                 Inherit default headers from parent collection

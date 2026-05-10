@@ -19,8 +19,6 @@ export const REQUEST_MODE_OPTIONS = [
   { value: REQUEST_MODES.SOCKET_IO, label: "Socket.IO Request" }
 ];
 
-export const DEFAULT_USER_AGENT_VALUE = "kivo/0.4.1";
-
 export function createDefaultAppSettings() {
   return {
     clearOAuthSessionOnStart: false,
@@ -43,12 +41,7 @@ export function createDefaultAppSettings() {
 }
 
 function withDefaultUserAgent(headers = []) {
-  const normalized = Array.isArray(headers) ? headers.map((row) => ({ ...row })) : [];
-  const hasUserAgent = normalized.some((row) => String(row?.key || "").trim().toLowerCase() === "user-agent");
-  if (hasUserAgent) {
-    return normalized;
-  }
-  return [...normalized, { key: "User-Agent", value: DEFAULT_USER_AGENT_VALUE, enabled: true }];
+  return Array.isArray(headers) ? headers.map((row) => ({ ...row })) : [];
 }
 
 function createSocketIoEvent(name = "message") {
@@ -194,7 +187,7 @@ export function createRequest(name = "New Request", mode = REQUEST_MODES.HTTP) {
     activeEditorTab: template.activeEditorTab ?? "Params",
     activeResponseTab: "Body",
     responseBodyView: "JSON",
-    inheritHeaders: true,
+    inheritHeaders: false,
     tags: [],
     urlEncoding: true,
     followRedirects: true,
@@ -385,7 +378,7 @@ export function normalizeRequestRecord(request) {
     ...request,
     requestMode,
     pinned: Boolean(request?.pinned),
-    inheritHeaders: request?.inheritHeaders ?? true,
+    inheritHeaders: request?.inheritHeaders ?? false,
     queryParams: Array.isArray(request?.queryParams) ? request.queryParams : [],
     headers: withDefaultUserAgent(Array.isArray(request?.headers) ? request.headers : []),
     body: normalizedBody,

@@ -254,7 +254,7 @@ export function buildResolvedRequestExport(request, context = {}) {
   const requestAuth = normalizeAuthState(request?.auth ?? { type: "none" });
   const collectionAuth = normalizeAuthState(context?.collectionConfig?.defaultAuth ?? { type: "none" });
   const effectiveAuth = requestAuth.type === "inherit" ? collectionAuth : requestAuth;
-  const inheritHeaders = request?.inheritHeaders ?? true;
+  const inheritHeaders = request?.inheritHeaders ?? false;
 
   const { body, contentType } = serializeBodyByType(request, method, resolveValue);
   const defaultHeaders = inheritHeaders ? context?.collectionConfig?.defaultHeaders ?? [] : [];
@@ -325,7 +325,7 @@ export function buildRequestPayload(request, workspaceName, collectionName) {
     workspaceName: workspaceName || "",
     collectionName: collectionName || "",
     authType: auth.type ?? "none",
-    inheritHeaders: request?.inheritHeaders ?? true,
+    inheritHeaders: request?.inheritHeaders ?? false,
     disableUserAgent,
     useCookieJar,
     timeoutMs,
