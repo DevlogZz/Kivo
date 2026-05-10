@@ -190,7 +190,6 @@ export function buildUrlWithParams(rawUrl, params = []) {
 
   try {
     const url = new URL(normalized);
-    url.search = "";
 
     params.forEach((param) => {
       if (param?.enabled && String(param.key || "").trim()) {
