@@ -1,4 +1,5 @@
 use std::fs;
+use std::collections::HashMap;
 use std::path::{Component, Path, PathBuf};
 
 use serde::Serialize;
@@ -15,6 +16,7 @@ pub mod models;
 pub use models::{
     default_state, AppSettings, CollectionConfig, CollectionRecord, EnvVar, EnvVarsResult,
     ImportedCollectionResult, ImportedRequestsResult, PersistedAppState, RequestRecord,
+    RequestRuntimeState,
     StoragePathValidationResult, StorageSwitchPayload, WorkspaceEnvironmentsResult,
     WorkspaceFile,
 };
@@ -452,10 +454,94 @@ pub fn get_storage_root(app: &AppHandle) -> Result<PathBuf, String> {
         .map_err(|e| format!("Failed to resolve fallback storage directory: {e}"))
 }
 
+fn request_runtime_key(workspace_name: &str, collection_name: &str, request: &RequestRecord) -> String {
+    let folder = request
+        .folder_path
+        .split(['/', '\\'])
+        .filter_map(|segment| {
+            let trimmed = segment.trim();
+            if trimmed.is_empty() {
+                None
+            } else {
+                Some(trimmed)
+            }
+        })
+        .collect::<Vec<_>>()
+        .join("/");
+
+    if folder.is_empty() {
+        format!("{}::{}::{}", workspace_name, collection_name, request.name)
+    } else {
+        format!("{}::{}::{}::{}", workspace_name, collection_name, folder, request.name)
+    }
+}
+
+fn extract_request_runtime_state(request: &mut RequestRecord) -> RequestRuntimeState {
+    let runtime = RequestRuntimeState {
+        active_editor_tab: request.active_editor_tab.clone(),
+        active_response_tab: request.active_response_tab.clone(),
+        response_body_view: request.response_body_view.clone(),
+        script_active_phase: request.script_active_phase.clone(),
+        script_last_run_at: request.script_last_run_at.clone(),
+        script_last_phase: request.script_last_phase.clone(),
+        script_last_status: request.script_last_status.clone(),
+        script_last_error: request.script_last_error.clone(),
+        script_last_logs: request.script_last_logs.clone(),
+        script_last_tests: request.script_last_tests.clone(),
+        script_last_vars: request.script_last_vars.clone(),
+        last_response: request.last_response.clone(),
+    };
+
+    request.active_editor_tab = models::default_active_editor_tab();
+    request.active_response_tab = models::default_active_response_tab();
+    request.response_body_view = models::default_response_body_view();
+    request.script_active_phase = models::default_script_active_phase();
+    request.script_last_run_at.clear();
+    request.script_last_phase.clear();
+    request.script_last_status.clear();
+    request.script_last_error.clear();
+    request.script_last_logs.clear();
+    request.script_last_tests.clear();
+    request.script_last_vars.clear();
+    request.last_response = None;
+
+    runtime
+}
+
+fn has_runtime_state(state: &RequestRuntimeState) -> bool {
+    !models::is_default_active_editor_tab(&state.active_editor_tab)
+        || !models::is_default_active_response_tab(&state.active_response_tab)
+        || !models::is_default_response_body_view(&state.response_body_view)
+        || !models::is_default_script_active_phase(&state.script_active_phase)
+        || !state.script_last_run_at.is_empty()
+        || !state.script_last_phase.is_empty()
+        || !state.script_last_status.is_empty()
+        || !state.script_last_error.is_empty()
+        || !state.script_last_logs.is_empty()
+        || !state.script_last_tests.is_empty()
+        || !state.script_last_vars.is_empty()
+        || state.last_response.is_some()
+}
+
+fn apply_request_runtime_state(request: &mut RequestRecord, runtime: &RequestRuntimeState) {
+    request.active_editor_tab = runtime.active_editor_tab.clone();
+    request.active_response_tab = runtime.active_response_tab.clone();
+    request.response_body_view = runtime.response_body_view.clone();
+    request.script_active_phase = runtime.script_active_phase.clone();
+    request.script_last_run_at = runtime.script_last_run_at.clone();
+    request.script_last_phase = runtime.script_last_phase.clone();
+    request.script_last_status = runtime.script_last_status.clone();
+    request.script_last_error = runtime.script_last_error.clone();
+    request.script_last_logs = runtime.script_last_logs.clone();
+    request.script_last_tests = runtime.script_last_tests.clone();
+    request.script_last_vars = runtime.script_last_vars.clone();
+    request.last_response = runtime.last_response.clone();
+}
+
 #[tauri::command]
 pub fn load_app_state(app: AppHandle) -> Result<PersistedAppState, String> {
     let root = get_storage_root(&app)?;
-    let workspaces = fs_load_workspaces(&root)?;
+    let mut workspaces = fs_load_workspaces(&root)?;
     let app_data_dir = app
         .path()
         .app_data_dir()
@@ -469,6 +555,18 @@ pub fn load_app_state(app: AppHandle) -> Result<PersistedAppState, String> {
     } else {
         default_state()
     };
+
+    for workspace in &mut workspaces {
+        for collection in &mut workspace.collections {
+            for request in &mut collection.requests {
+                let runtime_key = request_runtime_key(&workspace.name, &collection.name, request);
+                if let Some(runtime_state) = state.request_runtime_state.get(&runtime_key) {
+                    apply_request_runtime_state(request, runtime_state);
+                }
+            }
+        }
+    }
+
     state.workspaces = workspaces;
     Ok(state)
 }
@@ -481,7 +579,23 @@ pub fn save_app_state(app: AppHandle, payload: PersistedAppState) -> Result<(), 
         .app_data_dir()
         .map_err(|e| format!("Failed to resolve app data directory: {e}"))?;
     let state_file_path = app_data_dir.join("state.json");
+    let mut clean_workspaces = payload.workspaces.clone();
+    let mut runtime_state_map: HashMap<String, RequestRuntimeState> = HashMap::new();
+
+    for workspace in &mut clean_workspaces {
+        for collection in &mut workspace.collections {
+            for request in &mut collection.requests {
+                let runtime_key = request_runtime_key(&workspace.name, &collection.name, request);
+                let runtime_state = extract_request_runtime_state(request);
+                if has_runtime_state(&runtime_state) {
+                    runtime_state_map.insert(runtime_key, runtime_state);
+                }
+            }
+        }
+    }
+
     let mut state_to_save = payload.clone();
+    state_to_save.request_runtime_state = runtime_state_map;
     state_to_save.workspaces = vec![];
     if state_to_save.storage_path.is_none() {
         if let Ok(config) = get_app_config(app.clone()) {
@@ -492,7 +606,7 @@ pub fn save_app_state(app: AppHandle, payload: PersistedAppState) -> Result<(), 
         .map_err(|e| format!("Failed to serialize state.json: {e}"))?;
     fs::write(&state_file_path, state_json)
         .map_err(|e| format!("Failed to write state.json: {e}"))?;
-    fs_save_workspaces(&root, &payload.workspaces)
+    fs_save_workspaces(&root, &clean_workspaces)
 }
 
 #[tauri::command]

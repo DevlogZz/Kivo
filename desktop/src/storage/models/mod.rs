@@ -161,8 +161,39 @@ pub struct PersistedAppState {
     pub sidebar_width: u16,
     #[serde(default)]
     pub app_settings: AppSettings,
+    #[serde(default, skip_serializing_if = "HashMap::is_empty")]
+    pub request_runtime_state: HashMap<String, RequestRuntimeState>,
     #[serde(default)]
     pub workspaces: Vec<WorkspaceRecord>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct RequestRuntimeState {
+    #[serde(default = "default_active_editor_tab", skip_serializing_if = "is_default_active_editor_tab")]
+    pub active_editor_tab: String,
+    #[serde(default = "default_active_response_tab", skip_serializing_if = "is_default_active_response_tab")]
+    pub active_response_tab: String,
+    #[serde(default = "default_response_body_view", skip_serializing_if = "is_default_response_body_view")]
+    pub response_body_view: String,
+    #[serde(default = "default_script_active_phase", skip_serializing_if = "is_default_script_active_phase")]
+    pub script_active_phase: String,
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub script_last_run_at: String,
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub script_last_phase: String,
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub script_last_status: String,
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub script_last_error: String,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub script_last_logs: Vec<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub script_last_tests: Vec<ScriptTestRecord>,
+    #[serde(default, skip_serializing_if = "HashMap::is_empty")]
+    pub script_last_vars: HashMap<String, Value>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub last_response: Option<SavedResponse>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -319,13 +350,13 @@ pub struct RequestRecord {
     pub script_last_tests: Vec<ScriptTestRecord>,
     #[serde(default, skip_serializing_if = "HashMap::is_empty")]
     pub script_last_vars: HashMap<String, Value>,
-    #[serde(default)]
+    #[serde(default = "default_active_editor_tab", skip_serializing_if = "is_default_active_editor_tab")]
     pub active_editor_tab: String,
-    #[serde(default)]
+    #[serde(default = "default_active_response_tab", skip_serializing_if = "is_default_active_response_tab")]
     pub active_response_tab: String,
-    #[serde(default)]
+    #[serde(default = "default_response_body_view", skip_serializing_if = "is_default_response_body_view")]
     pub response_body_view: String,
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub last_response: Option<SavedResponse>,
 }
 
@@ -557,12 +588,36 @@ pub fn default_script_active_phase() -> String {
     "pre-request".to_string()
 }
 
+pub fn default_active_editor_tab() -> String {
+    "Params".to_string()
+}
+
+pub fn default_active_response_tab() -> String {
+    "Body".to_string()
+}
+
+pub fn default_response_body_view() -> String {
+    "JSON".to_string()
+}
+
 pub fn is_default_grpc_streaming_mode(value: &String) -> bool {
     value == "bidi"
 }
 
 pub fn is_default_script_active_phase(value: &String) -> bool {
     value == "pre-request"
+}
+
+pub fn is_default_active_editor_tab(value: &String) -> bool {
+    value.is_empty() || value == "Params"
+}
+
+pub fn is_default_active_response_tab(value: &String) -> bool {
+    value.is_empty() || value == "Body"
+}
+
+pub fn is_default_response_body_view(value: &String) -> bool {
+    value.is_empty() || value == "JSON"
 }
 
 pub fn default_auth_record() -> AuthRecord {
@@ -601,6 +656,7 @@ pub fn default_state() -> PersistedAppState {
         sidebar_tab: "requests".to_string(),
         sidebar_width: default_sidebar_width(),
         app_settings: AppSettings::default(),
+        request_runtime_state: HashMap::new(),
         workspaces: vec![],
     }
 }
